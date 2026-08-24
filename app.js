@@ -1256,7 +1256,7 @@ function renderFeedTools() {
 
       <input
         id="articleSearchInput"
-        type="search"
+        type="text"
         autocomplete="off"
         placeholder="Поиск по названию"
         value="${escapeHtml(
@@ -1538,7 +1538,7 @@ async function renderFeed() {
 
         <input
           id="articleSearchInput"
-          type="search"
+          type="text"
           autocomplete="off"
           placeholder="Поиск по названию"
           value="${escapeHtml(
