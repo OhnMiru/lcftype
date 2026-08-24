@@ -10,19 +10,21 @@ const MINIAPP_SHORT_NAME = 'lcftype';
 // Supabase
 // =========================================================
 
-const db = window.supabase.createClient(
-  window.SUPABASE_URL,
-  window.SUPABASE_ANON_KEY
-);
+const db =
+  window.supabase.createClient(
+    window.SUPABASE_URL,
+    window.SUPABASE_ANON_KEY
+  );
 
 
 // =========================================================
 // Telegram
 // =========================================================
 
-const tg = window.Telegram
-  ? window.Telegram.WebApp
-  : null;
+const tg =
+  window.Telegram
+    ? window.Telegram.WebApp
+    : null;
 
 if (tg) {
   tg.ready();
@@ -43,25 +45,25 @@ const tgUser =
 
 const state = {
   view: 'feed',
+
   articles: [],
+
   draft: null,
+
   currentId: null,
+
   profile: null,
 
-  // Поиск
   searchQuery: '',
 
-  // Выбранные авторы
   selectedAuthors: new Set(),
 
-  // Открыт ли фильтр
-  filterOpen: false,
-
-  // Позиция вставки изображения
-  pendingImageInsertIndex: null
+  filterOpen: false
 };
 
 let activeBlockEl = null;
+
+let filterCloseHandler = null;
 
 
 // =========================================================
@@ -69,7 +71,9 @@ let activeBlockEl = null;
 // =========================================================
 
 function showToast(msg) {
-  const t = document.getElementById('toast');
+
+  const t =
+    document.getElementById('toast');
 
   if (!t) {
     console.log(msg);
@@ -77,6 +81,7 @@ function showToast(msg) {
   }
 
   t.textContent = msg;
+
   t.classList.add('show');
 
   setTimeout(() => {
@@ -90,6 +95,7 @@ function showToast(msg) {
 // =========================================================
 
 function fmtDate(iso) {
+
   if (!iso) {
     return '';
   }
@@ -110,8 +116,13 @@ function fmtDate(iso) {
 // =========================================================
 
 function escapeHtml(s) {
-  const d = document.createElement('div');
-  d.textContent = s || '';
+
+  const d =
+    document.createElement('div');
+
+  d.textContent =
+    s || '';
+
   return d.innerHTML;
 }
 
@@ -120,54 +131,81 @@ function escapeHtml(s) {
 // Sanitize HTML
 // =========================================================
 
-const ALLOWED_TAGS = new Set([
-  'B',
-  'STRONG',
-  'I',
-  'EM',
-  'U',
-  'BR',
-  'SPAN',
-  'DIV'
-]);
+const ALLOWED_TAGS =
+  new Set([
+    'B',
+    'STRONG',
+    'I',
+    'EM',
+    'U',
+    'BR',
+    'SPAN',
+    'DIV'
+  ]);
+
 
 function sanitizeHtml(html) {
-  const doc = document.createElement('div');
 
-  doc.innerHTML = html || '';
+  const doc =
+    document.createElement('div');
+
+  doc.innerHTML =
+    html || '';
 
   (function clean(node) {
-    [...node.childNodes].forEach(child => {
+
+    [
+      ...node.childNodes
+    ].forEach(child => {
 
       if (child.nodeType === 1) {
 
-        if (!ALLOWED_TAGS.has(child.tagName)) {
+        if (
+          !ALLOWED_TAGS.has(
+            child.tagName
+          )
+        ) {
 
-          const parent = child.parentNode;
+          const parent =
+            child.parentNode;
 
-          while (child.firstChild) {
+          while (
+            child.firstChild
+          ) {
+
             parent.insertBefore(
               child.firstChild,
               child
             );
           }
 
-          parent.removeChild(child);
+          parent.removeChild(
+            child
+          );
 
           return;
         }
 
-        [...child.attributes].forEach(attr => {
-          child.removeAttribute(attr.name);
+        [
+          ...child.attributes
+        ].forEach(attr => {
+          child.removeAttribute(
+            attr.name
+          );
         });
 
         clean(child);
 
-      } else if (child.nodeType !== 3) {
+      } else if (
+        child.nodeType !== 3
+      ) {
 
-        child.parentNode.removeChild(child);
+        child.parentNode.removeChild(
+          child
+        );
       }
     });
+
   })(doc);
 
   return doc.innerHTML;
@@ -175,7 +213,7 @@ function sanitizeHtml(html) {
 
 
 // =========================================================
-// Telegram API
+// Edge Function
 // =========================================================
 
 async function callTelegramApi(
@@ -183,19 +221,27 @@ async function callTelegramApi(
   extra = {}
 ) {
 
-  if (!tg || !tg.initData) {
+  if (
+    !tg ||
+    !tg.initData
+  ) {
+
     throw new Error(
       'Откройте приложение внутри Telegram'
     );
   }
 
-  const { data, error } =
+  const {
+    data,
+    error
+  } =
     await db.functions.invoke(
       'telegram-api',
       {
         body: {
           action,
-          initData: tg.initData,
+          initData:
+            tg.initData,
           ...extra
         }
       }
@@ -214,8 +260,14 @@ async function callTelegramApi(
     );
   }
 
-  if (data && data.error) {
-    throw new Error(data.error);
+  if (
+    data &&
+    data.error
+  ) {
+
+    throw new Error(
+      data.error
+    );
   }
 
   return data;
@@ -234,13 +286,16 @@ async function getProfile() {
     );
 
   state.profile =
-    result.profile || null;
+    result.profile ||
+    null;
 
   return state.profile;
 }
 
 
-async function saveProfile(username) {
+async function saveProfile(
+  username
+) {
 
   const result =
     await callTelegramApi(
@@ -272,12 +327,14 @@ async function ensureProfile(
     return null;
   }
 
-  return openUsernameDialog(null);
+  return openUsernameDialog(
+    null
+  );
 }
 
 
 // =========================================================
-// Username dialog
+// Диалог ника
 // =========================================================
 
 function openUsernameDialog(
@@ -347,7 +404,9 @@ function openUsernameDialog(
       </div>
     `;
 
-    document.body.appendChild(overlay);
+    document.body.appendChild(
+      overlay
+    );
 
     const input =
       overlay.querySelector(
@@ -365,14 +424,18 @@ function openUsernameDialog(
       );
 
     setTimeout(() => {
+
       input.focus();
       input.select();
+
     }, 50);
 
     cancelBtn.addEventListener(
       'click',
       () => {
+
         overlay.remove();
+
         resolve(null);
       }
     );
@@ -384,23 +447,36 @@ function openUsernameDialog(
         const username =
           input.value
             .trim()
-            .replace(/\s+/g, ' ');
+            .replace(
+              /\s+/g,
+              ' '
+            );
 
-        if (username.length < 2) {
+        if (
+          username.length < 2
+        ) {
+
           showToast(
             'Минимум 2 символа'
           );
+
           return;
         }
 
-        if (username.length > 30) {
+        if (
+          username.length > 30
+        ) {
+
           showToast(
             'Максимум 30 символов'
           );
+
           return;
         }
 
-        saveBtn.disabled = true;
+        saveBtn.disabled =
+          true;
+
         saveBtn.textContent =
           'Сохраняем…';
 
@@ -428,7 +504,9 @@ function openUsernameDialog(
             'Не удалось сохранить ник'
           );
 
-          saveBtn.disabled = false;
+          saveBtn.disabled =
+            false;
+
           saveBtn.textContent =
             'Сохранить';
         }
@@ -439,11 +517,17 @@ function openUsernameDialog(
       'keydown',
       e => {
 
-        if (e.key === 'Enter') {
+        if (
+          e.key === 'Enter'
+        ) {
+
           saveBtn.click();
         }
 
-        if (e.key === 'Escape') {
+        if (
+          e.key === 'Escape'
+        ) {
+
           cancelBtn.click();
         }
       }
@@ -458,9 +542,11 @@ function openUsernameDialog(
 
 async function openProfile() {
 
-  state.view = 'profile';
-  state.currentId = null;
-  state.filterOpen = false;
+  state.view =
+    'profile';
+
+  state.currentId =
+    null;
 
   setBackButton(
     true,
@@ -468,7 +554,9 @@ async function openProfile() {
   );
 
   const main =
-    document.getElementById('main');
+    document.getElementById(
+      'main'
+    );
 
   main.innerHTML =
     '<div class="loading">Загрузка профиля…</div>';
@@ -476,7 +564,9 @@ async function openProfile() {
   try {
 
     const profile =
-      await ensureProfile(false);
+      await ensureProfile(
+        false
+      );
 
     if (!profile) {
 
@@ -519,7 +609,9 @@ async function openProfile() {
           async () => {
 
             const created =
-              await ensureProfile(true);
+              await ensureProfile(
+                true
+              );
 
             if (created) {
               openProfile();
@@ -651,7 +743,9 @@ async function fetchFeed() {
 }
 
 
-async function fetchArticle(id) {
+async function fetchArticle(
+  id
+) {
 
   const {
     data,
@@ -675,51 +769,69 @@ async function fetchArticle(id) {
 
 
 // =========================================================
-// Search / filter helpers
+// Search + filter
 // =========================================================
 
-function normalizeSearchText(value) {
+function normalizeSearchText(
+  value
+) {
 
-  return String(value || '')
-    .trim()
-    .toLocaleLowerCase('ru-RU');
+  return String(
+    value || ''
+  )
+    .toLocaleLowerCase(
+      'ru-RU'
+    )
+    .trim();
 }
 
 
-function getAvailableAuthors() {
+function getAuthorList() {
 
-  const map = new Map();
+  const map =
+    new Map();
 
-  state.articles.forEach(article => {
+  state.articles.forEach(
+    article => {
 
-    const name =
-      String(
-        article.author_name || ''
-      ).trim();
+      const name =
+        String(
+          article.author_name ||
+          ''
+        ).trim();
 
-    if (!name) {
-      return;
+      if (!name) {
+        return;
+      }
+
+      const key =
+        normalizeSearchText(
+          name
+        );
+
+      if (!map.has(key)) {
+
+        map.set(
+          key,
+          name
+        );
+      }
     }
+  );
 
-    const key =
-      name.toLocaleLowerCase('ru-RU');
-
-    if (!map.has(key)) {
-      map.set(key, name);
-    }
-  });
-
-  return [...map.values()]
-    .sort(
-      (a, b) =>
-        a.localeCompare(
-          b,
-          'ru-RU',
-          {
-            sensitivity: 'base'
-          }
-        )
-    );
+  return Array.from(
+    map.values()
+  ).sort(
+    (a, b) =>
+      a.localeCompare(
+        b,
+        'ru',
+        {
+          sensitivity:
+            'base'
+        }
+      )
+  );
 }
 
 
@@ -730,323 +842,242 @@ function getFilteredArticles() {
       state.searchQuery
     );
 
-  return state.articles.filter(article => {
+  return state.articles.filter(
+    article => {
 
-    const title =
-      normalizeSearchText(
-        article.title
-      );
-
-    if (
-      query &&
-      !title.includes(query)
-    ) {
-      return false;
-    }
-
-    if (
-      state.selectedAuthors.size
-    ) {
-
-      const author =
-        String(
-          article.author_name || ''
-        ).trim();
-
-      const key =
-        author.toLocaleLowerCase(
-          'ru-RU'
+      const title =
+        normalizeSearchText(
+          article.title
         );
 
-      if (
-        !state.selectedAuthors.has(
-          key
-        )
-      ) {
+      const matchesSearch =
+        !query ||
+        title.includes(
+          query
+        );
+
+      if (!matchesSearch) {
         return false;
       }
-    }
 
-    return true;
-  });
+      if (
+        !state.selectedAuthors.size
+      ) {
+        return true;
+      }
+
+      const author =
+        normalizeSearchText(
+          article.author_name
+        );
+
+      return state.selectedAuthors.has(
+        author
+      );
+    }
+  );
 }
 
 
-// =========================================================
-// Feed controls
-// =========================================================
+function clearFilterCloseHandler() {
 
-function renderFeedControls() {
+  if (
+    filterCloseHandler
+  ) {
 
-  const wrapper =
+    document.removeEventListener(
+      'click',
+      filterCloseHandler
+    );
+
+    filterCloseHandler =
+      null;
+  }
+}
+
+
+function closeAuthorFilter() {
+
+  state.filterOpen =
+    false;
+
+  clearFilterCloseHandler();
+
+  const popup =
+    document.getElementById(
+      'authorFilterPopup'
+    );
+
+  if (popup) {
+    popup.remove();
+  }
+}
+
+
+function openAuthorFilter() {
+
+  if (
+    state.filterOpen
+  ) {
+
+    closeAuthorFilter();
+
+    return;
+  }
+
+  const authors =
+    getAuthorList();
+
+  if (!authors.length) {
+
+    showToast(
+      'Пока нет авторов со статьями'
+    );
+
+    return;
+  }
+
+  state.filterOpen =
+    true;
+
+  const popup =
     document.createElement('div');
 
-  wrapper.className =
-    'feed-controls';
+  popup.id =
+    'authorFilterPopup';
 
-  const selectedCount =
-    state.selectedAuthors.size;
+  popup.className =
+    'author-filter-popup';
 
-  wrapper.innerHTML = `
+  popup.innerHTML = `
 
-    <div class="feed-search-wrap">
+    <div class="author-filter-header">
 
-      <span class="feed-search-icon">
-        ⌕
-      </span>
+      <div>
+        <div class="author-filter-title">
+          Фильтр по автору
+        </div>
 
-      <input
-        type="search"
-        class="feed-search"
-        id="feedSearch"
-        placeholder="Поиск по названию"
-        value="${escapeHtml(
-          state.searchQuery
-        )}"
-        autocomplete="off"
+        <div class="author-filter-subtitle">
+          Можно выбрать одного или нескольких
+        </div>
+      </div>
+
+      <button
+        class="author-filter-close"
+        type="button"
+        aria-label="Закрыть"
       >
+        ×
+      </button>
+
+    </div>
+
+    <div class="author-filter-list">
 
       ${
-        state.searchQuery
-          ? `
-            <button
-              class="feed-search-clear"
-              id="clearSearchBtn"
-              type="button"
-              aria-label="Очистить поиск"
-            >
-              ×
-            </button>
-          `
-          : ''
+        authors.map(
+          author => {
+
+            const key =
+              normalizeSearchText(
+                author
+              );
+
+            const checked =
+              state.selectedAuthors.has(
+                key
+              );
+
+            return `
+
+              <label
+                class="author-filter-option"
+              >
+
+                <input
+                  type="checkbox"
+                  data-author="${escapeHtml(
+                    key
+                  )}"
+                  ${
+                    checked
+                      ? 'checked'
+                      : ''
+                  }
+                >
+
+                <span
+                  class="author-filter-check"
+                ></span>
+
+                <span
+                  class="author-filter-name"
+                >
+                  ${escapeHtml(
+                    author
+                  )}
+                </span>
+
+              </label>
+
+            `;
+          }
+        ).join('')
       }
 
     </div>
 
-    <button
-      class="
-        feed-filter-btn
-        ${selectedCount ? 'has-selection' : ''}
-      "
-      id="feedFilterBtn"
-      type="button"
-    >
-
-      <span class="feed-filter-icon">
-        ☷
-      </span>
-
-      <span>
-        Фильтр
-      </span>
-
-      ${
-        selectedCount
-          ? `
-            <span class="filter-count">
-              ${selectedCount}
-            </span>
-          `
-          : ''
-      }
-
-    </button>
-
-  `;
-
-  const search =
-    wrapper.querySelector(
-      '#feedSearch'
-    );
-
-  const clear =
-    wrapper.querySelector(
-      '#clearSearchBtn'
-    );
-
-  const filter =
-    wrapper.querySelector(
-      '#feedFilterBtn'
-    );
-
-  search.addEventListener(
-    'input',
-    e => {
-
-      state.searchQuery =
-        e.target.value;
-
-      renderFeedResultsOnly();
-    }
-  );
-
-  if (clear) {
-
-    clear.addEventListener(
-      'click',
-      () => {
-
-        state.searchQuery = '';
-
-        renderFeed();
-      }
-    );
-  }
-
-  filter.addEventListener(
-    'click',
-    () => {
-      toggleFilterPanel(wrapper);
-    }
-  );
-
-  return wrapper;
-}
-
-
-// =========================================================
-// Filter panel
-// =========================================================
-
-function toggleFilterPanel(
-  controlsWrapper
-) {
-
-  const existing =
-    controlsWrapper.querySelector(
-      '.filter-panel'
-    );
-
-  if (existing) {
-
-    existing.remove();
-
-    state.filterOpen = false;
-
-    return;
-  }
-
-  state.filterOpen = true;
-
-  const authors =
-    getAvailableAuthors();
-
-  const panel =
-    document.createElement('div');
-
-  panel.className =
-    'filter-panel chrome';
-
-  if (!authors.length) {
-
-    panel.innerHTML = `
-
-      <div class="filter-empty">
-        Пока нет статей с указанным автором.
-      </div>
-
-    `;
-
-    controlsWrapper.appendChild(panel);
-
-    return;
-  }
-
-  const allSelected =
-    authors.every(author =>
-      state.selectedAuthors.has(
-        author.toLocaleLowerCase('ru-RU')
-      )
-    );
-
-  panel.innerHTML = `
-
-    <div class="filter-panel-header">
-
-      <div class="filter-panel-title">
-        Авторы
-      </div>
+    <div class="author-filter-footer">
 
       <button
-        class="filter-reset-btn"
-        id="filterResetBtn"
+        class="author-filter-reset"
         type="button"
       >
         Сбросить
       </button>
 
-    </div>
-
-    <div class="filter-panel-actions">
-
       <button
+        class="author-filter-done"
         type="button"
-        class="filter-small-btn"
-        id="filterAllBtn"
       >
-        ${
-          allSelected
-            ? 'Снять все'
-            : 'Выбрать всех'
-        }
+        Готово
       </button>
 
     </div>
-
-    <div class="filter-authors">
-
-      ${authors.map(author => {
-
-        const key =
-          author.toLocaleLowerCase(
-            'ru-RU'
-          );
-
-        const checked =
-          state.selectedAuthors.has(
-            key
-          );
-
-        return `
-
-          <label class="filter-author">
-
-            <input
-              type="checkbox"
-              value="${escapeHtml(
-                key
-              )}"
-              ${checked ? 'checked' : ''}
-            >
-
-            <span class="filter-check">
-              ✓
-            </span>
-
-            <span class="filter-author-name">
-              ${escapeHtml(
-                author
-              )}
-            </span>
-
-          </label>
-
-        `;
-
-      }).join('')}
-
-    </div>
-
   `;
 
-  controlsWrapper.appendChild(panel);
+  const searchBar =
+    document.querySelector(
+      '.feed-tools'
+    );
 
+  if (!searchBar) {
+    state.filterOpen =
+      false;
 
-  // ---------------------------------------------------------
-  // Checkboxes
-  // ---------------------------------------------------------
+    return;
+  }
 
-  panel
+  searchBar.appendChild(
+    popup
+  );
+
+  popup
+    .querySelector(
+      '.author-filter-close'
+    )
+    .addEventListener(
+      'click',
+      e => {
+
+        e.stopPropagation();
+
+        closeAuthorFilter();
+      }
+    );
+
+  popup
     .querySelectorAll(
       'input[type="checkbox"]'
     )
@@ -1056,32 +1087,34 @@ function toggleFilterPanel(
         'change',
         () => {
 
-          if (input.checked) {
+          const author =
+            input.dataset.author;
+
+          if (
+            input.checked
+          ) {
 
             state.selectedAuthors.add(
-              input.value
+              author
             );
 
           } else {
 
             state.selectedAuthors.delete(
-              input.value
+              author
             );
           }
 
-          renderFeed();
+          updateFilterButton();
+
+          renderFeedResults();
         }
       );
     });
 
-
-  // ---------------------------------------------------------
-  // Reset
-  // ---------------------------------------------------------
-
-  panel
+  popup
     .querySelector(
-      '#filterResetBtn'
+      '.author-filter-reset'
     )
     .addEventListener(
       'click',
@@ -1089,95 +1122,281 @@ function toggleFilterPanel(
 
         state.selectedAuthors.clear();
 
-        state.filterOpen = false;
+        updateFilterButton();
 
-        renderFeed();
+        renderFeedResults();
+
+        popup
+          .querySelectorAll(
+            'input[type="checkbox"]'
+          )
+          .forEach(
+            input => {
+              input.checked =
+                false;
+            }
+          );
       }
     );
 
-
-  // ---------------------------------------------------------
-  // Select all
-  // ---------------------------------------------------------
-
-  panel
+  popup
     .querySelector(
-      '#filterAllBtn'
+      '.author-filter-done'
     )
     .addEventListener(
       'click',
       () => {
 
-        const everySelected =
-          authors.every(author =>
-            state.selectedAuthors.has(
-              author.toLocaleLowerCase(
-                'ru-RU'
-              )
-            )
-          );
+        closeAuthorFilter();
 
-        if (everySelected) {
-
-          state.selectedAuthors.clear();
-
-        } else {
-
-          authors.forEach(author => {
-
-            state.selectedAuthors.add(
-              author.toLocaleLowerCase(
-                'ru-RU'
-              )
-            );
-
-          });
-        }
-
-        renderFeed();
+        renderFeedResults();
       }
     );
-}
 
+  requestAnimationFrame(
+    () => {
 
-// =========================================================
-// Feed results only
-// =========================================================
+      filterCloseHandler =
+        e => {
 
-function renderFeedResultsOnly() {
+          if (
+            !popup.contains(
+              e.target
+            ) &&
+            !e.target.closest(
+              '#authorFilterBtn'
+            )
+          ) {
 
-  const results =
-    getFilteredArticles();
+            closeAuthorFilter();
+          }
+        };
 
-  const resultsHost =
-    document.getElementById(
-      'feedResults'
-    );
-
-  if (!resultsHost) {
-    renderFeed();
-    return;
-  }
-
-  renderFeedResults(
-    resultsHost,
-    results
+      document.addEventListener(
+        'click',
+        filterCloseHandler
+      );
+    }
   );
 }
 
 
-// =========================================================
-// Render feed results
-// =========================================================
+function updateFilterButton() {
 
-function renderFeedResults(
-  host,
-  articles
-) {
+  const button =
+    document.getElementById(
+      'authorFilterBtn'
+    );
+
+  if (!button) {
+    return;
+  }
+
+  const count =
+    state.selectedAuthors.size;
+
+  button.classList.toggle(
+    'active',
+    count > 0
+  );
+
+  button.innerHTML = `
+
+    <span class="tool-icon">
+      ☷
+    </span>
+
+    <span class="tool-label">
+      Фильтр
+    </span>
+
+    ${
+      count
+        ? `
+          <span class="filter-count">
+            ${count}
+          </span>
+        `
+        : ''
+    }
+
+  `;
+}
+
+
+function renderFeedTools() {
+
+  const existing =
+    document.querySelector(
+      '.feed-tools'
+    );
+
+  if (existing) {
+    return;
+  }
+
+  const main =
+    document.getElementById(
+      'main'
+    );
+
+  const tools =
+    document.createElement('div');
+
+  tools.className =
+    'feed-tools chrome';
+
+  tools.innerHTML = `
+
+    <div class="feed-search">
+
+      <span class="search-icon">
+        ⌕
+      </span>
+
+      <input
+        id="articleSearchInput"
+        type="search"
+        autocomplete="off"
+        placeholder="Поиск по названию"
+        value="${escapeHtml(
+          state.searchQuery
+        )}"
+      >
+
+      <button
+        class="search-clear"
+        id="articleSearchClear"
+        type="button"
+        aria-label="Очистить поиск"
+      >
+        ×
+      </button>
+
+    </div>
+
+    <button
+      class="feed-filter-btn"
+      id="authorFilterBtn"
+      type="button"
+    >
+
+      <span class="tool-icon">
+        ☷
+      </span>
+
+      <span class="tool-label">
+        Фильтр
+      </span>
+
+    </button>
+
+  `;
+
+  main.insertBefore(
+    tools,
+    main.firstChild
+  );
+
+  const searchInput =
+    document.getElementById(
+      'articleSearchInput'
+    );
+
+  const clearButton =
+    document.getElementById(
+      'articleSearchClear'
+    );
+
+  const filterButton =
+    document.getElementById(
+      'authorFilterBtn'
+    );
+
+  searchInput.addEventListener(
+    'input',
+    e => {
+
+      state.searchQuery =
+        e.target.value;
+
+      updateSearchClear();
+
+      renderFeedResults();
+    }
+  );
+
+  clearButton.addEventListener(
+    'click',
+    () => {
+
+      state.searchQuery =
+        '';
+
+      searchInput.value =
+        '';
+
+      updateSearchClear();
+
+      searchInput.focus();
+
+      renderFeedResults();
+    }
+  );
+
+  filterButton.addEventListener(
+    'click',
+    e => {
+
+      e.stopPropagation();
+
+      openAuthorFilter();
+    }
+  );
+
+  updateSearchClear();
+
+  updateFilterButton();
+}
+
+
+function updateSearchClear() {
+
+  const button =
+    document.getElementById(
+      'articleSearchClear'
+    );
+
+  if (!button) {
+    return;
+  }
+
+  button.classList.toggle(
+    'visible',
+    Boolean(
+      state.searchQuery
+    )
+  );
+}
+
+
+function renderFeedResults() {
+
+  const list =
+    document.getElementById(
+      'feedResults'
+    );
+
+  if (!list) {
+    return;
+  }
+
+  const articles =
+    getFilteredArticles();
 
   if (!articles.length) {
 
-    host.innerHTML = `
+    list.innerHTML = `
 
       <div class="empty-state feed-empty">
 
@@ -1187,80 +1406,84 @@ function renderFeedResults(
 
         <p>
           Попробуйте изменить запрос
-          или параметры фильтра.
+          или убрать фильтр автора.
         </p>
 
       </div>
-
     `;
 
     return;
   }
 
-  host.innerHTML =
+  list.innerHTML =
     articles
-      .map(article => `
+      .map(
+        article => `
 
-        <div
-          class="feed-item"
-          data-id="${escapeHtml(
-            article.id
-          )}"
-        >
-
-          ${
-            article.cover
-              ? `
-                <img
-                  class="thumb"
-                  src="${escapeHtml(
-                    article.cover
-                  )}"
-                  alt=""
-                >
-              `
-              : ''
-          }
-
-          <div class="feed-meta">
-
-            ${fmtDate(
-              article.created_at
-            )}
+          <div
+            class="feed-item"
+            data-id="${escapeHtml(
+              article.id
+            )}"
+          >
 
             ${
-              article.author_name
+              article.cover
                 ? `
-                  ·
-                  ${escapeHtml(
-                    article.author_name
-                  )}
+                  <img
+                    class="thumb"
+                    src="${escapeHtml(
+                      article.cover
+                    )}"
+                    alt=""
+                  >
                 `
                 : ''
             }
 
+            <div class="feed-meta">
+
+              ${fmtDate(
+                article.created_at
+              )}
+
+              ${
+                article.author_name
+                  ? `
+                    ·
+                    ${escapeHtml(
+                      article.author_name
+                    )}
+                  `
+                  : ''
+              }
+
+            </div>
+
+            <h3>
+              ${escapeHtml(
+                article.title ||
+                'Без названия'
+              )}
+            </h3>
+
+            <p>
+              ${escapeHtml(
+                article.excerpt ||
+                ''
+              )}
+            </p>
+
           </div>
 
-          <h3>
-            ${escapeHtml(
-              article.title ||
-              'Без названия'
-            )}
-          </h3>
-
-          <p>
-            ${escapeHtml(
-              article.excerpt || ''
-            )}
-          </p>
-
-        </div>
-
-      `)
+        `
+      )
       .join('');
 
-  host
-    .querySelectorAll('.feed-item')
+  list
+    .querySelectorAll(
+      '.feed-item'
+    )
     .forEach(el => {
 
       el.addEventListener(
@@ -1277,18 +1500,25 @@ function renderFeedResults(
 
 
 // =========================================================
-// Render feed
+// Feed screen
 // =========================================================
 
 async function renderFeed() {
 
-  state.view = 'feed';
-  state.currentId = null;
+  closeAuthorFilter();
+
+  state.view =
+    'feed';
+
+  state.currentId =
+    null;
 
   setBackButton(false);
 
   const main =
-    document.getElementById('main');
+    document.getElementById(
+      'main'
+    );
 
   main.innerHTML =
     '<div class="loading">Загрузка статей…</div>';
@@ -1296,188 +1526,120 @@ async function renderFeed() {
   state.articles =
     await fetchFeed();
 
-  state.filterOpen = false;
+  main.innerHTML = `
 
-  const controls =
-    renderFeedControls();
+    <div class="feed-tools chrome">
 
-  const resultsHost =
-    document.createElement('div');
+      <div class="feed-search">
 
-  resultsHost.id =
-    'feedResults';
+        <span class="search-icon">
+          ⌕
+        </span>
 
-  main.innerHTML = '';
+        <input
+          id="articleSearchInput"
+          type="search"
+          autocomplete="off"
+          placeholder="Поиск по названию"
+          value="${escapeHtml(
+            state.searchQuery
+          )}"
+        >
 
-  main.appendChild(
-    controls
-  );
+        <button
+          class="search-clear"
+          id="articleSearchClear"
+          type="button"
+          aria-label="Очистить поиск"
+        >
+          ×
+        </button>
 
-  main.appendChild(
-    resultsHost
-  );
+      </div>
 
-  const results =
-    getFilteredArticles();
+      <button
+        class="feed-filter-btn"
+        id="authorFilterBtn"
+        type="button"
+      >
 
-  renderFeedResults(
-    resultsHost,
-    results
-  );
-}
+        <span class="tool-icon">
+          ☷
+        </span>
 
+        <span class="tool-label">
+          Фильтр
+        </span>
 
-// =========================================================
-// Upload image
-// =========================================================
+      </button>
 
-async function uploadImage(
-  dataUrl,
-  filename
-) {
+    </div>
 
-  const res =
-    await fetch(dataUrl);
+    <div id="feedResults"></div>
 
-  const blob =
-    await res.blob();
+  `;
 
-  const safeFilename =
-    String(filename || 'image.jpg')
-      .replace(
-        /[^a-zA-Z0-9._-]/g,
-        '_'
-      );
+  const searchInput =
+    document.getElementById(
+      'articleSearchInput'
+    );
 
-  const path =
-    `${Date.now()}-${Math.random()
-      .toString(36)
-      .slice(2, 8)}-${safeFilename}`;
+  const clearButton =
+    document.getElementById(
+      'articleSearchClear'
+    );
 
-  const { error } =
-    await db
-      .storage
-      .from('images')
-      .upload(
-        path,
-        blob,
-        {
-          contentType:
-            blob.type ||
-            'image/jpeg',
-          upsert: false
-        }
-      );
+  const filterButton =
+    document.getElementById(
+      'authorFilterBtn'
+    );
 
-  if (error) {
-    throw error;
-  }
+  searchInput.addEventListener(
+    'input',
+    e => {
 
-  const { data } =
-    db
-      .storage
-      .from('images')
-      .getPublicUrl(path);
+      state.searchQuery =
+        e.target.value;
 
-  return data.publicUrl;
-}
+      updateSearchClear();
 
-
-// =========================================================
-// Compress image
-// =========================================================
-
-function compressImageFile(
-  file,
-  maxW = 1200,
-  quality = 0.82
-) {
-
-  return new Promise(
-    (resolve, reject) => {
-
-      const reader =
-        new FileReader();
-
-      reader.onload = e => {
-
-        const img =
-          new Image();
-
-        img.onload = () => {
-
-          let w = img.width;
-          let h = img.height;
-
-          if (w > maxW) {
-
-            h =
-              Math.round(
-                h *
-                (maxW / w)
-              );
-
-            w = maxW;
-          }
-
-          const canvas =
-            document.createElement(
-              'canvas'
-            );
-
-          canvas.width = w;
-          canvas.height = h;
-
-          canvas
-            .getContext('2d')
-            .drawImage(
-              img,
-              0,
-              0,
-              w,
-              h
-            );
-
-          resolve(
-            canvas.toDataURL(
-              'image/jpeg',
-              quality
-            )
-          );
-        };
-
-        img.onerror = reject;
-
-        img.src =
-          e.target.result;
-      };
-
-      reader.onerror = reject;
-
-      reader.readAsDataURL(file);
+      renderFeedResults();
     }
   );
-}
 
+  clearButton.addEventListener(
+    'click',
+    () => {
 
-// =========================================================
-// Is owner
-// =========================================================
+      state.searchQuery =
+        '';
 
-function isArticleOwner(article) {
+      searchInput.value =
+        '';
 
-  if (
-    !tgUser ||
-    !article ||
-    !article.author_id
-  ) {
-    return false;
-  }
+      updateSearchClear();
 
-  return (
-    Number(article.author_id) ===
-    Number(tgUser.id)
+      searchInput.focus();
+
+      renderFeedResults();
+    }
   );
+
+  filterButton.addEventListener(
+    'click',
+    e => {
+
+      e.stopPropagation();
+
+      openAuthorFilter();
+    }
+  );
+
+  updateSearchClear();
+
+  updateFilterButton();
+
+  renderFeedResults();
 }
 
 
@@ -1485,11 +1647,15 @@ function isArticleOwner(article) {
 // Reader
 // =========================================================
 
-async function openReader(id) {
+async function openReader(
+  id
+) {
 
-  state.view = 'reader';
-  state.currentId = id;
-  state.filterOpen = false;
+  state.view =
+    'reader';
+
+  state.currentId =
+    id;
 
   setBackButton(
     true,
@@ -1497,7 +1663,9 @@ async function openReader(id) {
   );
 
   const main =
-    document.getElementById('main');
+    document.getElementById(
+      'main'
+    );
 
   main.innerHTML =
     '<div class="loading">Открываем статью…</div>';
@@ -1520,14 +1688,16 @@ async function openReader(id) {
         </p>
 
       </div>
-
     `;
 
     return;
   }
 
   const bodyHtml =
-    (article.blocks || [])
+    (
+      article.blocks ||
+      []
+    )
       .map(block => {
 
         if (
@@ -1553,12 +1723,12 @@ async function openReader(id) {
         ) {
 
           return `
-
             <figure>
 
               <img
                 src="${escapeHtml(
-                  block.src || ''
+                  block.src ||
+                  ''
                 )}"
                 alt=""
               >
@@ -1576,7 +1746,6 @@ async function openReader(id) {
               }
 
             </figure>
-
           `;
         }
 
@@ -1588,7 +1757,9 @@ async function openReader(id) {
     `https://t.me/${BOT_USERNAME}/${MINIAPP_SHORT_NAME}?startapp=${article.id}`;
 
   const owner =
-    isArticleOwner(article);
+    isArticleOwner(
+      article
+    );
 
   main.innerHTML = `
 
@@ -1680,10 +1851,14 @@ async function openReader(id) {
   `;
 
 
+  // =======================================================
   // Share
+  // =======================================================
 
   document
-    .getElementById('shareBtn')
+    .getElementById(
+      'shareBtn'
+    )
     .addEventListener(
       'click',
       async () => {
@@ -1711,11 +1886,14 @@ async function openReader(id) {
             return;
           }
 
-          if (navigator.share) {
+          if (
+            navigator.share
+          ) {
 
             await navigator.share({
               title:
                 article.title,
+
               url:
                 shareUrl
             });
@@ -1725,7 +1903,9 @@ async function openReader(id) {
 
           await navigator
             .clipboard
-            .writeText(shareUrl);
+            .writeText(
+              shareUrl
+            );
 
           showToast(
             'Ссылка скопирована'
@@ -1739,21 +1919,29 @@ async function openReader(id) {
     );
 
 
+  // =======================================================
   // Edit / Delete
+  // =======================================================
 
   if (owner) {
 
     document
-      .getElementById('editBtn')
+      .getElementById(
+        'editBtn'
+      )
       .addEventListener(
         'click',
         () => {
-          editArticle(article);
+          editArticle(
+            article
+          );
         }
       );
 
     document
-      .getElementById('deleteBtn')
+      .getElementById(
+        'deleteBtn'
+      )
       .addEventListener(
         'click',
         async () => {
@@ -1771,7 +1959,8 @@ async function openReader(id) {
               'deleteBtn'
             );
 
-          btn.disabled = true;
+          btn.disabled =
+            true;
 
           btn.textContent =
             'Удаляем…';
@@ -1796,7 +1985,8 @@ async function openReader(id) {
 
             console.error(err);
 
-            btn.disabled = false;
+            btn.disabled =
+              false;
 
             btn.textContent =
               'Удалить';
@@ -1857,15 +2047,22 @@ async function openEditor() {
     }
 
     const profile =
-      await ensureProfile(true);
+      await ensureProfile(
+        true
+      );
 
     if (!profile) {
       return;
     }
 
-    state.view = 'editor';
-    state.currentId = null;
-    state.draft = newDraft();
+    state.view =
+      'editor';
+
+    state.currentId =
+      null;
+
+    state.draft =
+      newDraft();
 
     setBackButton(
       true,
@@ -1900,10 +2097,14 @@ async function openEditor() {
 // Edit article
 // =========================================================
 
-function editArticle(article) {
+function editArticle(
+  article
+) {
 
   if (
-    !isArticleOwner(article)
+    !isArticleOwner(
+      article
+    )
   ) {
 
     showToast(
@@ -1913,8 +2114,11 @@ function editArticle(article) {
     return;
   }
 
-  state.view = 'editor';
-  state.currentId = article.id;
+  state.view =
+    'editor';
+
+  state.currentId =
+    article.id;
 
   state.draft = {
 
@@ -1922,20 +2126,25 @@ function editArticle(article) {
       article.id,
 
     title:
-      article.title || '',
+      article.title ||
+      '',
 
     cover:
-      article.cover || null,
+      article.cover ||
+      null,
 
     blocks:
       JSON.parse(
         JSON.stringify(
-          article.blocks || []
+          article.blocks ||
+          []
         )
       )
   };
 
-  if (!state.draft.blocks.length) {
+  if (
+    !state.draft.blocks.length
+  ) {
 
     state.draft.blocks = [
       {
@@ -1967,13 +2176,211 @@ function editArticle(article) {
 
 
 // =========================================================
+// Upload image
+// =========================================================
+
+async function uploadImage(
+  dataUrl,
+  filename
+) {
+
+  const res =
+    await fetch(
+      dataUrl
+    );
+
+  const blob =
+    await res.blob();
+
+  const safeFilename =
+    String(
+      filename ||
+      'image.jpg'
+    )
+      .replace(
+        /[^a-zA-Z0-9._-]/g,
+        '_'
+      );
+
+  const path =
+    `${Date.now()}-${Math.random()
+      .toString(36)
+      .slice(2, 8)}-${safeFilename}`;
+
+  const {
+    error
+  } =
+    await db
+      .storage
+      .from('images')
+      .upload(
+        path,
+        blob,
+        {
+          contentType:
+            blob.type ||
+            'image/jpeg',
+
+          upsert: false
+        }
+      );
+
+  if (error) {
+    throw error;
+  }
+
+  const {
+    data
+  } =
+    db
+      .storage
+      .from('images')
+      .getPublicUrl(
+        path
+      );
+
+  return data.publicUrl;
+}
+
+
+// =========================================================
+// Compress image
+// =========================================================
+
+function compressImageFile(
+  file,
+  maxW = 1200,
+  quality = 0.82
+) {
+
+  return new Promise(
+    (
+      resolve,
+      reject
+    ) => {
+
+      const reader =
+        new FileReader();
+
+      reader.onload =
+        e => {
+
+          const img =
+            new Image();
+
+          img.onload =
+            () => {
+
+              let w =
+                img.width;
+
+              let h =
+                img.height;
+
+              if (
+                w > maxW
+              ) {
+
+                h =
+                  Math.round(
+                    h *
+                    (
+                      maxW /
+                      w
+                    )
+                  );
+
+                w =
+                  maxW;
+              }
+
+              const canvas =
+                document.createElement(
+                  'canvas'
+                );
+
+              canvas.width =
+                w;
+
+              canvas.height =
+                h;
+
+              canvas
+                .getContext(
+                  '2d'
+                )
+                .drawImage(
+                  img,
+                  0,
+                  0,
+                  w,
+                  h
+                );
+
+              resolve(
+                canvas.toDataURL(
+                  'image/jpeg',
+                  quality
+                )
+              );
+            };
+
+          img.onerror =
+            reject;
+
+          img.src =
+            e.target.result;
+        };
+
+      reader.onerror =
+        reject;
+
+      reader.readAsDataURL(
+        file
+      );
+    }
+  );
+}
+
+
+// =========================================================
+// Is owner
+// =========================================================
+
+function isArticleOwner(
+  article
+) {
+
+  if (
+    !tgUser ||
+    !article ||
+    !article.author_id
+  ) {
+
+    return false;
+  }
+
+  return (
+    Number(
+      article.author_id
+    ) ===
+    Number(
+      tgUser.id
+    )
+  );
+}
+
+
+// =========================================================
 // Editor
 // =========================================================
 
 function renderEditor() {
 
   const main =
-    document.getElementById('main');
+    document.getElementById(
+      'main'
+    );
 
   const d =
     state.draft;
@@ -2096,7 +2503,9 @@ function renderEditor() {
 
     </div>
 
-    <div id="blocksHost"></div>
+    <div
+      id="blocksHost"
+    ></div>
 
     <button
       class="btn btn-primary publish-btn"
@@ -2133,64 +2542,76 @@ function renderEditor() {
   `;
 
 
-  // Title
-
   document
-    .getElementById('titleInput')
+    .getElementById(
+      'titleInput'
+    )
     .addEventListener(
       'input',
       e => {
+
         d.title =
           e.target.value;
       }
     );
 
 
-  // Toolbar
-
   document
-    .getElementById('toolbar')
-    .querySelectorAll('button')
-    .forEach(btn => {
+    .getElementById(
+      'toolbar'
+    )
+    .querySelectorAll(
+      'button'
+    )
+    .forEach(
+      btn => {
 
-      btn.addEventListener(
-        'mousedown',
-        e => {
+        btn.addEventListener(
+          'mousedown',
+          e => {
 
-          e.preventDefault();
+            e.preventDefault();
 
-          if (!activeBlockEl) {
-            return;
+            if (
+              !activeBlockEl
+            ) {
+              return;
+            }
+
+            document.execCommand(
+              btn.dataset.cmd,
+              false,
+              null
+            );
+
+            activeBlockEl.dispatchEvent(
+              new Event(
+                'input'
+              )
+            );
           }
+        );
+      }
+    );
 
-          document.execCommand(
-            btn.dataset.cmd,
-            false,
-            null
-          );
-
-          activeBlockEl.dispatchEvent(
-            new Event('input')
-          );
-        }
-      );
-    });
-
-
-  // Cover buttons
 
   const addCoverBtn =
     document.getElementById(
       'addCoverBtn'
     );
 
-  if (addCoverBtn) {
+  if (
+    addCoverBtn
+  ) {
 
     addCoverBtn.addEventListener(
       'click',
       () => {
+
         document
-          .getElementById('coverInput')
+          .getElementById(
+            'coverInput'
+          )
           .click();
       }
     );
@@ -2202,13 +2623,18 @@ function renderEditor() {
       'changeCoverBtn'
     );
 
-  if (changeCoverBtn) {
+  if (
+    changeCoverBtn
+  ) {
 
     changeCoverBtn.addEventListener(
       'click',
       () => {
+
         document
-          .getElementById('coverInput')
+          .getElementById(
+            'coverInput'
+          )
           .click();
       }
     );
@@ -2220,13 +2646,16 @@ function renderEditor() {
       'removeCoverBtn'
     );
 
-  if (removeCoverBtn) {
+  if (
+    removeCoverBtn
+  ) {
 
     removeCoverBtn.addEventListener(
       'click',
       () => {
 
-        d.cover = null;
+        d.cover =
+          null;
 
         renderEditor();
 
@@ -2238,10 +2667,10 @@ function renderEditor() {
   }
 
 
-  // Cover file
-
   document
-    .getElementById('coverInput')
+    .getElementById(
+      'coverInput'
+    )
     .addEventListener(
       'change',
       async e => {
@@ -2284,25 +2713,42 @@ function renderEditor() {
           );
         }
 
-        e.target.value = '';
+        const currentHint =
+          document.getElementById(
+            'editorHint'
+          );
+
+        if (
+          currentHint
+        ) {
+
+          currentHint.textContent =
+            '';
+        }
+
+        e.target.value =
+          '';
       }
     );
 
 
-  // Images
-
   document
-    .getElementById('fileInput')
+    .getElementById(
+      'fileInput'
+    )
     .addEventListener(
       'change',
       async e => {
 
         const files =
           Array.from(
-            e.target.files || []
+            e.target.files ||
+            []
           );
 
-        if (!files.length) {
+        if (
+          !files.length
+        ) {
           return;
         }
 
@@ -2325,7 +2771,8 @@ function renderEditor() {
               ? state.pendingImageInsertIndex
               : d.blocks.length;
 
-          const newBlocks = [];
+          const newBlocks =
+            [];
 
           for (
             const file of files
@@ -2337,10 +2784,17 @@ function renderEditor() {
               );
 
             newBlocks.push({
-              type: 'image',
-              src: dataUrl,
-              caption: '',
-              _pendingFile: true
+              type:
+                'image',
+
+              src:
+                dataUrl,
+
+              caption:
+                '',
+
+              _pendingFile:
+                true
             });
           }
 
@@ -2373,18 +2827,25 @@ function renderEditor() {
               'editorHint'
             );
 
-          if (currentHint) {
-            currentHint.textContent = '';
+          if (
+            currentHint
+          ) {
+
+            currentHint.textContent =
+              '';
           }
 
-          e.target.value = '';
+          e.target.value =
+            '';
         }
       }
     );
 
 
   document
-    .getElementById('publishBtn')
+    .getElementById(
+      'publishBtn'
+    )
     .addEventListener(
       'click',
       publishDraft
@@ -2425,7 +2886,7 @@ function insertBlockAfter(
 
 
 // =========================================================
-// Image picker
+// Open image picker
 // =========================================================
 
 function openImagePicker(
@@ -2444,13 +2905,15 @@ function openImagePicker(
     return;
   }
 
-  input.value = '';
+  input.value =
+    '';
+
   input.click();
 }
 
 
 // =========================================================
-// Block add controls
+// Add controls
 // =========================================================
 
 function createBlockAddControls(
@@ -2458,7 +2921,9 @@ function createBlockAddControls(
 ) {
 
   const row =
-    document.createElement('div');
+    document.createElement(
+      'div'
+    );
 
   row.className =
     'block-add-row';
@@ -2494,8 +2959,11 @@ function createBlockAddControls(
         insertBlockAfter(
           index,
           {
-            type: 'text',
-            html: ''
+            type:
+              'text',
+
+            html:
+              ''
           }
         );
       }
@@ -2542,13 +3010,17 @@ function renderBlocks(
   const oldActiveEl =
     activeBlockEl;
 
-  let activeIndex = null;
-  let selectionOffset = null;
+  let activeIndex =
+    null;
+
+  let selectionOffset =
+    null;
 
   if (
     oldActiveEl &&
     oldActiveEl.isConnected &&
-    oldActiveEl.dataset.i !== undefined
+    oldActiveEl.dataset.i !==
+      undefined
   ) {
 
     activeIndex =
@@ -2567,7 +3039,9 @@ function renderBlocks(
       ) {
 
         const range =
-          selection.getRangeAt(0);
+          selection.getRangeAt(
+            0
+          );
 
         if (
           oldActiveEl.contains(
@@ -2584,6 +3058,7 @@ function renderBlocks(
       }
 
     } catch (err) {
+
       console.warn(
         'Не удалось сохранить курсор:',
         err
@@ -2591,7 +3066,8 @@ function renderBlocks(
     }
   }
 
-  host.innerHTML = '';
+  host.innerHTML =
+    '';
 
   d.blocks.forEach(
     (b, i) => {
@@ -2629,7 +3105,8 @@ function renderBlocks(
             data-placeholder="Текст абзаца…"
           >
             ${sanitizeHtml(
-              b.html || ''
+              b.html ||
+              ''
             )}
           </div>
 
@@ -2656,7 +3133,8 @@ function renderBlocks(
 
           <img
             src="${escapeHtml(
-              b.src || ''
+              b.src ||
+              ''
             )}"
             alt=""
           >
@@ -2666,7 +3144,8 @@ function renderBlocks(
             data-i="${i}"
             placeholder="Подпись (необязательно)"
             value="${escapeHtml(
-              b.caption || ''
+              b.caption ||
+              ''
             )}"
           >
 
@@ -2677,7 +3156,9 @@ function renderBlocks(
         return;
       }
 
-      host.appendChild(block);
+      host.appendChild(
+        block
+      );
 
       host.appendChild(
         createBlockAddControls(
@@ -2688,170 +3169,202 @@ function renderBlocks(
   );
 
 
-  // Text listeners
+  host
+    .querySelectorAll(
+      '.block-text'
+    )
+    .forEach(
+      el => {
+
+        el.addEventListener(
+          'focus',
+          () => {
+
+            activeBlockEl =
+              el;
+          }
+        );
+
+        el.addEventListener(
+          'input',
+          e => {
+
+            const index =
+              Number(
+                e.target.dataset.i
+              );
+
+            if (
+              !d.blocks[index] ||
+              d.blocks[index].type !==
+                'text'
+            ) {
+
+              return;
+            }
+
+            d.blocks[index].html =
+              sanitizeHtml(
+                e.target.innerHTML
+              );
+          }
+        );
+
+        el.addEventListener(
+          'keyup',
+          () => {
+
+            activeBlockEl =
+              el;
+          }
+        );
+
+        el.addEventListener(
+          'mouseup',
+          () => {
+
+            activeBlockEl =
+              el;
+          }
+        );
+      }
+    );
+
 
   host
-    .querySelectorAll('.block-text')
-    .forEach(el => {
+    .querySelectorAll(
+      '.block-caption'
+    )
+    .forEach(
+      el => {
 
-      el.addEventListener(
-        'focus',
-        () => {
-          activeBlockEl = el;
-        }
-      );
+        el.addEventListener(
+          'input',
+          e => {
 
-      el.addEventListener(
-        'input',
-        e => {
+            const index =
+              Number(
+                e.target.dataset.i
+              );
 
-          const index =
-            Number(
-              e.target.dataset.i
-            );
+            if (
+              !d.blocks[index] ||
+              d.blocks[index].type !==
+                'image'
+            ) {
 
-          if (
-            !d.blocks[index] ||
-            d.blocks[index].type !== 'text'
-          ) {
-            return;
+              return;
+            }
+
+            d.blocks[index].caption =
+              e.target.value;
           }
+        );
+      }
+    );
 
-          d.blocks[index].html =
-            sanitizeHtml(
-              e.target.innerHTML
-            );
-        }
-      );
-
-      el.addEventListener(
-        'keyup',
-        () => {
-          activeBlockEl = el;
-        }
-      );
-
-      el.addEventListener(
-        'mouseup',
-        () => {
-          activeBlockEl = el;
-        }
-      );
-    });
-
-
-  // Captions
-
-  host
-    .querySelectorAll('.block-caption')
-    .forEach(el => {
-
-      el.addEventListener(
-        'input',
-        e => {
-
-          const index =
-            Number(
-              e.target.dataset.i
-            );
-
-          if (
-            !d.blocks[index] ||
-            d.blocks[index].type !== 'image'
-          ) {
-            return;
-          }
-
-          d.blocks[index].caption =
-            e.target.value;
-        }
-      );
-    });
-
-
-  // Delete
 
   host
     .querySelectorAll(
       '[data-act="del"]'
     )
-    .forEach(el => {
+    .forEach(
+      el => {
 
-      el.addEventListener(
-        'click',
-        () => {
+        el.addEventListener(
+          'click',
+          () => {
 
-          const index =
-            Number(
-              el.dataset.i
-            );
-
-          if (!d.blocks[index]) {
-            return;
-          }
-
-          const wasActive =
-            activeIndex === index;
-
-          d.blocks.splice(
-            index,
-            1
-          );
-
-          if (!d.blocks.length) {
-
-            d.blocks.push({
-              type: 'text',
-              html: ''
-            });
-          }
-
-          let focusIndex = null;
-
-          if (wasActive) {
-
-            focusIndex =
-              Math.min(
-                index,
-                d.blocks.length - 1
+            const index =
+              Number(
+                el.dataset.i
               );
 
-          } else if (
-            activeIndex !== null
-          ) {
+            if (
+              !d.blocks[index]
+            ) {
+              return;
+            }
+
+            const wasActive =
+              activeIndex ===
+              index;
+
+            d.blocks.splice(
+              index,
+              1
+            );
 
             if (
-              activeIndex > index
+              !d.blocks.length
+            ) {
+
+              d.blocks.push({
+                type:
+                  'text',
+
+                html:
+                  ''
+              });
+            }
+
+            let focusIndex =
+              null;
+
+            if (
+              wasActive
             ) {
 
               focusIndex =
-                activeIndex - 1;
+                Math.min(
+                  index,
+                  d.blocks.length -
+                    1
+                );
 
-            } else {
+            } else if (
+              activeIndex !==
+              null
+            ) {
 
-              focusIndex =
-                activeIndex;
+              if (
+                activeIndex >
+                index
+              ) {
+
+                focusIndex =
+                  activeIndex -
+                  1;
+
+              } else {
+
+                focusIndex =
+                  activeIndex;
+              }
             }
+
+            renderBlocks({
+              focusIndex
+            });
           }
+        );
+      }
+    );
 
-          renderBlocks({
-            focusIndex
-          });
-        }
-      );
-    });
-
-
-  // Restore focus
 
   if (
-    options.focusIndex !== undefined &&
-    options.focusIndex !== null
+    options.focusIndex !==
+      undefined &&
+    options.focusIndex !==
+      null
   ) {
+
+    const focusIndex =
+      options.focusIndex;
 
     const target =
       host.querySelector(
-        `.block-text[data-i="${options.focusIndex}"]`
+        `.block-text[data-i="${focusIndex}"]`
       );
 
     if (target) {
@@ -2874,11 +3387,12 @@ function renderBlocks(
     }
   }
 
-
   if (
-    activeIndex !== null &&
+    activeIndex !==
+      null &&
     activeIndex >= 0 &&
-    activeIndex < d.blocks.length
+    activeIndex <
+      d.blocks.length
   ) {
 
     const target =
@@ -2888,7 +3402,8 @@ function renderBlocks(
 
     if (
       target &&
-      document.activeElement === document.body
+      document.activeElement ===
+        document.body
     ) {
 
       target.focus();
@@ -2897,7 +3412,8 @@ function renderBlocks(
         target;
 
       if (
-        selectionOffset !== null
+        selectionOffset !==
+        null
       ) {
 
         setCaretOffset(
@@ -2931,7 +3447,9 @@ function getCaretOffset(
     range.startOffset
   );
 
-  return preRange.toString().length;
+  return preRange
+    .toString()
+    .length;
 }
 
 
@@ -2950,8 +3468,11 @@ function setCaretOffset(
   const range =
     document.createRange();
 
-  let currentOffset = 0;
-  let found = false;
+  let currentOffset =
+    0;
+
+  let found =
+    false;
 
   function walk(node) {
 
@@ -2959,13 +3480,17 @@ function setCaretOffset(
       return;
     }
 
-    if (node.nodeType === 3) {
+    if (
+      node.nodeType ===
+      3
+    ) {
 
       const length =
         node.nodeValue.length;
 
       if (
-        currentOffset + length >=
+        currentOffset +
+          length >=
         offset
       ) {
 
@@ -2974,18 +3499,22 @@ function setCaretOffset(
           Math.max(
             0,
             offset -
-            currentOffset
+              currentOffset
           )
         );
 
-        range.collapse(true);
+        range.collapse(
+          true
+        );
 
-        found = true;
+        found =
+          true;
 
         return;
       }
 
-      currentOffset += length;
+      currentOffset +=
+        length;
 
       return;
     }
@@ -3009,7 +3538,10 @@ function setCaretOffset(
   }
 
   selection.removeAllRanges();
-  selection.addRange(range);
+
+  selection.addRange(
+    range
+  );
 }
 
 
@@ -3031,15 +3563,20 @@ function placeCaretAtEnd(
     element
   );
 
-  range.collapse(false);
+  range.collapse(
+    false
+  );
 
   selection.removeAllRanges();
-  selection.addRange(range);
+
+  selection.addRange(
+    range
+  );
 }
 
 
 // =========================================================
-// Publish
+// Publish / Update
 // =========================================================
 
 async function publishDraft() {
@@ -3051,28 +3588,33 @@ async function publishDraft() {
     Boolean(
       d.title.trim()
     ) ||
-    Boolean(d.cover) ||
-    d.blocks.some(b => {
+    Boolean(
+      d.cover
+    ) ||
+    d.blocks.some(
+      b => {
 
-      if (
-        b.type === 'text'
-      ) {
+        if (
+          b.type === 'text'
+        ) {
+
+          return (
+            b.html
+              .replace(
+                /<[^>]+>/g,
+                ''
+              )
+              .trim()
+              .length > 0
+          );
+        }
 
         return (
-          b.html
-            .replace(
-              /<[^>]+>/g,
-              ''
-            )
-            .trim()
-            .length > 0
+          b.type ===
+          'image'
         );
       }
-
-      return (
-        b.type === 'image'
-      );
-    });
+    );
 
   if (!hasContent) {
 
@@ -3093,7 +3635,8 @@ async function publishDraft() {
       'publishBtn'
     );
 
-  button.disabled = true;
+  button.disabled =
+    true;
 
   hint.textContent =
     d.id
@@ -3103,7 +3646,9 @@ async function publishDraft() {
   try {
 
     const profile =
-      await ensureProfile(true);
+      await ensureProfile(
+        true
+      );
 
     if (!profile) {
 
@@ -3112,15 +3657,15 @@ async function publishDraft() {
       );
     }
 
-
-    // Cover
-
     let finalCover =
-      d.cover || null;
+      d.cover ||
+      null;
 
     if (
       finalCover &&
-      finalCover.startsWith('data:')
+      finalCover.startsWith(
+        'data:'
+      )
     ) {
 
       finalCover =
@@ -3130,15 +3675,14 @@ async function publishDraft() {
         );
     }
 
-
-    // Images
-
     for (
-      const block of d.blocks
+      const block of
+      d.blocks
     ) {
 
       if (
-        block.type === 'image' &&
+        block.type ===
+          'image' &&
         block._pendingFile
       ) {
 
@@ -3155,13 +3699,11 @@ async function publishDraft() {
       }
     }
 
-
-    // Excerpt
-
     const firstText =
       d.blocks.find(
         b =>
-          b.type === 'text' &&
+          b.type ===
+            'text' &&
           b.html &&
           b.html.trim()
       );
@@ -3174,9 +3716,11 @@ async function publishDraft() {
               ''
             )
             .trim()
-            .slice(0, 140)
+            .slice(
+              0,
+              140
+            )
         : '';
-
 
     const payload = {
 
@@ -3192,9 +3736,6 @@ async function publishDraft() {
       blocks:
         d.blocks
     };
-
-
-    // Create
 
     if (!d.id) {
 
@@ -3217,9 +3758,6 @@ async function publishDraft() {
 
       return;
     }
-
-
-    // Update
 
     const result =
       await callTelegramApi(
@@ -3252,11 +3790,13 @@ async function publishDraft() {
       'Ошибка публикации'
     );
 
-    hint.textContent = '';
+    hint.textContent =
+      '';
 
   } finally {
 
-    button.disabled = false;
+    button.disabled =
+      false;
   }
 }
 
@@ -3333,11 +3873,6 @@ function setBackButton(
 // =========================================================
 // Navigation
 // =========================================================
-
-// ВАЖНО:
-// Эти кнопки уже существуют в index.html.
-// Мы только подключаем обработчики.
-// Никаких новых кнопок здесь не создаём.
 
 const homeLink =
   document.getElementById(
