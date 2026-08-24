@@ -45,10 +45,24 @@ const tgUser =
 
 const state = {
   view: 'feed',
+
   articles: [],
+
   draft: null,
+
   currentId: null,
-  profile: null
+
+  profile: null,
+
+  // -------------------------------------------------------
+  // Фильтры ленты
+  // -------------------------------------------------------
+
+  feedSearch: '',
+
+  selectedAuthors: [],
+
+  filterOpen: false
 };
 
 let activeBlockEl = null;
@@ -59,7 +73,9 @@ let activeBlockEl = null;
 // =========================================================
 
 function showToast(msg) {
-  const t = document.getElementById('toast');
+
+  const t =
+    document.getElementById('toast');
 
   if (!t) {
     console.log(msg);
@@ -81,6 +97,7 @@ function showToast(msg) {
 // =========================================================
 
 function fmtDate(iso) {
+
   if (!iso) {
     return '';
   }
@@ -101,9 +118,12 @@ function fmtDate(iso) {
 // =========================================================
 
 function escapeHtml(s) {
-  const d = document.createElement('div');
 
-  d.textContent = s || '';
+  const d =
+    document.createElement('div');
+
+  d.textContent =
+    s || '';
 
   return d.innerHTML;
 }
@@ -127,10 +147,12 @@ const ALLOWED_TAGS =
 
 
 function sanitizeHtml(html) {
+
   const doc =
     document.createElement('div');
 
-  doc.innerHTML = html || '';
+  doc.innerHTML =
+    html || '';
 
   (function clean(node) {
 
@@ -140,18 +162,26 @@ function sanitizeHtml(html) {
 
       if (child.nodeType === 1) {
 
-        if (!ALLOWED_TAGS.has(child.tagName)) {
+        if (
+          !ALLOWED_TAGS.has(
+            child.tagName
+          )
+        ) {
 
-          const parent = child.parentNode;
+          const parent =
+            child.parentNode;
 
           while (child.firstChild) {
+
             parent.insertBefore(
               child.firstChild,
               child
             );
           }
 
-          parent.removeChild(child);
+          parent.removeChild(
+            child
+          );
 
           return;
         }
@@ -159,14 +189,21 @@ function sanitizeHtml(html) {
         [
           ...child.attributes
         ].forEach(attr => {
-          child.removeAttribute(attr.name);
+
+          child.removeAttribute(
+            attr.name
+          );
         });
 
         clean(child);
 
-      } else if (child.nodeType !== 3) {
+      } else if (
+        child.nodeType !== 3
+      ) {
 
-        child.parentNode.removeChild(child);
+        child.parentNode.removeChild(
+          child
+        );
       }
     });
 
@@ -185,7 +222,11 @@ async function callTelegramApi(
   extra = {}
 ) {
 
-  if (!tg || !tg.initData) {
+  if (
+    !tg ||
+    !tg.initData
+  ) {
+
     throw new Error(
       'Откройте приложение внутри Telegram'
     );
@@ -219,8 +260,14 @@ async function callTelegramApi(
     );
   }
 
-  if (data && data.error) {
-    throw new Error(data.error);
+  if (
+    data &&
+    data.error
+  ) {
+
+    throw new Error(
+      data.error
+    );
   }
 
   return data;
@@ -239,13 +286,16 @@ async function getProfile() {
     );
 
   state.profile =
-    result.profile || null;
+    result.profile ||
+    null;
 
   return state.profile;
 }
 
 
-async function saveProfile(username) {
+async function saveProfile(
+  username
+) {
 
   const result =
     await callTelegramApi(
@@ -277,7 +327,9 @@ async function ensureProfile(
     return null;
   }
 
-  return openUsernameDialog(null);
+  return openUsernameDialog(
+    null
+  );
 }
 
 
@@ -354,7 +406,9 @@ function openUsernameDialog(
       </div>
     `;
 
-    document.body.appendChild(overlay);
+    document.body.appendChild(
+      overlay
+    );
 
     const input =
       overlay.querySelector(
@@ -372,8 +426,11 @@ function openUsernameDialog(
       );
 
     setTimeout(() => {
+
       input.focus();
+
       input.select();
+
     }, 50);
 
     cancelBtn.addEventListener(
@@ -393,9 +450,14 @@ function openUsernameDialog(
         const username =
           input.value
             .trim()
-            .replace(/\s+/g, ' ');
+            .replace(
+              /\s+/g,
+              ' '
+            );
 
-        if (username.length < 2) {
+        if (
+          username.length < 2
+        ) {
 
           showToast(
             'Минимум 2 символа'
@@ -404,7 +466,9 @@ function openUsernameDialog(
           return;
         }
 
-        if (username.length > 30) {
+        if (
+          username.length > 30
+        ) {
 
           showToast(
             'Максимум 30 символов'
@@ -413,7 +477,8 @@ function openUsernameDialog(
           return;
         }
 
-        saveBtn.disabled = true;
+        saveBtn.disabled =
+          true;
 
         saveBtn.textContent =
           'Сохраняем…';
@@ -442,7 +507,8 @@ function openUsernameDialog(
             'Не удалось сохранить ник'
           );
 
-          saveBtn.disabled = false;
+          saveBtn.disabled =
+            false;
 
           saveBtn.textContent =
             'Сохранить';
@@ -454,11 +520,17 @@ function openUsernameDialog(
       'keydown',
       e => {
 
-        if (e.key === 'Enter') {
+        if (
+          e.key === 'Enter'
+        ) {
+
           saveBtn.click();
         }
 
-        if (e.key === 'Escape') {
+        if (
+          e.key === 'Escape'
+        ) {
+
           cancelBtn.click();
         }
       }
@@ -473,9 +545,11 @@ function openUsernameDialog(
 
 async function openProfile() {
 
-  state.view = 'profile';
+  state.view =
+    'profile';
 
-  state.currentId = null;
+  state.currentId =
+    null;
 
   setBackButton(
     true,
@@ -483,7 +557,9 @@ async function openProfile() {
   );
 
   const main =
-    document.getElementById('main');
+    document.getElementById(
+      'main'
+    );
 
   main.innerHTML =
     '<div class="loading">Загрузка профиля…</div>';
@@ -491,7 +567,9 @@ async function openProfile() {
   try {
 
     const profile =
-      await ensureProfile(false);
+      await ensureProfile(
+        false
+      );
 
     if (!profile) {
 
@@ -534,7 +612,9 @@ async function openProfile() {
           async () => {
 
             const created =
-              await ensureProfile(true);
+              await ensureProfile(
+                true
+              );
 
             if (created) {
               openProfile();
@@ -636,7 +716,7 @@ async function openProfile() {
 
 
 // =========================================================
-// Feed
+// Feed data
 // =========================================================
 
 async function fetchFeed() {
@@ -668,7 +748,9 @@ async function fetchFeed() {
 }
 
 
-async function fetchArticle(id) {
+async function fetchArticle(
+  id
+) {
 
   const {
     data,
@@ -677,7 +759,10 @@ async function fetchArticle(id) {
     await db
       .from('articles')
       .select('*')
-      .eq('id', id)
+      .eq(
+        'id',
+        id
+      )
       .single();
 
   if (error) {
@@ -692,161 +777,724 @@ async function fetchArticle(id) {
 
 
 // =========================================================
-// Upload image
+// Feed filter helpers
 // =========================================================
 
-async function uploadImage(
-  dataUrl,
-  filename
+function normalizeSearchValue(
+  value
 ) {
 
-  const res =
-    await fetch(dataUrl);
-
-  const blob =
-    await res.blob();
-
-  const safeFilename =
-    String(filename || 'image.jpg')
-      .replace(
-        /[^a-zA-Z0-9._-]/g,
-        '_'
-      );
-
-  const path =
-    `${Date.now()}-${Math.random()
-      .toString(36)
-      .slice(2, 8)}-${safeFilename}`;
-
-  const {
-    error
-  } =
-    await db
-      .storage
-      .from('images')
-      .upload(
-        path,
-        blob,
-        {
-          contentType:
-            blob.type ||
-            'image/jpeg',
-
-          upsert: false
-        }
-      );
-
-  if (error) {
-    throw error;
-  }
-
-  const {
-    data
-  } =
-    db
-      .storage
-      .from('images')
-      .getPublicUrl(path);
-
-  return data.publicUrl;
+  return String(
+    value || ''
+  )
+    .trim()
+    .toLocaleLowerCase(
+      'ru-RU'
+    );
 }
 
 
-// =========================================================
-// Compress image
-// =========================================================
+function getFeedAuthors() {
 
-function compressImageFile(
-  file,
-  maxW = 1200,
-  quality = 0.82
-) {
+  const map =
+    new Map();
 
-  return new Promise(
-    (resolve, reject) => {
+  state.articles.forEach(
+    article => {
 
-      const reader =
-        new FileReader();
+      const name =
+        String(
+          article.author_name ||
+          ''
+        ).trim();
 
-      reader.onload = e => {
+      if (!name) {
+        return;
+      }
 
-        const img =
-          new Image();
+      /*
+       * Используем имя автора как
+       * отображаемое значение.
+       *
+       * Если у одного автора несколько
+       * статей, он всё равно попадёт
+       * в список только один раз.
+       */
+      if (!map.has(name)) {
 
-        img.onload = () => {
-
-          let w = img.width;
-          let h = img.height;
-
-          if (w > maxW) {
-
-            h =
-              Math.round(
-                h *
-                (maxW / w)
-              );
-
-            w = maxW;
+        map.set(
+          name,
+          {
+            name,
+            count: 0
           }
+        );
+      }
 
-          const canvas =
-            document.createElement(
-              'canvas'
-            );
+      map.get(name).count++;
+    }
+  );
 
-          canvas.width = w;
-          canvas.height = h;
+  return Array.from(
+    map.values()
+  ).sort(
+    (a, b) =>
+      a.name.localeCompare(
+        b.name,
+        'ru',
+        {
+          sensitivity:
+            'base'
+        }
+      )
+  );
+}
 
-          canvas
-            .getContext('2d')
-            .drawImage(
-              img,
-              0,
-              0,
-              w,
-              h
-            );
 
-          resolve(
-            canvas.toDataURL(
-              'image/jpeg',
-              quality
-            )
-          );
-        };
+function getFilteredArticles() {
 
-        img.onerror = reject;
+  const search =
+    normalizeSearchValue(
+      state.feedSearch
+    );
 
-        img.src =
-          e.target.result;
-      };
+  const selected =
+    new Set(
+      state.selectedAuthors
+    );
 
-      reader.onerror = reject;
+  return state.articles.filter(
+    article => {
 
-      reader.readAsDataURL(file);
+      const title =
+        normalizeSearchValue(
+          article.title
+        );
+
+      const matchesSearch =
+        !search ||
+        title.includes(
+          search
+        );
+
+      const author =
+        String(
+          article.author_name ||
+          ''
+        ).trim();
+
+      const matchesAuthor =
+        selected.size === 0 ||
+        selected.has(author);
+
+      return (
+        matchesSearch &&
+        matchesAuthor
+      );
     }
   );
 }
 
 
+function resetFeedFilters() {
+
+  state.feedSearch =
+    '';
+
+  state.selectedAuthors =
+    [];
+
+  state.filterOpen =
+    false;
+}
+
+
 // =========================================================
-// Is owner
+// Feed toolbar
 // =========================================================
 
-function isArticleOwner(article) {
+function renderFeedToolbar() {
 
-  if (
-    !tgUser ||
-    !article ||
-    !article.author_id
-  ) {
-    return false;
+  const searchActive =
+    Boolean(
+      state.feedSearch
+    );
+
+  const filterActive =
+    state.selectedAuthors.length >
+    0;
+
+  return `
+
+    <div class="feed-toolbar">
+
+      <div class="feed-tools">
+
+        <button
+          class="
+            feed-tool-btn
+            ${searchActive ? 'active' : ''}
+          "
+          id="feedSearchBtn"
+          type="button"
+          aria-label="Поиск"
+          title="Поиск"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+          >
+            <circle
+              cx="11"
+              cy="11"
+              r="6.5"
+            ></circle>
+            <path
+              d="M16 16l4.5 4.5"
+            ></path>
+          </svg>
+        </button>
+
+        <button
+          class="
+            feed-tool-btn
+            ${filterActive ? 'active' : ''}
+          "
+          id="feedFilterBtn"
+          type="button"
+          aria-label="Фильтр по авторам"
+          title="Фильтр по авторам"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+          >
+            <path
+              d="M4 6h16"
+            ></path>
+            <path
+              d="M7 12h10"
+            ></path>
+            <path
+              d="M10 18h4"
+            ></path>
+          </svg>
+
+          ${
+            filterActive
+              ? `
+                <span class="feed-filter-badge">
+                  ${state.selectedAuthors.length}
+                </span>
+              `
+              : ''
+          }
+        </button>
+
+      </div>
+
+      <button
+        class="btn btn-primary"
+        id="newArticleBtnFeed"
+        type="button"
+      >
+        + Статья
+      </button>
+
+    </div>
+
+
+    ${
+      searchActive
+        ? `
+          <div class="feed-search-wrap">
+
+            <svg
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <circle
+                cx="11"
+                cy="11"
+                r="6.5"
+              ></circle>
+
+              <path
+                d="M16 16l4.5 4.5"
+              ></path>
+            </svg>
+
+            <input
+              id="feedSearchInput"
+              class="feed-search-input"
+              type="search"
+              autocomplete="off"
+              placeholder="Найти статью по названию…"
+              value="${escapeHtml(
+                state.feedSearch
+              )}"
+            >
+
+            ${
+              state.feedSearch
+                ? `
+                  <button
+                    id="feedSearchClear"
+                    class="feed-search-clear"
+                    type="button"
+                    aria-label="Очистить поиск"
+                  >
+                    ×
+                  </button>
+                `
+                : ''
+            }
+
+          </div>
+        `
+        : ''
+    }
+
+
+    ${
+      state.filterOpen
+        ? renderAuthorFilter()
+        : ''
+    }
+
+  `;
+}
+
+
+function renderAuthorFilter() {
+
+  const authors =
+    getFeedAuthors();
+
+  if (!authors.length) {
+
+    return `
+
+      <div class="author-filter chrome">
+
+        <div class="author-filter-header">
+
+          <div class="author-filter-title">
+            Авторы
+          </div>
+
+          <button
+            class="author-filter-close"
+            id="authorFilterClose"
+            type="button"
+          >
+            ×
+          </button>
+
+        </div>
+
+        <div class="author-filter-empty">
+          Пока нет статей с указанным автором.
+        </div>
+
+      </div>
+    `;
   }
 
-  return (
-    Number(article.author_id) ===
-    Number(tgUser.id)
-  );
+  const selected =
+    new Set(
+      state.selectedAuthors
+    );
+
+  return `
+
+    <div class="author-filter chrome">
+
+      <div class="author-filter-header">
+
+        <div>
+
+          <div class="author-filter-title">
+            Авторы
+          </div>
+
+          <div class="author-filter-subtitle">
+            Можно выбрать одного или нескольких
+          </div>
+
+        </div>
+
+        <button
+          class="author-filter-close"
+          id="authorFilterClose"
+          type="button"
+        >
+          ×
+        </button>
+
+      </div>
+
+
+      <div class="author-filter-list">
+
+        ${
+          authors
+            .map(author => {
+
+              const checked =
+                selected.has(
+                  author.name
+                );
+
+              return `
+
+                <label
+                  class="author-filter-option"
+                >
+
+                  <input
+                    type="checkbox"
+                    class="author-filter-checkbox"
+                    data-author="${escapeHtml(
+                      author.name
+                    )}"
+                    ${
+                      checked
+                        ? 'checked'
+                        : ''
+                    }
+                  >
+
+                  <span class="custom-checkbox">
+
+                    ${
+                      checked
+                        ? `
+                          <svg
+                            viewBox="0 0 20 20"
+                            aria-hidden="true"
+                          >
+                            <path
+                              d="M4 10l4 4 8-9"
+                            ></path>
+                          </svg>
+                        `
+                        : ''
+                    }
+
+                  </span>
+
+                  <span class="author-filter-name">
+                    ${escapeHtml(
+                      author.name
+                    )}
+                  </span>
+
+                  <span class="author-filter-count">
+                    ${author.count}
+                  </span>
+
+                </label>
+              `;
+            })
+            .join('')
+        }
+
+      </div>
+
+
+      <div class="author-filter-footer">
+
+        <button
+          class="author-filter-reset"
+          id="authorFilterReset"
+          type="button"
+          ${
+            state.selectedAuthors.length
+              ? ''
+              : 'disabled'
+          }
+        >
+          Сбросить
+        </button>
+
+        <button
+          class="btn btn-primary author-filter-done"
+          id="authorFilterDone"
+          type="button"
+        >
+          Готово
+        </button>
+
+      </div>
+
+    </div>
+  `;
+}
+
+
+function bindFeedToolbar() {
+
+  const searchBtn =
+    document.getElementById(
+      'feedSearchBtn'
+    );
+
+  if (searchBtn) {
+
+    searchBtn.addEventListener(
+      'click',
+      () => {
+
+        state.filterOpen =
+          false;
+
+        /*
+         * Если поиск уже открыт,
+         * повторный клик не закрывает
+         * строку — это удобнее для
+         * мобильного интерфейса.
+         */
+
+        renderFeed();
+        
+        requestAnimationFrame(
+          () => {
+
+            const input =
+              document.getElementById(
+                'feedSearchInput'
+              );
+
+            if (input) {
+
+              input.focus();
+
+              input.setSelectionRange(
+                input.value.length,
+                input.value.length
+              );
+            }
+          }
+        );
+      }
+    );
+  }
+
+
+  const filterBtn =
+    document.getElementById(
+      'feedFilterBtn'
+    );
+
+  if (filterBtn) {
+
+    filterBtn.addEventListener(
+      'click',
+      () => {
+
+        state.filterOpen =
+          !state.filterOpen;
+
+        renderFeed();
+      }
+    );
+  }
+
+
+  const newBtn =
+    document.getElementById(
+      'newArticleBtnFeed'
+    );
+
+  if (newBtn) {
+
+    newBtn.addEventListener(
+      'click',
+      openEditor
+    );
+  }
+
+
+  const searchInput =
+    document.getElementById(
+      'feedSearchInput'
+    );
+
+  if (searchInput) {
+
+    searchInput.addEventListener(
+      'input',
+      e => {
+
+        state.feedSearch =
+          e.target.value;
+
+        renderFeed();
+
+        requestAnimationFrame(
+          () => {
+
+            const input =
+              document.getElementById(
+                'feedSearchInput'
+              );
+
+            if (!input) {
+              return;
+            }
+
+            input.focus();
+
+            input.setSelectionRange(
+              input.value.length,
+              input.value.length
+            );
+          }
+        );
+      }
+    );
+  }
+
+
+  const clearSearch =
+    document.getElementById(
+      'feedSearchClear'
+    );
+
+  if (clearSearch) {
+
+    clearSearch.addEventListener(
+      'click',
+      () => {
+
+        state.feedSearch =
+          '';
+
+        renderFeed();
+
+        requestAnimationFrame(
+          () => {
+
+            const input =
+              document.getElementById(
+                'feedSearchInput'
+              );
+
+            if (input) {
+              input.focus();
+            }
+          }
+        );
+      }
+    );
+  }
+
+
+  const closeFilter =
+    document.getElementById(
+      'authorFilterClose'
+    );
+
+  if (closeFilter) {
+
+    closeFilter.addEventListener(
+      'click',
+      () => {
+
+        state.filterOpen =
+          false;
+
+        renderFeed();
+      }
+    );
+  }
+
+
+  const resetFilter =
+    document.getElementById(
+      'authorFilterReset'
+    );
+
+  if (resetFilter) {
+
+    resetFilter.addEventListener(
+      'click',
+      () => {
+
+        state.selectedAuthors =
+          [];
+
+        renderFeed();
+      }
+    );
+  }
+
+
+  const doneFilter =
+    document.getElementById(
+      'authorFilterDone'
+    );
+
+  if (doneFilter) {
+
+    doneFilter.addEventListener(
+      'click',
+      () => {
+
+        state.filterOpen =
+          false;
+
+        renderFeed();
+      }
+    );
+  }
+
+
+  document
+    .querySelectorAll(
+      '.author-filter-checkbox'
+    )
+    .forEach(input => {
+
+      input.addEventListener(
+        'change',
+        e => {
+
+          const author =
+            e.target.dataset.author;
+
+          if (!author) {
+            return;
+          }
+
+          const current =
+            new Set(
+              state.selectedAuthors
+            );
+
+          if (
+            e.target.checked
+          ) {
+
+            current.add(
+              author
+            );
+
+          } else {
+
+            current.delete(
+              author
+            );
+          }
+
+          state.selectedAuthors =
+            Array.from(current);
+
+          renderFeed();
+        }
+      );
+    });
 }
 
 
@@ -856,14 +1504,20 @@ function isArticleOwner(article) {
 
 async function renderFeed() {
 
-  state.view = 'feed';
+  state.view =
+    'feed';
 
-  state.currentId = null;
+  state.currentId =
+    null;
 
-  setBackButton(false);
+  setBackButton(
+    false
+  );
 
   const main =
-    document.getElementById('main');
+    document.getElementById(
+      'main'
+    );
 
   main.innerHTML =
     '<div class="loading">Загрузка статей…</div>';
@@ -871,9 +1525,64 @@ async function renderFeed() {
   state.articles =
     await fetchFeed();
 
+  /*
+   * Удаляем из выбранных авторов тех,
+   * кого больше нет среди статей.
+   */
+
+  const availableAuthors =
+    new Set(
+      getFeedAuthors()
+        .map(
+          author => author.name
+        )
+    );
+
+  state.selectedAuthors =
+    state.selectedAuthors.filter(
+      author =>
+        availableAuthors.has(
+          author
+        )
+    );
+
+  const filtered =
+    getFilteredArticles();
+
+  main.innerHTML = `
+
+    <div class="feed-header">
+
+      ${renderFeedToolbar()}
+
+    </div>
+
+  `;
+
+
+  const feedHost =
+    document.createElement(
+      'div'
+    );
+
+  feedHost.className =
+    'feed-list';
+
+  main.appendChild(
+    feedHost
+  );
+
+
+  bindFeedToolbar();
+
+
+  // =======================================================
+  // Empty states
+  // =======================================================
+
   if (!state.articles.length) {
 
-    main.innerHTML = `
+    feedHost.innerHTML = `
 
       <div class="empty-state">
 
@@ -892,8 +1601,81 @@ async function renderFeed() {
     return;
   }
 
-  main.innerHTML =
-    state.articles
+
+  if (!filtered.length) {
+
+    const hasFilters =
+      Boolean(
+        state.feedSearch
+      ) ||
+      state.selectedAuthors.length >
+        0;
+
+    feedHost.innerHTML = `
+
+      <div class="empty-state">
+
+        <h2>
+          ${
+            hasFilters
+              ? 'Ничего не найдено'
+              : 'Здесь пока пусто'
+          }
+        </h2>
+
+        <p>
+          ${
+            hasFilters
+              ? 'Попробуйте изменить поиск или фильтр по авторам.'
+              : 'Нажмите «+ Статья», чтобы опубликовать первую запись.'
+          }
+        </p>
+
+        ${
+          hasFilters
+            ? `
+              <button
+                class="btn btn-secondary"
+                id="resetAllFeedFilters"
+                type="button"
+              >
+                Сбросить фильтры
+              </button>
+            `
+            : ''
+        }
+
+      </div>
+    `;
+
+    const resetBtn =
+      document.getElementById(
+        'resetAllFeedFilters'
+      );
+
+    if (resetBtn) {
+
+      resetBtn.addEventListener(
+        'click',
+        () => {
+
+          resetFeedFilters();
+
+          renderFeed();
+        }
+      );
+    }
+
+    return;
+  }
+
+
+  // =======================================================
+  // Articles
+  // =======================================================
+
+  feedHost.innerHTML =
+    filtered
       .map(article => `
 
         <div
@@ -945,7 +1727,8 @@ async function renderFeed() {
 
           <p>
             ${escapeHtml(
-              article.excerpt || ''
+              article.excerpt ||
+              ''
             )}
           </p>
 
@@ -953,8 +1736,11 @@ async function renderFeed() {
       `)
       .join('');
 
-  main
-    .querySelectorAll('.feed-item')
+
+  feedHost
+    .querySelectorAll(
+      '.feed-item'
+    )
     .forEach(el => {
 
       el.addEventListener(
@@ -974,11 +1760,15 @@ async function renderFeed() {
 // Reader
 // =========================================================
 
-async function openReader(id) {
+async function openReader(
+  id
+) {
 
-  state.view = 'reader';
+  state.view =
+    'reader';
 
-  state.currentId = id;
+  state.currentId =
+    id;
 
   setBackButton(
     true,
@@ -986,13 +1776,17 @@ async function openReader(id) {
   );
 
   const main =
-    document.getElementById('main');
+    document.getElementById(
+      'main'
+    );
 
   main.innerHTML =
     '<div class="loading">Открываем статью…</div>';
 
   const article =
-    await fetchArticle(id);
+    await fetchArticle(
+      id
+    );
 
   if (!article) {
 
@@ -1016,7 +1810,8 @@ async function openReader(id) {
 
   const bodyHtml =
     (
-      article.blocks || []
+      article.blocks ||
+      []
     )
       .map(block => {
 
@@ -1047,7 +1842,8 @@ async function openReader(id) {
 
               <img
                 src="${escapeHtml(
-                  block.src || ''
+                  block.src ||
+                  ''
                 )}"
                 alt=""
               >
@@ -1076,7 +1872,9 @@ async function openReader(id) {
     `https://t.me/${BOT_USERNAME}/${MINIAPP_SHORT_NAME}?startapp=${article.id}`;
 
   const owner =
-    isArticleOwner(article);
+    isArticleOwner(
+      article
+    );
 
   main.innerHTML = `
 
@@ -1173,7 +1971,9 @@ async function openReader(id) {
   // =======================================================
 
   document
-    .getElementById('shareBtn')
+    .getElementById(
+      'shareBtn'
+    )
     .addEventListener(
       'click',
       async () => {
@@ -1201,7 +2001,9 @@ async function openReader(id) {
             return;
           }
 
-          if (navigator.share) {
+          if (
+            navigator.share
+          ) {
 
             await navigator.share({
               title:
@@ -1216,7 +2018,9 @@ async function openReader(id) {
 
           await navigator
             .clipboard
-            .writeText(shareUrl);
+            .writeText(
+              shareUrl
+            );
 
           showToast(
             'Ссылка скопирована'
@@ -1237,16 +2041,23 @@ async function openReader(id) {
   if (owner) {
 
     document
-      .getElementById('editBtn')
+      .getElementById(
+        'editBtn'
+      )
       .addEventListener(
         'click',
         () => {
-          editArticle(article);
+
+          editArticle(
+            article
+          );
         }
       );
 
     document
-      .getElementById('deleteBtn')
+      .getElementById(
+        'deleteBtn'
+      )
       .addEventListener(
         'click',
         async () => {
@@ -1256,6 +2067,7 @@ async function openReader(id) {
               'Удалить статью безвозвратно?'
             )
           ) {
+
             return;
           }
 
@@ -1264,7 +2076,8 @@ async function openReader(id) {
               'deleteBtn'
             );
 
-          btn.disabled = true;
+          btn.disabled =
+            true;
 
           btn.textContent =
             'Удаляем…';
@@ -1289,7 +2102,8 @@ async function openReader(id) {
 
             console.error(err);
 
-            btn.disabled = false;
+            btn.disabled =
+              false;
 
             btn.textContent =
               'Удалить';
@@ -1350,15 +2164,19 @@ async function openEditor() {
     }
 
     const profile =
-      await ensureProfile(true);
+      await ensureProfile(
+        true
+      );
 
     if (!profile) {
       return;
     }
 
-    state.view = 'editor';
+    state.view =
+      'editor';
 
-    state.currentId = null;
+    state.currentId =
+      null;
 
     state.draft =
       newDraft();
@@ -1396,10 +2214,14 @@ async function openEditor() {
 // Edit article
 // =========================================================
 
-function editArticle(article) {
+function editArticle(
+  article
+) {
 
   if (
-    !isArticleOwner(article)
+    !isArticleOwner(
+      article
+    )
   ) {
 
     showToast(
@@ -1409,7 +2231,8 @@ function editArticle(article) {
     return;
   }
 
-  state.view = 'editor';
+  state.view =
+    'editor';
 
   state.currentId =
     article.id;
@@ -1420,20 +2243,25 @@ function editArticle(article) {
       article.id,
 
     title:
-      article.title || '',
+      article.title ||
+      '',
 
     cover:
-      article.cover || null,
+      article.cover ||
+      null,
 
     blocks:
       JSON.parse(
         JSON.stringify(
-          article.blocks || []
+          article.blocks ||
+          []
         )
       )
   };
 
-  if (!state.draft.blocks.length) {
+  if (
+    !state.draft.blocks.length
+  ) {
 
     state.draft.blocks = [
       {
@@ -1471,7 +2299,9 @@ function editArticle(article) {
 function renderEditor() {
 
   const main =
-    document.getElementById('main');
+    document.getElementById(
+      'main'
+    );
 
   const d =
     state.draft;
@@ -1487,10 +2317,6 @@ function renderEditor() {
       )}"
     >
 
-
-    <!-- ===============================================
-         COVER
-         =============================================== -->
 
     <div
       class="cover-editor"
@@ -1620,8 +2446,6 @@ function renderEditor() {
     </button>
 
 
-    <!-- Обложка -->
-
     <input
       type="file"
       accept="image/*"
@@ -1629,8 +2453,6 @@ function renderEditor() {
       style="display:none"
     >
 
-
-    <!-- Обычные картинки -->
 
     <input
       type="file"
@@ -1654,7 +2476,9 @@ function renderEditor() {
   // =======================================================
 
   document
-    .getElementById('titleInput')
+    .getElementById(
+      'titleInput'
+    )
     .addEventListener(
       'input',
       e => {
@@ -1670,8 +2494,12 @@ function renderEditor() {
   // =======================================================
 
   document
-    .getElementById('toolbar')
-    .querySelectorAll('button')
+    .getElementById(
+      'toolbar'
+    )
+    .querySelectorAll(
+      'button'
+    )
     .forEach(btn => {
 
       btn.addEventListener(
@@ -1680,7 +2508,9 @@ function renderEditor() {
 
           e.preventDefault();
 
-          if (!activeBlockEl) {
+          if (
+            !activeBlockEl
+          ) {
             return;
           }
 
@@ -1691,7 +2521,9 @@ function renderEditor() {
           );
 
           activeBlockEl.dispatchEvent(
-            new Event('input')
+            new Event(
+              'input'
+            )
           );
         }
       );
@@ -1714,7 +2546,9 @@ function renderEditor() {
       () => {
 
         document
-          .getElementById('coverInput')
+          .getElementById(
+            'coverInput'
+          )
           .click();
       }
     );
@@ -1733,7 +2567,9 @@ function renderEditor() {
       () => {
 
         document
-          .getElementById('coverInput')
+          .getElementById(
+            'coverInput'
+          )
           .click();
       }
     );
@@ -1751,7 +2587,8 @@ function renderEditor() {
       'click',
       () => {
 
-        d.cover = null;
+        d.cover =
+          null;
 
         renderEditor();
 
@@ -1768,7 +2605,9 @@ function renderEditor() {
   // =======================================================
 
   document
-    .getElementById('coverInput')
+    .getElementById(
+      'coverInput'
+    )
     .addEventListener(
       'change',
       async e => {
@@ -1817,10 +2656,12 @@ function renderEditor() {
           );
 
         if (currentHint) {
-          currentHint.textContent = '';
+          currentHint.textContent =
+            '';
         }
 
-        e.target.value = '';
+        e.target.value =
+          '';
       }
     );
 
@@ -1830,14 +2671,17 @@ function renderEditor() {
   // =======================================================
 
   document
-    .getElementById('fileInput')
+    .getElementById(
+      'fileInput'
+    )
     .addEventListener(
       'change',
       async e => {
 
         const files =
           Array.from(
-            e.target.files || []
+            e.target.files ||
+            []
           );
 
         if (!files.length) {
@@ -1856,14 +2700,6 @@ function renderEditor() {
 
         try {
 
-          /*
-           * ВАЖНО:
-           * Здесь больше нет d.blocks.push().
-           *
-           * Изображения вставляются в конкретную
-           * позицию, которую передал пользователь.
-           */
-
           const insertIndex =
             Number.isInteger(
               state.pendingImageInsertIndex
@@ -1871,7 +2707,8 @@ function renderEditor() {
               ? state.pendingImageInsertIndex
               : d.blocks.length;
 
-          const newBlocks = [];
+          const newBlocks =
+            [];
 
           for (
             const file
@@ -1900,10 +2737,6 @@ function renderEditor() {
           state.pendingImageInsertIndex =
             null;
 
-          /*
-           * Не перерисовываем весь редактор.
-           * Только обновляем список блоков.
-           */
           renderBlocks({
             focusIndex:
               insertIndex
@@ -1925,10 +2758,12 @@ function renderEditor() {
             );
 
           if (currentHint) {
-            currentHint.textContent = '';
+            currentHint.textContent =
+              '';
           }
 
-          e.target.value = '';
+          e.target.value =
+            '';
         }
       }
     );
@@ -1939,7 +2774,9 @@ function renderEditor() {
   // =======================================================
 
   document
-    .getElementById('publishBtn')
+    .getElementById(
+      'publishBtn'
+    )
     .addEventListener(
       'click',
       publishDraft
@@ -1955,7 +2792,7 @@ function renderEditor() {
 
 
 // =========================================================
-// Insert block without full editor rerender
+// Insert block
 // =========================================================
 
 function insertBlockAfter(
@@ -1985,7 +2822,7 @@ function insertBlockAfter(
 
 
 // =========================================================
-// Open image picker at specific position
+// Open image picker
 // =========================================================
 
 function openImagePicker(
@@ -2004,14 +2841,15 @@ function openImagePicker(
     return;
   }
 
-  input.value = '';
+  input.value =
+    '';
 
   input.click();
 }
 
 
 // =========================================================
-// Add controls under block
+// Add controls
 // =========================================================
 
 function createBlockAddControls(
@@ -2019,7 +2857,9 @@ function createBlockAddControls(
 ) {
 
   const row =
-    document.createElement('div');
+    document.createElement(
+      'div'
+    );
 
   row.className =
     'block-add-row';
@@ -2055,10 +2895,6 @@ function createBlockAddControls(
     );
 
 
-  // =======================================================
-  // Add text
-  // =======================================================
-
   textBtn.addEventListener(
     'click',
     () => {
@@ -2073,10 +2909,6 @@ function createBlockAddControls(
     }
   );
 
-
-  // =======================================================
-  // Add image
-  // =======================================================
 
   imageBtn.addEventListener(
     'click',
@@ -2112,10 +2944,6 @@ function renderBlocks(
   const d =
     state.draft;
 
-  /*
-   * Сохраняем состояние текущего текстового
-   * блока перед обновлением DOM.
-   */
   const oldActiveEl =
     activeBlockEl;
 
@@ -2128,7 +2956,8 @@ function renderBlocks(
   if (
     oldActiveEl &&
     oldActiveEl.isConnected &&
-    oldActiveEl.dataset.i !== undefined
+    oldActiveEl.dataset.i !==
+      undefined
   ) {
 
     activeIndex =
@@ -2147,7 +2976,9 @@ function renderBlocks(
       ) {
 
         const range =
-          selection.getRangeAt(0);
+          selection.getRangeAt(
+            0
+          );
 
         if (
           oldActiveEl.contains(
@@ -2173,7 +3004,8 @@ function renderBlocks(
   }
 
 
-  host.innerHTML = '';
+  host.innerHTML =
+    '';
 
 
   d.blocks.forEach(
@@ -2190,10 +3022,6 @@ function renderBlocks(
       block.dataset.i =
         i;
 
-
-      // ===================================================
-      // Text block
-      // ===================================================
 
       if (
         b.type === 'text'
@@ -2217,17 +3045,14 @@ function renderBlocks(
             data-placeholder="Текст абзаца…"
           >
             ${sanitizeHtml(
-              b.html || ''
+              b.html ||
+              ''
             )}
           </div>
 
         `;
       }
 
-
-      // ===================================================
-      // Image block
-      // ===================================================
 
       else if (
         b.type === 'image'
@@ -2249,7 +3074,8 @@ function renderBlocks(
 
           <img
             src="${escapeHtml(
-              b.src || ''
+              b.src ||
+              ''
             )}"
             alt=""
           >
@@ -2259,26 +3085,23 @@ function renderBlocks(
             data-i="${i}"
             placeholder="Подпись (необязательно)"
             value="${escapeHtml(
-              b.caption || ''
+              b.caption ||
+              ''
             )}"
           >
 
         `;
       }
 
-
       else {
         return;
       }
 
 
-      // Add block itself
       host.appendChild(
         block
       );
 
-
-      // Add controls directly below it
       host.appendChild(
         createBlockAddControls(
           i
@@ -2289,11 +3112,13 @@ function renderBlocks(
 
 
   // =======================================================
-  // Text event listeners
+  // Text listeners
   // =======================================================
 
   host
-    .querySelectorAll('.block-text')
+    .querySelectorAll(
+      '.block-text'
+    )
     .forEach(el => {
 
       el.addEventListener(
@@ -2317,7 +3142,8 @@ function renderBlocks(
 
           if (
             !d.blocks[index] ||
-            d.blocks[index].type !== 'text'
+            d.blocks[index].type !==
+              'text'
           ) {
             return;
           }
@@ -2356,7 +3182,9 @@ function renderBlocks(
   // =======================================================
 
   host
-    .querySelectorAll('.block-caption')
+    .querySelectorAll(
+      '.block-caption'
+    )
     .forEach(el => {
 
       el.addEventListener(
@@ -2370,7 +3198,8 @@ function renderBlocks(
 
           if (
             !d.blocks[index] ||
-            d.blocks[index].type !== 'image'
+            d.blocks[index].type !==
+              'image'
           ) {
             return;
           }
@@ -2383,7 +3212,7 @@ function renderBlocks(
 
 
   // =======================================================
-  // Delete block
+  // Delete
   // =======================================================
 
   host
@@ -2407,16 +3236,14 @@ function renderBlocks(
             return;
           }
 
-
           const wasActive =
-            activeIndex === index;
-
+            activeIndex ===
+            index;
 
           d.blocks.splice(
             index,
             1
           );
-
 
           if (
             !d.blocks.length
@@ -2427,12 +3254,6 @@ function renderBlocks(
               html: ''
             });
           }
-
-
-          /*
-           * Не перерисовываем весь editor.
-           * renderBlocks обновляет только блоки.
-           */
 
           let focusIndex =
             null;
@@ -2463,7 +3284,6 @@ function renderBlocks(
             }
           }
 
-
           renderBlocks({
             focusIndex
           });
@@ -2473,12 +3293,14 @@ function renderBlocks(
 
 
   // =======================================================
-  // Restore focus / caret
+  // Restore caret
   // =======================================================
 
   if (
-    options.focusIndex !== undefined &&
-    options.focusIndex !== null
+    options.focusIndex !==
+      undefined &&
+    options.focusIndex !==
+      null
   ) {
 
     const focusIndex =
@@ -2510,15 +3332,11 @@ function renderBlocks(
   }
 
 
-  /*
-   * Если это обычное обновление после ввода,
-   * возвращаем старый фокус и позицию курсора.
-   */
-
   if (
     activeIndex !== null &&
     activeIndex >= 0 &&
-    activeIndex < d.blocks.length
+    activeIndex <
+      d.blocks.length
   ) {
 
     const target =
@@ -2528,7 +3346,8 @@ function renderBlocks(
 
     if (
       target &&
-      document.activeElement === document.body
+      document.activeElement ===
+        document.body
     ) {
 
       target.focus();
@@ -2537,7 +3356,8 @@ function renderBlocks(
         target;
 
       if (
-        selectionOffset !== null
+        selectionOffset !==
+          null
       ) {
 
         setCaretOffset(
@@ -2571,7 +3391,8 @@ function getCaretOffset(
     range.startOffset
   );
 
-  return preRange.toString().length;
+  return preRange.toString()
+    .length;
 }
 
 
@@ -2593,7 +3414,8 @@ function setCaretOffset(
   let currentOffset =
     0;
 
-  let found = false;
+  let found =
+    false;
 
 
   function walk(node) {
@@ -2610,7 +3432,8 @@ function setCaretOffset(
         node.nodeValue.length;
 
       if (
-        currentOffset + length >=
+        currentOffset +
+          length >=
         offset
       ) {
 
@@ -2619,13 +3442,16 @@ function setCaretOffset(
           Math.max(
             0,
             offset -
-            currentOffset
+              currentOffset
           )
         );
 
-        range.collapse(true);
+        range.collapse(
+          true
+        );
 
-        found = true;
+        found =
+          true;
 
         return;
       }
@@ -2635,7 +3461,6 @@ function setCaretOffset(
 
       return;
     }
-
 
     node.childNodes.forEach(
       child => {
@@ -2649,6 +3474,7 @@ function setCaretOffset(
 
 
   if (!found) {
+
     placeCaretAtEnd(
       element
     );
@@ -2683,12 +3509,207 @@ function placeCaretAtEnd(
     element
   );
 
-  range.collapse(false);
+  range.collapse(
+    false
+  );
 
   selection.removeAllRanges();
 
   selection.addRange(
     range
+  );
+}
+
+
+// =========================================================
+// Upload image
+// =========================================================
+
+async function uploadImage(
+  dataUrl,
+  filename
+) {
+
+  const res =
+    await fetch(
+      dataUrl
+    );
+
+  const blob =
+    await res.blob();
+
+  const safeFilename =
+    String(
+      filename ||
+      'image.jpg'
+    )
+      .replace(
+        /[^a-zA-Z0-9._-]/g,
+        '_'
+      );
+
+  const path =
+    `${Date.now()}-${Math.random()
+      .toString(36)
+      .slice(2, 8)}-${safeFilename}`;
+
+  const {
+    error
+  } =
+    await db
+      .storage
+      .from('images')
+      .upload(
+        path,
+        blob,
+        {
+          contentType:
+            blob.type ||
+            'image/jpeg',
+
+          upsert:
+            false
+        }
+      );
+
+  if (error) {
+    throw error;
+  }
+
+  const {
+    data
+  } =
+    db
+      .storage
+      .from('images')
+      .getPublicUrl(
+        path
+      );
+
+  return data.publicUrl;
+}
+
+
+// =========================================================
+// Compress image
+// =========================================================
+
+function compressImageFile(
+  file,
+  maxW = 1200,
+  quality = 0.82
+) {
+
+  return new Promise(
+    (resolve, reject) => {
+
+      const reader =
+        new FileReader();
+
+      reader.onload =
+        e => {
+
+          const img =
+            new Image();
+
+          img.onload =
+            () => {
+
+              let w =
+                img.width;
+
+              let h =
+                img.height;
+
+              if (
+                w > maxW
+              ) {
+
+                h =
+                  Math.round(
+                    h *
+                    (
+                      maxW /
+                      w
+                    )
+                  );
+
+                w =
+                  maxW;
+              }
+
+              const canvas =
+                document.createElement(
+                  'canvas'
+                );
+
+              canvas.width =
+                w;
+
+              canvas.height =
+                h;
+
+              canvas
+                .getContext(
+                  '2d'
+                )
+                .drawImage(
+                  img,
+                  0,
+                  0,
+                  w,
+                  h
+                );
+
+              resolve(
+                canvas.toDataURL(
+                  'image/jpeg',
+                  quality
+                )
+              );
+            };
+
+          img.onerror =
+            reject;
+
+          img.src =
+            e.target.result;
+        };
+
+      reader.onerror =
+        reject;
+
+      reader.readAsDataURL(
+        file
+      );
+    }
+  );
+}
+
+
+// =========================================================
+// Is owner
+// =========================================================
+
+function isArticleOwner(
+  article
+) {
+
+  if (
+    !tgUser ||
+    !article ||
+    !article.author_id
+  ) {
+    return false;
+  }
+
+  return (
+    Number(
+      article.author_id
+    ) ===
+    Number(
+      tgUser.id
+    )
   );
 }
 
@@ -2706,28 +3727,34 @@ async function publishDraft() {
     Boolean(
       d.title.trim()
     ) ||
-    Boolean(d.cover) ||
-    d.blocks.some(b => {
+    Boolean(
+      d.cover
+    ) ||
+    d.blocks.some(
+      b => {
 
-      if (
-        b.type === 'text'
-      ) {
+        if (
+          b.type === 'text'
+        ) {
+
+          return (
+            b.html
+              .replace(
+                /<[^>]+>/g,
+                ''
+              )
+              .trim()
+              .length >
+            0
+          );
+        }
 
         return (
-          b.html
-            .replace(
-              /<[^>]+>/g,
-              ''
-            )
-            .trim()
-            .length > 0
+          b.type ===
+          'image'
         );
       }
-
-      return (
-        b.type === 'image'
-      );
-    });
+    );
 
 
   if (!hasContent) {
@@ -2750,7 +3777,8 @@ async function publishDraft() {
       'publishBtn'
     );
 
-  button.disabled = true;
+  button.disabled =
+    true;
 
   hint.textContent =
     d.id
@@ -2760,12 +3788,10 @@ async function publishDraft() {
 
   try {
 
-    // =====================================================
-    // Profile
-    // =====================================================
-
     const profile =
-      await ensureProfile(true);
+      await ensureProfile(
+        true
+      );
 
     if (!profile) {
 
@@ -2775,16 +3801,15 @@ async function publishDraft() {
     }
 
 
-    // =====================================================
-    // Upload cover
-    // =====================================================
-
     let finalCover =
-      d.cover || null;
+      d.cover ||
+      null;
 
     if (
       finalCover &&
-      finalCover.startsWith('data:')
+      finalCover.startsWith(
+        'data:'
+      )
     ) {
 
       finalCover =
@@ -2794,10 +3819,6 @@ async function publishDraft() {
         );
     }
 
-
-    // =====================================================
-    // Upload article images
-    // =====================================================
 
     for (
       const block
@@ -2823,10 +3844,6 @@ async function publishDraft() {
     }
 
 
-    // =====================================================
-    // Excerpt
-    // =====================================================
-
     const firstText =
       d.blocks.find(
         b =>
@@ -2843,13 +3860,12 @@ async function publishDraft() {
               ''
             )
             .trim()
-            .slice(0, 140)
+            .slice(
+              0,
+              140
+            )
         : '';
 
-
-    // =====================================================
-    // Payload
-    // =====================================================
 
     const payload = {
 
@@ -2866,10 +3882,6 @@ async function publishDraft() {
         d.blocks
     };
 
-
-    // =====================================================
-    // CREATE
-    // =====================================================
 
     if (!d.id) {
 
@@ -2893,10 +3905,6 @@ async function publishDraft() {
       return;
     }
 
-
-    // =====================================================
-    // UPDATE
-    // =====================================================
 
     const result =
       await callTelegramApi(
@@ -2929,11 +3937,13 @@ async function publishDraft() {
       'Ошибка публикации'
     );
 
-    hint.textContent = '';
+    hint.textContent =
+      '';
 
   } finally {
 
-    button.disabled = false;
+    button.disabled =
+      false;
   }
 }
 
@@ -3020,7 +4030,14 @@ if (homeLink) {
 
   homeLink.addEventListener(
     'click',
-    renderFeed
+    () => {
+
+      /*
+       * При возврате на главную
+       * сохраняем выбранные фильтры.
+       */
+      renderFeed();
+    }
   );
 }
 
