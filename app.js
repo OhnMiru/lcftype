@@ -7,7 +7,7 @@ const BOT_USERNAME = 'lcftype_bot'; // без @, из BotFather
 const MINIAPP_SHORT_NAME = 'lcftype';     // short name Web App, из BotFather
 
 // ---- Инициализация ----
-const supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+const db = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
 const tg = window.Telegram ? window.Telegram.WebApp : null;
 if (tg) {
   tg.ready();
@@ -67,7 +67,7 @@ function sanitizeHtml(html){
 // Данные: Supabase
 // ---------------------------------------------------------
 async function fetchFeed(){
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from('articles')
     .select('id,title,excerpt,cover,created_at')
     .order('created_at', { ascending: false });
@@ -76,19 +76,19 @@ async function fetchFeed(){
 }
 
 async function fetchArticle(id){
-  const { data, error } = await supabase.from('articles').select('*').eq('id', id).single();
+  const { data, error } = await db.from('articles').select('*').eq('id', id).single();
   if(error){ console.error(error); return null; }
   return data;
 }
 
 async function insertArticle(payload){
-  const { data, error } = await supabase.from('articles').insert(payload).select().single();
+  const { data, error } = await db.from('articles').insert(payload).select().single();
   if(error) throw error;
   return data;
 }
 
 async function deleteArticle(id){
-  const { error } = await supabase.from('articles').delete().eq('id', id);
+  const { error } = await db.from('articles').delete().eq('id', id);
   if(error) throw error;
 }
 
@@ -96,9 +96,9 @@ async function uploadImage(dataUrl, filename){
   const res = await fetch(dataUrl);
   const blob = await res.blob();
   const path = `${Date.now()}-${Math.random().toString(36).slice(2,8)}-${filename}`;
-  const { error } = await supabase.storage.from('images').upload(path, blob, { contentType: blob.type });
+  const { error } = await db.storage.from('images').upload(path, blob, { contentType: blob.type });
   if(error) throw error;
-  const { data } = supabase.storage.from('images').getPublicUrl(path);
+  const { data } = db.storage.from('images').getPublicUrl(path);
   return data.publicUrl;
 }
 
