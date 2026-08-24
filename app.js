@@ -58,6 +58,11 @@ const state = {
 };
 
 
+// Последний выбранный текстовый блок.
+// Используется для вставки новых блоков
+// в нужное место статьи.
+let activeBlockIndex = null;
+
 let activeBlockEl = null;
 
 
@@ -337,8 +342,7 @@ async function saveProfile(
 
 
 // =========================================================
-// Получение профиля с возможностью
-// показать окно создания
+// Ensure profile
 // =========================================================
 
 async function ensureProfile(
@@ -366,7 +370,7 @@ async function ensureProfile(
 
 
 // =========================================================
-// Диалог ника
+// Username dialog
 // =========================================================
 
 function openUsernameDialog(
@@ -601,7 +605,7 @@ function openUsernameDialog(
 
 
 // =========================================================
-// Экран профиля
+// Profile screen
 // =========================================================
 
 async function openProfile() {
@@ -832,6 +836,10 @@ async function fetchFeed() {
 }
 
 
+// =========================================================
+// Fetch article
+// =========================================================
+
 async function fetchArticle(
   id
 ) {
@@ -882,10 +890,21 @@ async function uploadImage(
     await res.blob();
 
 
+  const safeName =
+    String(
+      filename ||
+      'image.jpg'
+    )
+      .replace(
+        /[^a-zA-Z0-9._-]/g,
+        '-'
+      );
+
+
   const path =
     `${Date.now()}-${Math.random()
       .toString(36)
-      .slice(2, 8)}-${filename}`;
+      .slice(2, 8)}-${safeName}`;
 
 
   const {
@@ -933,8 +952,8 @@ async function uploadImage(
 
 function compressImageFile(
   file,
-  maxW = 1200,
-  quality = 0.82
+  maxW = 1600,
+  quality = 0.84
 ) {
 
   return new Promise(
@@ -992,17 +1011,19 @@ function compressImageFile(
                 h;
 
 
-              canvas
-                .getContext(
+              const ctx =
+                canvas.getContext(
                   '2d'
-                )
-                .drawImage(
-                  img,
-                  0,
-                  0,
-                  w,
-                  h
                 );
+
+
+              ctx.drawImage(
+                img,
+                0,
+                0,
+                w,
+                h
+              );
 
 
               resolve(
@@ -1628,6 +1649,8 @@ function newDraft() {
 
     title: '',
 
+    cover: null,
+
     blocks: [
       {
         type: 'text',
@@ -1672,6 +1695,13 @@ async function openEditor() {
 
     state.draft =
       newDraft();
+
+
+    activeBlockIndex =
+      0;
+
+    activeBlockEl =
+      null;
 
 
     setBackButton(
@@ -1748,6 +1778,10 @@ function editArticle(
       article.title ||
       '',
 
+    cover:
+      article.cover ||
+      null,
+
     blocks:
       JSON.parse(
         JSON.stringify(
@@ -1764,11 +1798,20 @@ function editArticle(
 
     state.draft.blocks = [
       {
-        type: 'text',
-        html: ''
+        type:
+          'text',
+        html:
+          ''
       }
     ];
   }
+
+
+  activeBlockIndex =
+    0;
+
+  activeBlockEl =
+    null;
 
 
   setBackButton(
@@ -1794,6 +1837,84 @@ function editArticle(
 
 
 // =========================================================
+// Insert blocks
+// =========================================================
+
+function getInsertIndex() {
+
+  const d =
+    state.draft;
+
+
+  if (
+    !d ||
+    !Array.isArray(
+      d.blocks
+    )
+  ) {
+
+    return 0;
+  }
+
+
+  if (
+    activeBlockIndex === null ||
+    activeBlockIndex < 0 ||
+    activeBlockIndex >=
+      d.blocks.length
+  ) {
+
+    return d.blocks.length;
+  }
+
+
+  return (
+    activeBlockIndex + 1
+  );
+}
+
+
+function insertBlocks(
+  blocks
+) {
+
+  const d =
+    state.draft;
+
+
+  if (
+    !d ||
+    !Array.isArray(
+      d.blocks
+    )
+  ) {
+
+    return;
+  }
+
+
+  const index =
+    getInsertIndex();
+
+
+  d.blocks.splice(
+    index,
+    0,
+    ...blocks
+  );
+
+
+  activeBlockIndex =
+    index +
+    blocks.length -
+    1;
+
+
+  renderBlocks();
+}
+
+
+// =========================================================
 // Editor
 // =========================================================
 
@@ -1810,6 +1931,52 @@ function renderEditor() {
 
 
   main.innerHTML = `
+
+    <div class="editor-cover-section">
+
+      <div class="editor-section-label">
+        Обложка статьи
+      </div>
+
+
+      <div
+        class="editor-cover"
+        id="editorCover"
+      >
+
+        ${
+          d.cover
+            ? `
+              <img
+                src="${escapeHtml(
+                  d.cover
+                )}"
+                alt=""
+              >
+
+              <button
+                class="editor-cover-remove"
+                id="removeCoverBtn"
+                type="button"
+              >
+                ✕
+              </button>
+            `
+            : `
+              <button
+                class="editor-cover-empty"
+                id="chooseCoverBtn"
+                type="button"
+              >
+                ＋ Добавить обложку
+              </button>
+            `
+        }
+
+      </div>
+
+    </div>
+
 
     <input
       class="editor-title-input"
@@ -1829,6 +1996,7 @@ function renderEditor() {
       <button
         data-cmd="bold"
         title="Жирный"
+        type="button"
       >
         B
       </button>
@@ -1837,6 +2005,7 @@ function renderEditor() {
       <button
         data-cmd="italic"
         title="Курсив"
+        type="button"
       >
         i
       </button>
@@ -1845,6 +2014,7 @@ function renderEditor() {
       <button
         data-cmd="underline"
         title="Подчёркнутый"
+        type="button"
       >
         U
       </button>
@@ -1864,6 +2034,7 @@ function renderEditor() {
       <button
         class="add-btn"
         id="addTextBtn"
+        type="button"
       >
         ＋ Текст
       </button>
@@ -1872,6 +2043,7 @@ function renderEditor() {
       <button
         class="add-btn"
         id="addImageBtn"
+        type="button"
       >
         ＋ Картинка
       </button>
@@ -1882,6 +2054,7 @@ function renderEditor() {
     <button
       class="btn btn-primary"
       id="publishBtn"
+      type="button"
     >
       ${
         d.id
@@ -1895,6 +2068,15 @@ function renderEditor() {
       type="file"
       accept="image/*"
       id="fileInput"
+      multiple
+      style="display:none"
+    >
+
+
+    <input
+      type="file"
+      accept="image/*"
+      id="coverInput"
       style="display:none"
     >
 
@@ -1906,6 +2088,10 @@ function renderEditor() {
 
   `;
 
+
+  // -----------------------------------------------
+  // Title
+  // -----------------------------------------------
 
   document
     .getElementById(
@@ -1919,6 +2105,136 @@ function renderEditor() {
           e.target.value;
       }
     );
+
+
+  // -----------------------------------------------
+  // Cover
+  // -----------------------------------------------
+
+  const chooseCoverBtn =
+    document.getElementById(
+      'chooseCoverBtn'
+    );
+
+
+  const removeCoverBtn =
+    document.getElementById(
+      'removeCoverBtn'
+    );
+
+
+  const coverInput =
+    document.getElementById(
+      'coverInput'
+    );
+
+
+  if (chooseCoverBtn) {
+
+    chooseCoverBtn.addEventListener(
+      'click',
+      () => {
+
+        coverInput.click();
+      }
+    );
+  }
+
+
+  if (removeCoverBtn) {
+
+    removeCoverBtn.addEventListener(
+      'click',
+      () => {
+
+        d.cover =
+          null;
+
+        renderEditor();
+      }
+    );
+  }
+
+
+  coverInput.addEventListener(
+    'change',
+    async e => {
+
+      const file =
+        e.target.files[0];
+
+
+      if (!file) {
+        return;
+      }
+
+
+      const hint =
+        document.getElementById(
+          'editorHint'
+        );
+
+
+      hint.textContent =
+        'Обрабатываем обложку…';
+
+
+      try {
+
+        const dataUrl =
+          await compressImageFile(
+            file,
+            1600,
+            0.86
+          );
+
+
+        d.cover = {
+
+          src:
+            dataUrl,
+
+          _pendingFile:
+            true
+        };
+
+
+        renderEditor();
+
+
+      } catch (
+        err
+      ) {
+
+        console.error(
+          err
+        );
+
+
+        showToast(
+          'Не удалось обработать обложку'
+        );
+
+
+      } finally {
+
+        const currentHint =
+          document.getElementById(
+            'editorHint'
+          );
+
+
+        if (currentHint) {
+          currentHint.textContent =
+            '';
+        }
+      }
+
+
+      e.target.value =
+        '';
+    }
+  );
 
 
   // -----------------------------------------------
@@ -1979,17 +2295,17 @@ function renderEditor() {
       'click',
       () => {
 
-        d.blocks.push(
-          {
-            type:
-              'text',
-            html:
-              ''
-          }
+        insertBlocks(
+          [
+            {
+              type:
+                'text',
+
+              html:
+                ''
+            }
+          ]
         );
-
-
-        renderBlocks();
       }
     );
 
@@ -2016,7 +2332,7 @@ function renderEditor() {
 
 
   // -----------------------------------------------
-  // File
+  // Image files
   // -----------------------------------------------
 
   document
@@ -2027,11 +2343,13 @@ function renderEditor() {
       'change',
       async e => {
 
-        const file =
-          e.target.files[0];
+        const files =
+          Array.from(
+            e.target.files || []
+          );
 
 
-        if (!file) {
+        if (!files.length) {
           return;
         }
 
@@ -2042,36 +2360,60 @@ function renderEditor() {
           );
 
 
-        hint.textContent =
-          'Обрабатываем изображение…';
+        const total =
+          files.length;
 
 
         try {
 
-          const dataUrl =
-            await compressImageFile(
-              file
+          const newBlocks =
+            [];
+
+
+          for (
+            let i = 0;
+            i < files.length;
+            i++
+          ) {
+
+            const file =
+              files[i];
+
+
+            hint.textContent =
+              total === 1
+                ? 'Обрабатываем изображение…'
+                : `Обрабатываем изображение ${i + 1} из ${total}…`;
+
+
+            const dataUrl =
+              await compressImageFile(
+                file
+              );
+
+
+            newBlocks.push(
+              {
+                type:
+                  'image',
+
+                src:
+                  dataUrl,
+
+                caption:
+                  '',
+
+                _pendingFile:
+                  true
+              }
             );
+          }
 
 
-          d.blocks.push(
-            {
-              type:
-                'image',
-
-              src:
-                dataUrl,
-
-              caption:
-                '',
-
-              _pendingFile:
-                true
-            }
+          insertBlocks(
+            newBlocks
           );
 
-
-          renderBlocks();
 
         } catch (
           err
@@ -2083,17 +2425,19 @@ function renderEditor() {
 
 
           showToast(
-            'Не удалось обработать изображение'
+            'Не удалось обработать одно из изображений'
           );
+
+
+        } finally {
+
+          hint.textContent =
+            '';
+
+
+          e.target.value =
+            '';
         }
-
-
-        hint.textContent =
-          '';
-
-
-        e.target.value =
-          '';
       }
     );
 
@@ -2158,6 +2502,7 @@ function renderBlocks() {
                   class="block-remove"
                   data-act="del"
                   data-i="${i}"
+                  type="button"
                 >
                   ✕
                 </button>
@@ -2196,6 +2541,7 @@ function renderBlocks() {
                   class="block-remove"
                   data-act="del"
                   data-i="${i}"
+                  type="button"
                 >
                   ✕
                 </button>
@@ -2248,6 +2594,26 @@ function renderBlocks() {
 
             activeBlockEl =
               el;
+
+            activeBlockIndex =
+              Number(
+                el.dataset.i
+              );
+          }
+        );
+
+
+        el.addEventListener(
+          'click',
+          () => {
+
+            activeBlockEl =
+              el;
+
+            activeBlockIndex =
+              Number(
+                el.dataset.i
+              );
           }
         );
 
@@ -2256,12 +2622,61 @@ function renderBlocks() {
           'input',
           e => {
 
-            d.blocks[
-              +e.target.dataset.i
-            ].html =
+            const index =
+              Number(
+                e.target.dataset.i
+              );
+
+
+            d.blocks[index].html =
               sanitizeHtml(
                 e.target.innerHTML
               );
+
+
+            activeBlockIndex =
+              index;
+          }
+        );
+      }
+    );
+
+
+  // -----------------------------------------------
+  // Images
+  // -----------------------------------------------
+
+  host
+    .querySelectorAll(
+      '.block-image-wrap'
+    )
+    .forEach(
+      el => {
+
+        el.addEventListener(
+          'click',
+          e => {
+
+            if (
+              e.target.closest(
+                '.block-remove'
+              ) ||
+              e.target.closest(
+                '.block-caption'
+              )
+            ) {
+
+              return;
+            }
+
+
+            activeBlockIndex =
+              Number(
+                el.dataset.i
+              );
+
+            activeBlockEl =
+              null;
           }
         );
       }
@@ -2278,6 +2693,21 @@ function renderBlocks() {
     )
     .forEach(
       el => {
+
+        el.addEventListener(
+          'focus',
+          () => {
+
+            activeBlockIndex =
+              Number(
+                el.dataset.i
+              );
+
+            activeBlockEl =
+              null;
+          }
+        );
+
 
         el.addEventListener(
           'input',
@@ -2306,10 +2736,21 @@ function renderBlocks() {
 
         el.addEventListener(
           'click',
-          () => {
+          e => {
+
+            e.preventDefault();
+
+            e.stopPropagation();
+
+
+            const index =
+              Number(
+                el.dataset.i
+              );
+
 
             d.blocks.splice(
-              +el.dataset.i,
+              index,
               1
             );
 
@@ -2330,11 +2771,86 @@ function renderBlocks() {
             }
 
 
+            if (
+              activeBlockIndex !==
+              null
+            ) {
+
+              if (
+                activeBlockIndex >=
+                d.blocks.length
+              ) {
+
+                activeBlockIndex =
+                  d.blocks.length -
+                  1;
+
+              } else if (
+                activeBlockIndex >
+                index
+              ) {
+
+                activeBlockIndex--;
+              }
+            }
+
+
+            activeBlockEl =
+              null;
+
+
             renderBlocks();
           }
         );
       }
     );
+}
+
+
+// =========================================================
+// Prepare cover
+// =========================================================
+
+async function prepareCover(
+  cover
+) {
+
+  if (!cover) {
+    return null;
+  }
+
+
+  if (
+    typeof cover ===
+    'string'
+  ) {
+
+    return cover;
+  }
+
+
+  if (
+    cover._pendingFile &&
+    cover.src
+  ) {
+
+    const url =
+      await uploadImage(
+        cover.src,
+        'cover.jpg'
+      );
+
+
+    return url;
+  }
+
+
+  if (cover.src) {
+    return cover.src;
+  }
+
+
+  return null;
 }
 
 
@@ -2348,9 +2864,17 @@ async function publishDraft() {
     state.draft;
 
 
+  if (!d) {
+    return;
+  }
+
+
   const hasContent =
     Boolean(
       d.title.trim()
+    ) ||
+    Boolean(
+      d.cover
     ) ||
     d.blocks.some(
       b => {
@@ -2433,8 +2957,34 @@ async function publishDraft() {
 
 
     // ---------------------------------------------
-    // Upload pending images
+    // Upload cover
     // ---------------------------------------------
+
+    if (
+      d.cover &&
+      typeof d.cover ===
+        'object' &&
+      d.cover._pendingFile
+    ) {
+
+      hint.textContent =
+        'Загружаем обложку…';
+
+
+      d.cover =
+        await prepareCover(
+          d.cover
+        );
+    }
+
+
+    // ---------------------------------------------
+    // Upload pending article images
+    // ---------------------------------------------
+
+    let imageNumber =
+      0;
+
 
     for (
       const block
@@ -2447,10 +2997,17 @@ async function publishDraft() {
         block._pendingFile
       ) {
 
+        imageNumber++;
+
+
+        hint.textContent =
+          `Загружаем изображение ${imageNumber}…`;
+
+
         const url =
           await uploadImage(
             block.src,
-            'image.jpg'
+            `image-${imageNumber}.jpg`
           );
 
 
@@ -2493,16 +3050,8 @@ async function publishDraft() {
 
 
     // ---------------------------------------------
-    // Cover
+    // Payload
     // ---------------------------------------------
-
-    const firstImage =
-      d.blocks.find(
-        b =>
-          b.type ===
-          'image'
-      );
-
 
     const payload = {
 
@@ -2512,10 +3061,11 @@ async function publishDraft() {
 
       excerpt,
 
+      // Обложка теперь отдельная.
+      // Она НЕ является частью blocks.
       cover:
-        firstImage
-          ? firstImage.src
-          : null,
+        d.cover ||
+        null,
 
       blocks:
         d.blocks
@@ -2716,17 +3266,6 @@ if (newArticleBtn) {
   );
 }
 
-
-// =========================================================
-// Профиль
-//
-// В index.html добавь кнопку:
-//
-// <button id="profileBtn">Профиль</button>
-//
-// Если кнопки пока нет,
-// функция просто не подключится.
-// =========================================================
 
 const profileBtn =
   document.getElementById(
