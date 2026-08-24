@@ -1,29 +1,36 @@
 // =========================================================
 // Летопись — Telegram Mini App
-// Защищённая версия с Telegram user_id
 // =========================================================
 
-// ---- Настройки ----
-const BOT_USERNAME = 'lcftype_bot';      // без @
-const MINIAPP_SHORT_NAME = 'lcftype';    // short name Web App
+const BOT_USERNAME = 'lcftype_bot';
+const MINIAPP_SHORT_NAME = 'lcftype';
+
 
 // =========================================================
-// Инициализация
+// Supabase
 // =========================================================
 
-const db = window.supabase.createClient(
-  window.SUPABASE_URL,
-  window.SUPABASE_ANON_KEY
-);
+const db =
+  window.supabase.createClient(
+    window.SUPABASE_URL,
+    window.SUPABASE_ANON_KEY
+  );
 
-const tg = window.Telegram
-  ? window.Telegram.WebApp
-  : null;
+
+// =========================================================
+// Telegram
+// =========================================================
+
+const tg =
+  window.Telegram
+    ? window.Telegram.WebApp
+    : null;
 
 if (tg) {
   tg.ready();
   tg.expand();
 }
+
 
 const tgUser =
   tg &&
@@ -32,22 +39,38 @@ const tgUser =
     ? tg.initDataUnsafe.user
     : null;
 
+
+// =========================================================
+// State
+// =========================================================
+
 const state = {
+
   view: 'feed',
+
   articles: [],
+
   draft: null,
-  currentId: null
+
+  currentId: null,
+
+  profile: null
 };
+
 
 let activeBlockEl = null;
 
 
 // =========================================================
-// Уведомления
+// Toast
 // =========================================================
 
 function showToast(msg) {
-  const t = document.getElementById('toast');
+
+  const t =
+    document.getElementById(
+      'toast'
+    );
 
   if (!t) {
     console.log(msg);
@@ -55,22 +78,35 @@ function showToast(msg) {
   }
 
   t.textContent = msg;
-  t.classList.add('show');
 
-  setTimeout(() => {
-    t.classList.remove('show');
-  }, 2500);
+  t.classList.add(
+    'show'
+  );
+
+  setTimeout(
+    () => {
+      t.classList.remove(
+        'show'
+      );
+    },
+    2500
+  );
 }
 
 
 // =========================================================
-// Дата
+// Date
 // =========================================================
 
 function fmtDate(iso) {
-  if (!iso) return '';
 
-  return new Date(iso).toLocaleDateString(
+  if (!iso) {
+    return '';
+  }
+
+  return new Date(
+    iso
+  ).toLocaleDateString(
     'ru-RU',
     {
       day: 'numeric',
@@ -82,181 +118,189 @@ function fmtDate(iso) {
 
 
 // =========================================================
-// HTML escape
+// Escape HTML
 // =========================================================
 
 function escapeHtml(s) {
-  const d = document.createElement('div');
 
-  d.textContent = s || '';
+  const d =
+    document.createElement(
+      'div'
+    );
+
+  d.textContent =
+    s || '';
 
   return d.innerHTML;
 }
 
 
 // =========================================================
-// Санитайзер HTML
+// Sanitize HTML
 // =========================================================
 
-const ALLOWED_TAGS = new Set([
-  'B',
-  'STRONG',
-  'I',
-  'EM',
-  'U',
-  'BR',
-  'SPAN',
-  'DIV'
-]);
+const ALLOWED_TAGS =
+  new Set([
+    'B',
+    'STRONG',
+    'I',
+    'EM',
+    'U',
+    'BR',
+    'SPAN',
+    'DIV'
+  ]);
+
 
 function sanitizeHtml(html) {
-  const doc = document.createElement('div');
 
-  doc.innerHTML = html;
+  const doc =
+    document.createElement(
+      'div'
+    );
+
+  doc.innerHTML =
+    html || '';
+
 
   (function clean(node) {
-    [...node.childNodes].forEach(child => {
 
-      if (child.nodeType === 1) {
+    [
+      ...node.childNodes
+    ].forEach(
+      child => {
 
-        if (!ALLOWED_TAGS.has(child.tagName)) {
+        if (
+          child.nodeType === 1
+        ) {
 
-          const parent = child.parentNode;
+          if (
+            !ALLOWED_TAGS.has(
+              child.tagName
+            )
+          ) {
 
-          while (child.firstChild) {
-            parent.insertBefore(
-              child.firstChild,
+            const parent =
+              child.parentNode;
+
+            while (
+              child.firstChild
+            ) {
+
+              parent.insertBefore(
+                child.firstChild,
+                child
+              );
+            }
+
+            parent.removeChild(
               child
             );
+
+            return;
           }
 
-          parent.removeChild(child);
 
-          return;
+          [
+            ...child.attributes
+          ].forEach(
+            attr => {
+              child.removeAttribute(
+                attr.name
+              );
+            }
+          );
+
+
+          clean(child);
+
+        } else if (
+          child.nodeType !== 3
+        ) {
+
+          child.parentNode
+            .removeChild(
+              child
+            );
         }
-
-        [...child.attributes].forEach(attr => {
-          child.removeAttribute(attr.name);
-        });
-
-        clean(child);
-
-      } else if (child.nodeType !== 3) {
-
-        child.parentNode.removeChild(child);
       }
-    });
+    );
+
   })(doc);
+
 
   return doc.innerHTML;
 }
 
 
 // =========================================================
-// Supabase: чтение
+// Edge Function
 // =========================================================
 
-async function fetchFeed() {
+async function callTelegramApi(
+  action,
+  extra = {}
+) {
+
+  if (
+    !tg ||
+    !tg.initData
+  ) {
+
+    throw new Error(
+      'Откройте приложение внутри Telegram'
+    );
+  }
+
 
   const {
     data,
     error
-  } = await db
-    .from('articles')
-    .select(
-      'id,title,excerpt,cover,created_at,author_id,author_name'
-    )
-    .order(
-      'created_at',
+  } =
+    await db.functions.invoke(
+      'telegram-api',
       {
-        ascending: false
+        body: {
+          action,
+          initData:
+            tg.initData,
+          ...extra
+        }
       }
     );
 
-  if (error) {
-    console.error(error);
-    return [];
-  }
-
-  return data || [];
-}
-
-
-async function fetchArticle(id) {
-
-  const {
-    data,
-    error
-  } = await db
-    .from('articles')
-    .select('*')
-    .eq('id', id)
-    .single();
 
   if (error) {
-    console.error(error);
-    return null;
-  }
 
-  return data;
-}
-
-
-// =========================================================
-// Защищённые операции через Edge Function
-// =========================================================
-
-async function callTelegramApi(action, extra = {}) {
-
-  if (!tg) {
-    throw new Error(
-      'Telegram WebApp недоступен.'
-    );
-  }
-
-  if (!tg.initData) {
-    throw new Error(
-      'Telegram initData отсутствует. ' +
-      'Откройте приложение внутри Telegram.'
-    );
-  }
-
-  const {
-    data,
-    error
-  } = await db.functions.invoke(
-    'telegram-api',
-    {
-      body: {
-        action,
-        initData: tg.initData,
-        ...extra
-      }
-    }
-  );
-
-  if (error) {
     console.error(
-      'Edge Function error:',
+      'telegram-api:',
       error
     );
 
     throw new Error(
       error.message ||
-      'Ошибка связи с сервером'
+      'Ошибка Edge Function'
     );
   }
 
-  if (data && data.error) {
-    throw new Error(data.error);
+
+  if (
+    data &&
+    data.error
+  ) {
+
+    throw new Error(
+      data.error
+    );
   }
+
 
   return data;
 }
 
 
 // =========================================================
-// Профиль пользователя
+// Profile
 // =========================================================
 
 async function getProfile() {
@@ -266,11 +310,16 @@ async function getProfile() {
       'get-profile'
     );
 
-  return result.profile || null;
+  state.profile =
+    result.profile || null;
+
+  return state.profile;
 }
 
 
-async function setProfile(username) {
+async function saveProfile(
+  username
+) {
 
   const result =
     await callTelegramApi(
@@ -280,97 +329,543 @@ async function setProfile(username) {
       }
     );
 
-  return result.profile;
+  state.profile =
+    result.profile;
+
+  return state.profile;
 }
 
 
 // =========================================================
-// Получить / создать профиль
+// Получение профиля с возможностью
+// показать окно создания
 // =========================================================
 
-async function ensureProfile() {
+async function ensureProfile(
+  askIfMissing = true
+) {
 
   const existing =
     await getProfile();
+
 
   if (existing) {
     return existing;
   }
 
-  let username = prompt(
-    'Придумайте имя автора.\n\n' +
-    'От 3 до 30 символов.\n' +
-    'Можно использовать латинские буквы, цифры и _.'
-  );
 
-  if (!username) {
-    throw new Error(
-      'Имя автора не задано'
-    );
+  if (!askIfMissing) {
+    return null;
   }
 
-  username = username.trim();
 
-  const profile =
-    await setProfile(username);
-
-  return profile;
+  return openUsernameDialog(
+    null
+  );
 }
 
 
 // =========================================================
-// Создание статьи
+// Диалог ника
 // =========================================================
 
-async function createArticle(article) {
+function openUsernameDialog(
+  currentUsername
+) {
 
-  const result =
-    await callTelegramApi(
-      'create-article',
-      {
-        article
-      }
-    );
+  return new Promise(
+    resolve => {
 
-  return result.article;
-}
+      const overlay =
+        document.createElement(
+          'div'
+        );
 
-
-// =========================================================
-// Редактирование статьи
-// =========================================================
-
-async function updateArticle(article) {
-
-  const result =
-    await callTelegramApi(
-      'update-article',
-      {
-        article
-      }
-    );
-
-  return result.article;
-}
+      overlay.className =
+        'profile-overlay';
 
 
-// =========================================================
-// Удаление статьи
-// =========================================================
+      overlay.innerHTML = `
 
-async function removeArticle(id) {
+        <div class="profile-dialog">
 
-  await callTelegramApi(
-    'delete-article',
-    {
-      articleId: id
+          <div class="profile-dialog-title">
+            ${
+              currentUsername
+                ? 'Изменить ник'
+                : 'Создать профиль'
+            }
+          </div>
+
+
+          <div class="profile-dialog-text">
+            Придумайте имя автора.
+            Его будут видеть рядом
+            с вашими статьями.
+          </div>
+
+
+          <input
+            class="profile-input"
+            id="profileUsernameInput"
+            maxlength="30"
+            placeholder="Например: Анна"
+            value="${
+              escapeHtml(
+                currentUsername || ''
+              )
+            }"
+          >
+
+
+          <div class="profile-hint">
+            Можно использовать русские
+            и латинские буквы, цифры,
+            пробел и _
+          </div>
+
+
+          <div class="profile-dialog-actions">
+
+            <button
+              class="btn btn-secondary"
+              id="profileCancelBtn"
+            >
+              Отмена
+            </button>
+
+            <button
+              class="btn btn-primary"
+              id="profileSaveBtn"
+            >
+              Сохранить
+            </button>
+
+          </div>
+
+        </div>
+      `;
+
+
+      document.body.appendChild(
+        overlay
+      );
+
+
+      const input =
+        overlay.querySelector(
+          '#profileUsernameInput'
+        );
+
+      const saveBtn =
+        overlay.querySelector(
+          '#profileSaveBtn'
+        );
+
+      const cancelBtn =
+        overlay.querySelector(
+          '#profileCancelBtn'
+        );
+
+
+      setTimeout(
+        () => {
+          input.focus();
+          input.select();
+        },
+        50
+      );
+
+
+      cancelBtn.addEventListener(
+        'click',
+        () => {
+
+          overlay.remove();
+
+          resolve(null);
+        }
+      );
+
+
+      saveBtn.addEventListener(
+        'click',
+        async () => {
+
+          const username =
+            input.value
+              .trim()
+              .replace(
+                /\s+/g,
+                ' '
+              );
+
+
+          if (
+            username.length < 2
+          ) {
+
+            showToast(
+              'Минимум 2 символа'
+            );
+
+            return;
+          }
+
+
+          if (
+            username.length > 30
+          ) {
+
+            showToast(
+              'Максимум 30 символов'
+            );
+
+            return;
+          }
+
+
+          saveBtn.disabled =
+            true;
+
+          saveBtn.textContent =
+            'Сохраняем…';
+
+
+          try {
+
+            const profile =
+              await saveProfile(
+                username
+              );
+
+
+            overlay.remove();
+
+            showToast(
+              'Ник сохранён'
+            );
+
+
+            resolve(
+              profile
+            );
+
+
+          } catch (err) {
+
+            console.error(
+              err
+            );
+
+
+            showToast(
+              err.message ||
+              'Не удалось сохранить ник'
+            );
+
+
+            saveBtn.disabled =
+              false;
+
+            saveBtn.textContent =
+              'Сохранить';
+          }
+        }
+      );
+
+
+      input.addEventListener(
+        'keydown',
+        e => {
+
+          if (
+            e.key === 'Enter'
+          ) {
+
+            saveBtn.click();
+          }
+
+
+          if (
+            e.key === 'Escape'
+          ) {
+
+            cancelBtn.click();
+          }
+        }
+      );
     }
   );
 }
 
 
 // =========================================================
-// Загрузка изображения
+// Экран профиля
+// =========================================================
+
+async function openProfile() {
+
+  state.view =
+    'profile';
+
+  state.currentId =
+    null;
+
+
+  setBackButton(
+    true,
+    renderFeed
+  );
+
+
+  const main =
+    document.getElementById(
+      'main'
+    );
+
+
+  main.innerHTML =
+    '<div class="loading">Загрузка профиля…</div>';
+
+
+  try {
+
+    const profile =
+      await ensureProfile(
+        false
+      );
+
+
+    if (!profile) {
+
+      main.innerHTML = `
+
+        <div class="profile-page">
+
+          <div class="profile-card chrome">
+
+            <div class="profile-avatar">
+              ?
+            </div>
+
+            <h2>
+              Профиль
+            </h2>
+
+            <p>
+              У вас пока нет ника
+            </p>
+
+            <button
+              class="btn btn-primary"
+              id="createProfileBtn"
+            >
+              Придумать ник
+            </button>
+
+          </div>
+
+        </div>
+      `;
+
+
+      document
+        .getElementById(
+          'createProfileBtn'
+        )
+        .addEventListener(
+          'click',
+          async () => {
+
+            const created =
+              await ensureProfile(
+                true
+              );
+
+            if (created) {
+              openProfile();
+            }
+          }
+        );
+
+
+      return;
+    }
+
+
+    const firstChar =
+      profile.username
+        .trim()
+        .charAt(0)
+        .toUpperCase();
+
+
+    main.innerHTML = `
+
+      <div class="profile-page">
+
+        <div class="profile-card chrome">
+
+          <div class="profile-avatar">
+            ${escapeHtml(
+              firstChar || '?'
+            )}
+          </div>
+
+
+          <div class="profile-label">
+            Ваш ник
+          </div>
+
+
+          <div class="profile-username">
+            ${escapeHtml(
+              profile.username
+            )}
+          </div>
+
+
+          <button
+            class="btn btn-primary profile-edit-btn"
+            id="changeUsernameBtn"
+          >
+            Изменить ник
+          </button>
+
+
+          <div class="profile-description">
+            Этот ник отображается
+            рядом с вашими статьями.
+          </div>
+
+        </div>
+
+      </div>
+    `;
+
+
+    document
+      .getElementById(
+        'changeUsernameBtn'
+      )
+      .addEventListener(
+        'click',
+        async () => {
+
+          const changed =
+            await openUsernameDialog(
+              profile.username
+            );
+
+
+          if (changed) {
+            openProfile();
+          }
+        }
+      );
+
+
+  } catch (err) {
+
+    console.error(
+      err
+    );
+
+    main.innerHTML = `
+
+      <div class="empty-state">
+
+        <h2>
+          Не удалось открыть профиль
+        </h2>
+
+        <p>
+          ${
+            escapeHtml(
+              err.message ||
+              ''
+            )
+          }
+        </p>
+
+      </div>
+    `;
+  }
+}
+
+
+// =========================================================
+// Feed
+// =========================================================
+
+async function fetchFeed() {
+
+  const {
+    data,
+    error
+  } =
+    await db
+      .from('articles')
+      .select(
+        'id,title,excerpt,cover,created_at,author_id,author_name'
+      )
+      .order(
+        'created_at',
+        {
+          ascending: false
+        }
+      );
+
+
+  if (error) {
+
+    console.error(
+      error
+    );
+
+    return [];
+  }
+
+
+  return data || [];
+}
+
+
+async function fetchArticle(
+  id
+) {
+
+  const {
+    data,
+    error
+  } =
+    await db
+      .from('articles')
+      .select('*')
+      .eq(
+        'id',
+        id
+      )
+      .single();
+
+
+  if (error) {
+
+    console.error(
+      error
+    );
+
+    return null;
+  }
+
+
+  return data;
+}
+
+
+// =========================================================
+// Upload image
 // =========================================================
 
 async function uploadImage(
@@ -379,48 +874,61 @@ async function uploadImage(
 ) {
 
   const res =
-    await fetch(dataUrl);
+    await fetch(
+      dataUrl
+    );
 
   const blob =
     await res.blob();
+
 
   const path =
     `${Date.now()}-${Math.random()
       .toString(36)
       .slice(2, 8)}-${filename}`;
 
+
   const {
     error
-  } = await db
-    .storage
-    .from('images')
-    .upload(
-      path,
-      blob,
-      {
-        contentType:
-          blob.type || 'image/jpeg',
-        upsert: false
-      }
-    );
+  } =
+    await db
+      .storage
+      .from('images')
+      .upload(
+        path,
+        blob,
+        {
+          contentType:
+            blob.type ||
+            'image/jpeg',
+          upsert:
+            false
+        }
+      );
+
 
   if (error) {
     throw error;
   }
 
+
   const {
     data
-  } = db
-    .storage
-    .from('images')
-    .getPublicUrl(path);
+  } =
+    db
+      .storage
+      .from('images')
+      .getPublicUrl(
+        path
+      );
+
 
   return data.publicUrl;
 }
 
 
 // =========================================================
-// Сжатие изображения
+// Compress image
 // =========================================================
 
 function compressImageFile(
@@ -435,213 +943,323 @@ function compressImageFile(
       const reader =
         new FileReader();
 
-      reader.onload = e => {
 
-        const img =
-          new Image();
+      reader.onload =
+        e => {
 
-        img.onload = () => {
+          const img =
+            new Image();
 
-          let w = img.width;
-          let h = img.height;
 
-          if (w > maxW) {
+          img.onload =
+            () => {
 
-            h =
-              Math.round(
-                h * (maxW / w)
+              let w =
+                img.width;
+
+              let h =
+                img.height;
+
+
+              if (
+                w > maxW
+              ) {
+
+                h =
+                  Math.round(
+                    h *
+                    (
+                      maxW /
+                      w
+                    )
+                  );
+
+                w =
+                  maxW;
+              }
+
+
+              const canvas =
+                document.createElement(
+                  'canvas'
+                );
+
+
+              canvas.width =
+                w;
+
+              canvas.height =
+                h;
+
+
+              canvas
+                .getContext(
+                  '2d'
+                )
+                .drawImage(
+                  img,
+                  0,
+                  0,
+                  w,
+                  h
+                );
+
+
+              resolve(
+                canvas.toDataURL(
+                  'image/jpeg',
+                  quality
+                )
               );
+            };
 
-            w = maxW;
-          }
 
-          const canvas =
-            document.createElement(
-              'canvas'
-            );
+          img.onerror =
+            reject;
 
-          canvas.width = w;
-          canvas.height = h;
 
-          const ctx =
-            canvas.getContext('2d');
-
-          ctx.drawImage(
-            img,
-            0,
-            0,
-            w,
-            h
-          );
-
-          resolve(
-            canvas.toDataURL(
-              'image/jpeg',
-              quality
-            )
-          );
+          img.src =
+            e.target.result;
         };
 
-        img.onerror = reject;
 
-        img.src = e.target.result;
-      };
+      reader.onerror =
+        reject;
 
-      reader.onerror = reject;
 
-      reader.readAsDataURL(file);
+      reader.readAsDataURL(
+        file
+      );
     }
   );
 }
 
 
 // =========================================================
-// Лента
+// Is owner
+// =========================================================
+
+function isArticleOwner(
+  article
+) {
+
+  if (
+    !tgUser ||
+    !article ||
+    !article.author_id
+  ) {
+
+    return false;
+  }
+
+
+  return (
+    Number(
+      article.author_id
+    ) ===
+    Number(
+      tgUser.id
+    )
+  );
+}
+
+
+// =========================================================
+// Feed screen
 // =========================================================
 
 async function renderFeed() {
 
-  state.view = 'feed';
-  state.currentId = null;
+  state.view =
+    'feed';
 
-  setBackButton(false);
+  state.currentId =
+    null;
+
+
+  setBackButton(
+    false
+  );
+
 
   const main =
-    document.getElementById('main');
+    document.getElementById(
+      'main'
+    );
+
 
   main.innerHTML =
     '<div class="loading">Загрузка статей…</div>';
 
+
   state.articles =
     await fetchFeed();
 
-  if (!state.articles.length) {
+
+  if (
+    !state.articles.length
+  ) {
 
     main.innerHTML = `
+
       <div class="empty-state">
-        <h2>Здесь пока пусто</h2>
+
+        <h2>
+          Здесь пока пусто
+        </h2>
 
         <p>
-          Нажмите «+ Статья» вверху,
+          Нажмите «+ Статья»,
           чтобы опубликовать первую запись.
         </p>
+
       </div>
     `;
 
     return;
   }
 
+
   main.innerHTML =
     state.articles
-      .map(article => `
-        <div
-          class="feed-item"
-          data-id="${escapeHtml(article.id)}"
-        >
+      .map(
+        article => `
 
-          ${
-            article.cover
-              ? `
-                <img
-                  class="thumb"
-                  src="${escapeHtml(article.cover)}"
-                  alt=""
-                >
-              `
-              : ''
-          }
+          <div
+            class="feed-item"
+            data-id="${escapeHtml(
+              article.id
+            )}"
+          >
 
-          <div class="feed-meta">
-            ${fmtDate(article.created_at)}
+            ${
+              article.cover
+                ? `
+                  <img
+                    class="thumb"
+                    src="${escapeHtml(
+                      article.cover
+                    )}"
+                    alt=""
+                  >
+                `
+                : ''
+            }
+
+
+            <div class="feed-meta">
+
+              ${fmtDate(
+                article.created_at
+              )}
+
+              ${
+                article.author_name
+                  ? `
+                    ·
+                    ${escapeHtml(
+                      article.author_name
+                    )}
+                  `
+                  : ''
+              }
+
+            </div>
+
+
+            <h3>
+              ${escapeHtml(
+                article.title ||
+                'Без названия'
+              )}
+            </h3>
+
+
+            <p>
+              ${escapeHtml(
+                article.excerpt ||
+                ''
+              )}
+            </p>
+
           </div>
-
-          <h3>
-            ${escapeHtml(
-              article.title ||
-              'Без названия'
-            )}
-          </h3>
-
-          <p>
-            ${escapeHtml(
-              article.excerpt || ''
-            )}
-          </p>
-
-        </div>
-      `)
+        `
+      )
       .join('');
 
+
   main
-    .querySelectorAll('.feed-item')
-    .forEach(el => {
+    .querySelectorAll(
+      '.feed-item'
+    )
+    .forEach(
+      el => {
 
-      el.addEventListener(
-        'click',
-        () => {
-          openReader(
-            el.dataset.id
-          );
-        }
-      );
-    });
+        el.addEventListener(
+          'click',
+          () => {
+
+            openReader(
+              el.dataset.id
+            );
+          }
+        );
+      }
+    );
 }
 
 
 // =========================================================
-// Определяем, владелец ли статьи
+// Reader
 // =========================================================
 
-function isArticleOwner(article) {
+async function openReader(
+  id
+) {
 
-  if (!tgUser) {
-    return false;
-  }
+  state.view =
+    'reader';
 
-  if (!article) {
-    return false;
-  }
+  state.currentId =
+    id;
 
-  if (!article.author_id) {
-    return false;
-  }
-
-  return (
-    Number(article.author_id) ===
-    Number(tgUser.id)
-  );
-}
-
-
-// =========================================================
-// Чтение статьи
-// =========================================================
-
-async function openReader(id) {
-
-  state.view = 'reader';
-  state.currentId = id;
 
   setBackButton(
     true,
     renderFeed
   );
 
+
   const main =
-    document.getElementById('main');
+    document.getElementById(
+      'main'
+    );
+
 
   main.innerHTML =
     '<div class="loading">Открываем статью…</div>';
 
+
   const article =
-    await fetchArticle(id);
+    await fetchArticle(
+      id
+    );
+
 
   if (!article) {
 
     main.innerHTML = `
+
       <div class="empty-state">
-        <h2>Статья не найдена</h2>
-        <p>Возможно, её удалили.</p>
+
+        <h2>
+          Статья не найдена
+        </h2>
+
+        <p>
+          Возможно, её удалили.
+        </p>
+
       </div>
     `;
 
@@ -649,140 +1267,94 @@ async function openReader(id) {
   }
 
 
-  // -----------------------------------------------
-  // Содержимое статьи
-  // -----------------------------------------------
-
   const bodyHtml =
-    (article.blocks || [])
-      .map(block => {
+    (
+      article.blocks ||
+      []
+    )
+      .map(
+        block => {
 
-        if (
-          block.type === 'text'
-        ) {
+          if (
+            block.type ===
+            'text'
+          ) {
 
-          return (
-            block.html &&
-            block.html.trim()
-          )
-            ? `<p>${sanitizeHtml(
-                block.html
-              )}</p>`
-            : '';
+            return (
+              block.html &&
+              block.html.trim()
+            )
+              ? `
+                <p>
+                  ${sanitizeHtml(
+                    block.html
+                  )}
+                </p>
+              `
+              : '';
+          }
+
+
+          if (
+            block.type ===
+            'image'
+          ) {
+
+            return `
+              <figure>
+
+                <img
+                  src="${escapeHtml(
+                    block.src ||
+                    ''
+                  )}"
+                  alt=""
+                >
+
+                ${
+                  block.caption
+                    ? `
+                      <figcaption>
+                        ${escapeHtml(
+                          block.caption
+                        )}
+                      </figcaption>
+                    `
+                    : ''
+                }
+
+              </figure>
+            `;
+          }
+
+
+          return '';
         }
-
-        if (
-          block.type === 'image'
-        ) {
-
-          return `
-            <figure>
-
-              <img
-                src="${escapeHtml(
-                  block.src || ''
-                )}"
-                alt=""
-              >
-
-              ${
-                block.caption
-                  ? `
-                    <figcaption>
-                      ${escapeHtml(
-                        block.caption
-                      )}
-                    </figcaption>
-                  `
-                  : ''
-              }
-
-            </figure>
-          `;
-        }
-
-        return '';
-      })
+      )
       .join('');
 
-
-  // -----------------------------------------------
-  // Share URL
-  // -----------------------------------------------
 
   const shareUrl =
     `https://t.me/${BOT_USERNAME}/${MINIAPP_SHORT_NAME}?startapp=${article.id}`;
 
 
-  // -----------------------------------------------
-  // Owner?
-  // -----------------------------------------------
-
   const owner =
-    isArticleOwner(article);
+    isArticleOwner(
+      article
+    );
 
-
-  // -----------------------------------------------
-  // Кнопки владельца
-  // -----------------------------------------------
-
-  const ownerButtons =
-    owner
-      ? `
-        <div
-          style="
-            display:flex;
-            gap:6px;
-            margin-left:auto;
-          "
-        >
-
-          <button
-            class="btn"
-            id="editBtn"
-            style="
-              font-size:11px;
-              padding:6px 10px;
-            "
-          >
-            Редактировать
-          </button>
-
-          <button
-            class="btn btn-danger"
-            id="deleteBtn"
-            style="
-              font-size:11px;
-              padding:6px 10px;
-            "
-          >
-            Удалить
-          </button>
-
-        </div>
-      `
-      : '';
-
-
-  // -----------------------------------------------
-  // HTML статьи
-  // -----------------------------------------------
 
   main.innerHTML = `
+
     <div class="reader">
 
-      <div
-        class="reader-meta"
-        style="
-          display:flex;
-          justify-content:space-between;
-          align-items:center;
-          gap:10px;
-        "
-      >
+      <div class="reader-meta reader-meta-row">
 
         <span>
-          ${fmtDate(article.created_at)}
+
+          ${fmtDate(
+            article.created_at
+          )}
 
           ${
             article.author_name
@@ -794,9 +1366,34 @@ async function openReader(id) {
               `
               : ''
           }
+
         </span>
 
-        ${ownerButtons}
+
+        ${
+          owner
+            ? `
+              <div class="article-owner-actions">
+
+                <button
+                  class="btn btn-secondary"
+                  id="editBtn"
+                >
+                  Редактировать
+                </button>
+
+
+                <button
+                  class="btn btn-danger"
+                  id="deleteBtn"
+                >
+                  Удалить
+                </button>
+
+              </div>
+            `
+            : ''
+        }
 
       </div>
 
@@ -810,18 +1407,16 @@ async function openReader(id) {
 
 
       <div class="reader-body">
+
         ${
           bodyHtml ||
           `
-            <p
-              style="
-                color:var(--ink-soft)
-              "
-            >
+            <p class="reader-empty">
               Статья пока пуста.
             </p>
           `
         }
+
       </div>
 
 
@@ -831,10 +1426,10 @@ async function openReader(id) {
           Поделиться
         </div>
 
+
         <button
           class="btn btn-primary"
           id="shareBtn"
-          style="width:100%;"
         >
           Отправить ссылку в чат
         </button>
@@ -846,17 +1441,14 @@ async function openReader(id) {
 
 
   // -----------------------------------------------
-  // Поделиться
+  // Share
   // -----------------------------------------------
 
-  const shareBtn =
-    document.getElementById(
+  document
+    .getElementById(
       'shareBtn'
-    );
-
-  if (shareBtn) {
-
-    shareBtn.addEventListener(
+    )
+    .addEventListener(
       'click',
       async () => {
 
@@ -888,12 +1480,14 @@ async function openReader(id) {
             navigator.share
           ) {
 
-            await navigator.share({
-              title:
-                article.title,
-              url:
-                shareUrl
-            });
+            await navigator.share(
+              {
+                title:
+                  article.title,
+                url:
+                  shareUrl
+              }
+            );
 
             return;
           }
@@ -905,56 +1499,53 @@ async function openReader(id) {
               shareUrl
             );
 
+
           showToast(
             'Ссылка скопирована'
           );
 
-        } catch (err) {
+        } catch (
+          err
+        ) {
 
           console.error(
-            'Share error:',
             err
           );
         }
       }
     );
-  }
 
 
   // -----------------------------------------------
-  // Редактирование
+  // Edit
   // -----------------------------------------------
 
   if (owner) {
 
-    const editBtn =
-      document.getElementById(
+    document
+      .getElementById(
         'editBtn'
-      );
-
-    if (editBtn) {
-
-      editBtn.addEventListener(
+      )
+      .addEventListener(
         'click',
         () => {
-          editArticle(article);
+
+          editArticle(
+            article
+          );
         }
       );
-    }
 
 
     // ---------------------------------------------
-    // Удаление
+    // Delete
     // ---------------------------------------------
 
-    const deleteBtn =
-      document.getElementById(
+    document
+      .getElementById(
         'deleteBtn'
-      );
-
-    if (deleteBtn) {
-
-      deleteBtn.addEventListener(
+      )
+      .addEventListener(
         'click',
         async () => {
 
@@ -966,57 +1557,73 @@ async function openReader(id) {
             return;
           }
 
+
+          const btn =
+            document.getElementById(
+              'deleteBtn'
+            );
+
+
+          btn.disabled =
+            true;
+
+          btn.textContent =
+            'Удаляем…';
+
+
           try {
 
-            deleteBtn.disabled = true;
-            deleteBtn.textContent =
-              'Удаляем…';
-
-            await removeArticle(
-              article.id
+            await callTelegramApi(
+              'delete-article',
+              {
+                articleId:
+                  article.id
+              }
             );
+
 
             showToast(
               'Статья удалена'
             );
 
+
             await renderFeed();
 
-          } catch (err) {
+          } catch (
+            err
+          ) {
 
             console.error(
-              'Delete error:',
               err
             );
 
-            deleteBtn.disabled =
+
+            btn.disabled =
               false;
 
-            deleteBtn.textContent =
+            btn.textContent =
               'Удалить';
 
+
             showToast(
-              'Не удалось удалить: ' +
-              (
-                err.message ||
-                'ошибка'
-              )
+              err.message ||
+              'Не удалось удалить статью'
             );
           }
         }
       );
-    }
   }
 }
 
 
 // =========================================================
-// Новый черновик
+// Draft
 // =========================================================
 
 function newDraft() {
 
   return {
+
     id: null,
 
     title: '',
@@ -1032,45 +1639,90 @@ function newDraft() {
 
 
 // =========================================================
-// Новый редактор
+// New editor
 // =========================================================
 
-function openEditor() {
+async function openEditor() {
 
-  state.view = 'editor';
+  try {
 
-  state.currentId = null;
+    if (
+      !tg ||
+      !tg.initData
+    ) {
 
-  state.draft =
-    newDraft();
+      showToast(
+        'Откройте приложение внутри Telegram'
+      );
 
-  setBackButton(
-    true,
-    () => {
-
-      if (
-        confirm(
-          'Отменить редактирование? ' +
-          'Черновик будет потерян.'
-        )
-      ) {
-
-        renderFeed();
-      }
+      return;
     }
-  );
 
-  renderEditor();
+
+    await ensureProfile(
+      true
+    );
+
+
+    state.view =
+      'editor';
+
+    state.currentId =
+      null;
+
+    state.draft =
+      newDraft();
+
+
+    setBackButton(
+      true,
+      () => {
+
+        if (
+          confirm(
+            'Отменить редактирование? Черновик будет потерян.'
+          )
+        ) {
+
+          renderFeed();
+        }
+      }
+    );
+
+
+    renderEditor();
+
+
+  } catch (
+    err
+  ) {
+
+    console.error(
+      err
+    );
+
+
+    showToast(
+      err.message ||
+      'Не удалось открыть редактор'
+    );
+  }
 }
 
 
 // =========================================================
-// Редактирование существующей статьи
+// Edit article
 // =========================================================
 
-function editArticle(article) {
+function editArticle(
+  article
+) {
 
-  if (!isArticleOwner(article)) {
+  if (
+    !isArticleOwner(
+      article
+    )
+  ) {
 
     showToast(
       'Вы не являетесь автором этой статьи'
@@ -1080,7 +1732,8 @@ function editArticle(article) {
   }
 
 
-  state.view = 'editor';
+  state.view =
+    'editor';
 
   state.currentId =
     article.id;
@@ -1088,15 +1741,18 @@ function editArticle(article) {
 
   state.draft = {
 
-    id: article.id,
+    id:
+      article.id,
 
     title:
-      article.title || '',
+      article.title ||
+      '',
 
     blocks:
       JSON.parse(
         JSON.stringify(
-          article.blocks || []
+          article.blocks ||
+          []
         )
       )
   };
@@ -1121,8 +1777,7 @@ function editArticle(article) {
 
       if (
         confirm(
-          'Отменить редактирование? ' +
-          'Изменения будут потеряны.'
+          'Отменить редактирование? Изменения будут потеряны.'
         )
       ) {
 
@@ -1139,13 +1794,16 @@ function editArticle(article) {
 
 
 // =========================================================
-// Редактор
+// Editor
 // =========================================================
 
 function renderEditor() {
 
   const main =
-    document.getElementById('main');
+    document.getElementById(
+      'main'
+    );
+
 
   const d =
     state.draft;
@@ -1175,12 +1833,14 @@ function renderEditor() {
         B
       </button>
 
+
       <button
         data-cmd="italic"
         title="Курсив"
       >
         i
       </button>
+
 
       <button
         data-cmd="underline"
@@ -1192,10 +1852,14 @@ function renderEditor() {
     </div>
 
 
-    <div id="blocksHost"></div>
+    <div
+      id="blocksHost"
+    ></div>
 
 
-    <div class="add-row">
+    <div
+      class="add-row"
+    >
 
       <button
         class="add-btn"
@@ -1203,6 +1867,7 @@ function renderEditor() {
       >
         ＋ Текст
       </button>
+
 
       <button
         class="add-btn"
@@ -1217,10 +1882,6 @@ function renderEditor() {
     <button
       class="btn btn-primary"
       id="publishBtn"
-      style="
-        width:100%;
-        padding:14px;
-      "
     >
       ${
         d.id
@@ -1241,77 +1902,73 @@ function renderEditor() {
     <div
       class="hint chrome"
       id="editorHint"
-      style="
-        text-align:center;
-        margin-top:10px;
-        color:var(--ink-soft);
-        font-size:12px;
-      "
     ></div>
 
   `;
 
 
-  // -----------------------------------------------
-  // Заголовок
-  // -----------------------------------------------
-
-  const titleInput =
-    document.getElementById(
+  document
+    .getElementById(
       'titleInput'
+    )
+    .addEventListener(
+      'input',
+      e => {
+
+        d.title =
+          e.target.value;
+      }
     );
 
-  titleInput.addEventListener(
-    'input',
-    e => {
-
-      d.title =
-        e.target.value;
-    }
-  );
-
 
   // -----------------------------------------------
-  // Toolbar
+  // Formatting
   // -----------------------------------------------
 
-  const toolbar =
-    document.getElementById(
+  document
+    .getElementById(
       'toolbar'
-    );
+    )
+    .querySelectorAll(
+      'button'
+    )
+    .forEach(
+      btn => {
 
-  toolbar
-    .querySelectorAll('button')
-    .forEach(btn => {
+        btn.addEventListener(
+          'mousedown',
+          e => {
 
-      btn.addEventListener(
-        'mousedown',
-        e => {
+            e.preventDefault();
 
-          e.preventDefault();
 
-          if (
-            !activeBlockEl
-          ) {
-            return;
+            if (
+              !activeBlockEl
+            ) {
+              return;
+            }
+
+
+            document.execCommand(
+              btn.dataset.cmd,
+              false,
+              null
+            );
+
+
+            activeBlockEl.dispatchEvent(
+              new Event(
+                'input'
+              )
+            );
           }
-
-          document.execCommand(
-            btn.dataset.cmd,
-            false,
-            null
-          );
-
-          activeBlockEl.dispatchEvent(
-            new Event('input')
-          );
-        }
-      );
-    });
+        );
+      }
+    );
 
 
   // -----------------------------------------------
-  // Добавить текст
+  // Add text
   // -----------------------------------------------
 
   document
@@ -1322,10 +1979,15 @@ function renderEditor() {
       'click',
       () => {
 
-        d.blocks.push({
-          type: 'text',
-          html: ''
-        });
+        d.blocks.push(
+          {
+            type:
+              'text',
+            html:
+              ''
+          }
+        );
+
 
         renderBlocks();
       }
@@ -1333,7 +1995,7 @@ function renderEditor() {
 
 
   // -----------------------------------------------
-  // Добавить изображение
+  // Add image
   // -----------------------------------------------
 
   document
@@ -1354,7 +2016,7 @@ function renderEditor() {
 
 
   // -----------------------------------------------
-  // Выбор файла
+  // File
   // -----------------------------------------------
 
   document
@@ -1368,6 +2030,7 @@ function renderEditor() {
         const file =
           e.target.files[0];
 
+
         if (!file) {
           return;
         }
@@ -1377,6 +2040,7 @@ function renderEditor() {
           document.getElementById(
             'editorHint'
           );
+
 
         hint.textContent =
           'Обрабатываем изображение…';
@@ -1390,22 +2054,33 @@ function renderEditor() {
             );
 
 
-          d.blocks.push({
-            type: 'image',
-            src: dataUrl,
-            caption: '',
-            _pendingFile: true
-          });
+          d.blocks.push(
+            {
+              type:
+                'image',
+
+              src:
+                dataUrl,
+
+              caption:
+                '',
+
+              _pendingFile:
+                true
+            }
+          );
 
 
           renderBlocks();
 
-        } catch (err) {
+        } catch (
+          err
+        ) {
 
           console.error(
-            'Image processing error:',
             err
           );
+
 
           showToast(
             'Не удалось обработать изображение'
@@ -1413,15 +2088,18 @@ function renderEditor() {
         }
 
 
-        hint.textContent = '';
+        hint.textContent =
+          '';
 
-        e.target.value = '';
+
+        e.target.value =
+          '';
       }
     );
 
 
   // -----------------------------------------------
-  // Сохранить / опубликовать
+  // Publish
   // -----------------------------------------------
 
   document
@@ -1439,7 +2117,7 @@ function renderEditor() {
 
 
 // =========================================================
-// Отрисовка блоков
+// Blocks
 // =========================================================
 
 function renderBlocks() {
@@ -1449,9 +2127,11 @@ function renderBlocks() {
       'blocksHost'
     );
 
+
   if (!host) {
     return;
   }
+
 
   const d =
     state.draft;
@@ -1459,204 +2139,207 @@ function renderBlocks() {
 
   host.innerHTML =
     d.blocks
-      .map((block, i) => {
+      .map(
+        (b, i) => {
 
-        // -------------------------------------------
-        // Текст
-        // -------------------------------------------
+          if (
+            b.type ===
+            'text'
+          ) {
 
-        if (
-          block.type === 'text'
-        ) {
-
-          return `
-            <div
-              class="block"
-              data-i="${i}"
-            >
-
-              <button
-                class="block-remove"
-                data-act="del"
-                data-i="${i}"
-              >
-                ✕
-              </button>
-
+            return `
 
               <div
-                class="block-text"
-                contenteditable="true"
+                class="block"
                 data-i="${i}"
-                data-placeholder="Текст абзаца…"
               >
-                ${sanitizeHtml(
-                  block.html || ''
-                )}
+
+                <button
+                  class="block-remove"
+                  data-act="del"
+                  data-i="${i}"
+                >
+                  ✕
+                </button>
+
+
+                <div
+                  class="block-text"
+                  contenteditable="true"
+                  data-i="${i}"
+                  data-placeholder="Текст абзаца…"
+                >
+                  ${sanitizeHtml(
+                    b.html ||
+                    ''
+                  )}
+                </div>
+
               </div>
-
-            </div>
-          `;
-        }
+            `;
+          }
 
 
-        // -------------------------------------------
-        // Картинка
-        // -------------------------------------------
+          if (
+            b.type ===
+            'image'
+          ) {
 
-        if (
-          block.type === 'image'
-        ) {
+            return `
 
-          return `
-            <div
-              class="block block-image-wrap"
-              data-i="${i}"
-            >
-
-              <button
-                class="block-remove"
-                data-act="del"
+              <div
+                class="block block-image-wrap"
                 data-i="${i}"
               >
-                ✕
-              </button>
+
+                <button
+                  class="block-remove"
+                  data-act="del"
+                  data-i="${i}"
+                >
+                  ✕
+                </button>
 
 
-              <img
-                src="${escapeHtml(
-                  block.src || ''
-                )}"
-                alt=""
-              >
+                <img
+                  src="${escapeHtml(
+                    b.src ||
+                    ''
+                  )}"
+                  alt=""
+                >
 
 
-              <input
-                class="block-caption"
-                data-i="${i}"
-                placeholder="Подпись (необязательно)"
-                value="${escapeHtml(
-                  block.caption || ''
-                )}"
-              >
+                <input
+                  class="block-caption"
+                  data-i="${i}"
+                  placeholder="Подпись (необязательно)"
+                  value="${escapeHtml(
+                    b.caption ||
+                    ''
+                  )}"
+                >
 
-            </div>
-          `;
+              </div>
+            `;
+          }
+
+
+          return '';
         }
-
-
-        return '';
-      })
+      )
       .join('');
 
 
   // -----------------------------------------------
-  // Текстовые блоки
+  // Text
   // -----------------------------------------------
 
   host
     .querySelectorAll(
       '.block-text'
     )
-    .forEach(el => {
+    .forEach(
+      el => {
 
-      el.addEventListener(
-        'focus',
-        () => {
+        el.addEventListener(
+          'focus',
+          () => {
 
-          activeBlockEl =
-            el;
-        }
-      );
+            activeBlockEl =
+              el;
+          }
+        );
 
 
-      el.addEventListener(
-        'input',
-        e => {
+        el.addEventListener(
+          'input',
+          e => {
 
-          const index =
-            Number(
-              e.target.dataset.i
-            );
-
-          d.blocks[index].html =
-            sanitizeHtml(
-              e.target.innerHTML
-            );
-        }
-      );
-    });
+            d.blocks[
+              +e.target.dataset.i
+            ].html =
+              sanitizeHtml(
+                e.target.innerHTML
+              );
+          }
+        );
+      }
+    );
 
 
   // -----------------------------------------------
-  // Подписи картинок
+  // Captions
   // -----------------------------------------------
 
   host
     .querySelectorAll(
       '.block-caption'
     )
-    .forEach(el => {
+    .forEach(
+      el => {
 
-      el.addEventListener(
-        'input',
-        e => {
+        el.addEventListener(
+          'input',
+          e => {
 
-          const index =
-            Number(
-              e.target.dataset.i
-            );
-
-          d.blocks[index].caption =
-            e.target.value;
-        }
-      );
-    });
+            d.blocks[
+              +e.target.dataset.i
+            ].caption =
+              e.target.value;
+          }
+        );
+      }
+    );
 
 
   // -----------------------------------------------
-  // Удаление блока
+  // Delete block
   // -----------------------------------------------
 
   host
     .querySelectorAll(
       '[data-act="del"]'
     )
-    .forEach(el => {
+    .forEach(
+      el => {
 
-      el.addEventListener(
-        'click',
-        () => {
+        el.addEventListener(
+          'click',
+          () => {
 
-          const index =
-            Number(
-              el.dataset.i
+            d.blocks.splice(
+              +el.dataset.i,
+              1
             );
 
-          d.blocks.splice(
-            index,
-            1
-          );
 
-          if (
-            !d.blocks.length
-          ) {
+            if (
+              !d.blocks.length
+            ) {
 
-            d.blocks.push({
-              type: 'text',
-              html: ''
-            });
+              d.blocks.push(
+                {
+                  type:
+                    'text',
+
+                  html:
+                    ''
+                }
+              );
+            }
+
+
+            renderBlocks();
           }
-
-          renderBlocks();
-        }
-      );
-    });
+        );
+      }
+    );
 }
 
 
 // =========================================================
-// Публикация / сохранение
+// Publish / Update
 // =========================================================
 
 async function publishDraft() {
@@ -1670,14 +2353,15 @@ async function publishDraft() {
       d.title.trim()
     ) ||
     d.blocks.some(
-      block => {
+      b => {
 
         if (
-          block.type === 'text'
+          b.type ===
+          'text'
         ) {
 
           return (
-            block.html
+            b.html
               .replace(
                 /<[^>]+>/g,
                 ''
@@ -1687,8 +2371,10 @@ async function publishDraft() {
           );
         }
 
+
         return (
-          block.type === 'image'
+          b.type ===
+          'image'
         );
       }
     );
@@ -1709,15 +2395,15 @@ async function publishDraft() {
       'editorHint'
     );
 
+
   const button =
     document.getElementById(
       'publishBtn'
     );
 
 
-  if (button) {
-    button.disabled = true;
-  }
+  button.disabled =
+    true;
 
 
   hint.textContent =
@@ -1729,29 +2415,35 @@ async function publishDraft() {
   try {
 
     // ---------------------------------------------
-    // Проверяем / создаём профиль
+    // Profile
     // ---------------------------------------------
 
     const profile =
-      await ensureProfile();
+      await ensureProfile(
+        true
+      );
+
 
     if (!profile) {
+
       throw new Error(
-        'Не удалось получить профиль автора'
+        'Необходимо указать ник'
       );
     }
 
 
     // ---------------------------------------------
-    // Загружаем новые картинки
+    // Upload pending images
     // ---------------------------------------------
 
     for (
-      const block of d.blocks
+      const block
+      of d.blocks
     ) {
 
       if (
-        block.type === 'image' &&
+        block.type ===
+        'image' &&
         block._pendingFile
       ) {
 
@@ -1761,8 +2453,10 @@ async function publishDraft() {
             'image.jpg'
           );
 
+
         block.src =
           url;
+
 
         delete block._pendingFile;
       }
@@ -1775,10 +2469,11 @@ async function publishDraft() {
 
     const firstText =
       d.blocks.find(
-        block =>
-          block.type === 'text' &&
-          block.html &&
-          block.html.trim()
+        b =>
+          b.type ===
+          'text' &&
+          b.html &&
+          b.html.trim()
       );
 
 
@@ -1790,7 +2485,10 @@ async function publishDraft() {
               ''
             )
             .trim()
-            .slice(0, 140)
+            .slice(
+              0,
+              140
+            )
         : '';
 
 
@@ -1800,14 +2498,11 @@ async function publishDraft() {
 
     const firstImage =
       d.blocks.find(
-        block =>
-          block.type === 'image'
+        b =>
+          b.type ===
+          'image'
       );
 
-
-    // ---------------------------------------------
-    // Payload
-    // ---------------------------------------------
 
     const payload = {
 
@@ -1833,18 +2528,25 @@ async function publishDraft() {
 
     if (!d.id) {
 
-      const saved =
-        await createArticle(
-          payload
+      const result =
+        await callTelegramApi(
+          'create-article',
+          {
+            article:
+              payload
+          }
         );
+
 
       showToast(
         'Опубликовано'
       );
 
+
       await openReader(
-        saved.id
+        result.article.id
       );
+
 
       return;
     }
@@ -1854,14 +2556,18 @@ async function publishDraft() {
     // UPDATE
     // ---------------------------------------------
 
-    const saved =
-      await updateArticle({
+    const result =
+      await callTelegramApi(
+        'update-article',
+        {
+          article: {
+            id:
+              d.id,
 
-        id:
-          d.id,
-
-        ...payload
-      });
+            ...payload
+          }
+        }
+      );
 
 
     showToast(
@@ -1870,51 +2576,39 @@ async function publishDraft() {
 
 
     await openReader(
-      saved.id
+      result.article.id
     );
 
 
-  } catch (err) {
+  } catch (
+    err
+  ) {
 
     console.error(
-      'Publish/update error:',
       err
     );
 
 
-    hint.textContent = '';
-
-
     showToast(
-      'Ошибка: ' +
-      (
-        err.message ||
-        'см. консоль'
-      )
+      err.message ||
+      'Ошибка публикации'
     );
+
+
+    hint.textContent =
+      '';
 
 
   } finally {
 
-    if (button) {
-      button.disabled = false;
-    }
-
-    if (
-      hint &&
-      state.view === 'editor'
-    ) {
-      hint.textContent = '';
-    }
+    button.disabled =
+      false;
   }
 }
 
 
 // =========================================================
 // Telegram Back Button
-// =========================================================
-// В старых версиях Telegram BackButton может отсутствовать.
-// Поэтому проверяем его наличие перед использованием.
 // =========================================================
 
 function setBackButton(
@@ -1929,8 +2623,10 @@ function setBackButton(
 
   if (
     !tg.BackButton ||
-    typeof tg.BackButton.show !== 'function'
+    typeof tg.BackButton.show !==
+      'function'
   ) {
+
     return;
   }
 
@@ -1939,7 +2635,8 @@ function setBackButton(
 
     if (
       setBackButton._last &&
-      typeof tg.BackButton.offClick === 'function'
+      typeof tg.BackButton.offClick ===
+        'function'
     ) {
 
       tg.BackButton.offClick(
@@ -1952,8 +2649,10 @@ function setBackButton(
 
       tg.BackButton.show();
 
+
       if (
-        typeof tg.BackButton.onClick === 'function'
+        typeof tg.BackButton.onClick ===
+          'function'
       ) {
 
         tg.BackButton.onClick(
@@ -1972,10 +2671,12 @@ function setBackButton(
         null;
     }
 
-  } catch (err) {
+  } catch (
+    err
+  ) {
 
     console.warn(
-      'Telegram BackButton unavailable:',
+      'BackButton:',
       err
     );
   }
@@ -1983,13 +2684,14 @@ function setBackButton(
 
 
 // =========================================================
-// Навигация
+// Navigation
 // =========================================================
 
 const homeLink =
   document.getElementById(
     'homeLink'
   );
+
 
 if (homeLink) {
 
@@ -2005,50 +2707,44 @@ const newArticleBtn =
     'newArticleBtn'
   );
 
+
 if (newArticleBtn) {
 
   newArticleBtn.addEventListener(
     'click',
-    async () => {
-
-      try {
-
-        // Проверяем, что Telegram
-        // действительно передал пользователя.
-        if (!tg || !tg.initData) {
-
-          showToast(
-            'Откройте приложение внутри Telegram'
-          );
-
-          return;
-        }
-
-
-        // Проверяем профиль заранее.
-        await ensureProfile();
-
-        openEditor();
-
-      } catch (err) {
-
-        console.error(
-          'Open editor error:',
-          err
-        );
-
-        showToast(
-          err.message ||
-          'Не удалось открыть редактор'
-        );
-      }
-    }
+    openEditor
   );
 }
 
 
 // =========================================================
-// Инициализация
+// Профиль
+//
+// В index.html добавь кнопку:
+//
+// <button id="profileBtn">Профиль</button>
+//
+// Если кнопки пока нет,
+// функция просто не подключится.
+// =========================================================
+
+const profileBtn =
+  document.getElementById(
+    'profileBtn'
+  );
+
+
+if (profileBtn) {
+
+  profileBtn.addEventListener(
+    'click',
+    openProfile
+  );
+}
+
+
+// =========================================================
+// Init
 // =========================================================
 
 (async function init() {
@@ -2073,12 +2769,16 @@ if (newArticleBtn) {
       await renderFeed();
     }
 
-  } catch (err) {
+
+  } catch (
+    err
+  ) {
 
     console.error(
-      'Initialization error:',
+      'Init:',
       err
     );
+
 
     showToast(
       'Ошибка запуска приложения'
