@@ -16,7 +16,7 @@ const MINIAPP_SHORT_NAME = 'letopis';
 // SUPABASE / TELEGRAM
 // =========================================================
 
-const supabase =
+const db =
   window.supabase.createClient(
     window.SUPABASE_URL,
     window.SUPABASE_ANON_KEY
@@ -456,7 +456,7 @@ async function fetchFeed() {
     data,
     error
   } =
-    await supabase
+    await db
       .from('articles')
       .select(
         `
@@ -503,7 +503,7 @@ async function fetchArticle(id) {
     data,
     error
   } =
-    await supabase
+    await db
       .from('articles')
       .select('*')
       .eq(
@@ -540,7 +540,7 @@ async function fetchAuthorArticles(
     data,
     error
   } =
-    await supabase
+    await db
       .from('articles')
       .select(
         `
@@ -593,7 +593,7 @@ async function fetchComments(
     data,
     error
   } =
-    await supabase
+    await db
       .from('article_comments')
       .select(
         `
@@ -646,7 +646,7 @@ async function fetchArticleReactions(
     data,
     error
   } =
-    await supabase
+    await db
       .from('article_reactions')
       .select(
         `
@@ -695,7 +695,7 @@ async function fetchCommentReactions(
     data,
     error
   } =
-    await supabase
+    await db
       .from('comment_reactions')
       .select(
         `
@@ -742,7 +742,7 @@ async function fetchMyArticles() {
     data,
     error
   } =
-    await supabase
+    await db
       .from('articles')
       .select('*')
       .eq(
@@ -786,7 +786,7 @@ async function fetchMyComments() {
     data,
     error
   } =
-    await supabase
+    await db
       .from('article_comments')
       .select(
         `
@@ -3409,7 +3409,7 @@ async function uploadImage(
   const {
     error
   } =
-    await supabase
+    await db
       .storage
       .from('images')
       .upload(
@@ -3432,7 +3432,7 @@ async function uploadImage(
   const {
     data
   } =
-    supabase
+    db
       .storage
       .from('images')
       .getPublicUrl(
@@ -4252,7 +4252,7 @@ async function getProfileStats() {
   ] =
     await Promise.all([
 
-      supabase
+      db
         .from('articles')
         .select(
           'id',
@@ -4266,7 +4266,7 @@ async function getProfileStats() {
           tgUser.id
         ),
 
-      supabase
+      db
         .from('article_comments')
         .select(
           'id',
