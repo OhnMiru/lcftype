@@ -53,9 +53,6 @@ const state = {
 
 let activeBlockEl = null;
 
-// Индекс, после которого нужно вставить загружаемые картинки.
-let pendingImageInsertIndex = null;
-
 
 // =========================================================
 // Toast
@@ -136,6 +133,7 @@ function sanitizeHtml(html) {
   doc.innerHTML = html || '';
 
   (function clean(node) {
+
     [
       ...node.childNodes
     ].forEach(child => {
@@ -171,6 +169,7 @@ function sanitizeHtml(html) {
         child.parentNode.removeChild(child);
       }
     });
+
   })(doc);
 
   return doc.innerHTML;
@@ -185,6 +184,7 @@ async function callTelegramApi(
   action,
   extra = {}
 ) {
+
   if (!tg || !tg.initData) {
     throw new Error(
       'Откройте приложение внутри Telegram'
@@ -207,6 +207,7 @@ async function callTelegramApi(
     );
 
   if (error) {
+
     console.error(
       'telegram-api:',
       error
@@ -231,6 +232,7 @@ async function callTelegramApi(
 // =========================================================
 
 async function getProfile() {
+
   const result =
     await callTelegramApi(
       'get-profile'
@@ -244,6 +246,7 @@ async function getProfile() {
 
 
 async function saveProfile(username) {
+
   const result =
     await callTelegramApi(
       'set-profile',
@@ -262,6 +265,7 @@ async function saveProfile(username) {
 async function ensureProfile(
   askIfMissing = true
 ) {
+
   const existing =
     await getProfile();
 
@@ -284,6 +288,7 @@ async function ensureProfile(
 function openUsernameDialog(
   currentUsername
 ) {
+
   return new Promise(resolve => {
 
     const overlay =
@@ -374,7 +379,9 @@ function openUsernameDialog(
     cancelBtn.addEventListener(
       'click',
       () => {
+
         overlay.remove();
+
         resolve(null);
       }
     );
@@ -389,20 +396,25 @@ function openUsernameDialog(
             .replace(/\s+/g, ' ');
 
         if (username.length < 2) {
+
           showToast(
             'Минимум 2 символа'
           );
+
           return;
         }
 
         if (username.length > 30) {
+
           showToast(
             'Максимум 30 символов'
           );
+
           return;
         }
 
         saveBtn.disabled = true;
+
         saveBtn.textContent =
           'Сохраняем…';
 
@@ -431,6 +443,7 @@ function openUsernameDialog(
           );
 
           saveBtn.disabled = false;
+
           saveBtn.textContent =
             'Сохранить';
         }
@@ -459,7 +472,9 @@ function openUsernameDialog(
 // =========================================================
 
 async function openProfile() {
+
   state.view = 'profile';
+
   state.currentId = null;
 
   setBackButton(
@@ -625,6 +640,7 @@ async function openProfile() {
 // =========================================================
 
 async function fetchFeed() {
+
   const {
     data,
     error
@@ -642,7 +658,9 @@ async function fetchFeed() {
       );
 
   if (error) {
+
     console.error(error);
+
     return [];
   }
 
@@ -651,6 +669,7 @@ async function fetchFeed() {
 
 
 async function fetchArticle(id) {
+
   const {
     data,
     error
@@ -662,7 +681,9 @@ async function fetchArticle(id) {
       .single();
 
   if (error) {
+
     console.error(error);
+
     return null;
   }
 
@@ -678,6 +699,7 @@ async function uploadImage(
   dataUrl,
   filename
 ) {
+
   const res =
     await fetch(dataUrl);
 
@@ -709,6 +731,7 @@ async function uploadImage(
           contentType:
             blob.type ||
             'image/jpeg',
+
           upsert: false
         }
       );
@@ -738,6 +761,7 @@ function compressImageFile(
   maxW = 1200,
   quality = 0.82
 ) {
+
   return new Promise(
     (resolve, reject) => {
 
@@ -810,6 +834,7 @@ function compressImageFile(
 // =========================================================
 
 function isArticleOwner(article) {
+
   if (
     !tgUser ||
     !article ||
@@ -830,7 +855,9 @@ function isArticleOwner(article) {
 // =========================================================
 
 async function renderFeed() {
+
   state.view = 'feed';
+
   state.currentId = null;
 
   setBackButton(false);
@@ -933,6 +960,7 @@ async function renderFeed() {
       el.addEventListener(
         'click',
         () => {
+
           openReader(
             el.dataset.id
           );
@@ -947,7 +975,9 @@ async function renderFeed() {
 // =========================================================
 
 async function openReader(id) {
+
   state.view = 'reader';
+
   state.currentId = id;
 
   setBackButton(
@@ -983,10 +1013,6 @@ async function openReader(id) {
 
     return;
   }
-
-  /*
-   * Обложка здесь намеренно НЕ выводится.
-   */
 
   const bodyHtml =
     (
@@ -1180,6 +1206,7 @@ async function openReader(id) {
             await navigator.share({
               title:
                 article.title,
+
               url:
                 shareUrl
             });
@@ -1196,6 +1223,7 @@ async function openReader(id) {
           );
 
         } catch (err) {
+
           console.error(err);
         }
       }
@@ -1237,6 +1265,7 @@ async function openReader(id) {
             );
 
           btn.disabled = true;
+
           btn.textContent =
             'Удаляем…';
 
@@ -1261,6 +1290,7 @@ async function openReader(id) {
             console.error(err);
 
             btn.disabled = false;
+
             btn.textContent =
               'Удалить';
 
@@ -1280,6 +1310,7 @@ async function openReader(id) {
 // =========================================================
 
 function newDraft() {
+
   return {
 
     id: null,
@@ -1326,8 +1357,11 @@ async function openEditor() {
     }
 
     state.view = 'editor';
+
     state.currentId = null;
-    state.draft = newDraft();
+
+    state.draft =
+      newDraft();
 
     setBackButton(
       true,
@@ -1338,6 +1372,7 @@ async function openEditor() {
             'Отменить редактирование? Черновик будет потерян.'
           )
         ) {
+
           renderFeed();
         }
       }
@@ -1375,7 +1410,9 @@ function editArticle(article) {
   }
 
   state.view = 'editor';
-  state.currentId = article.id;
+
+  state.currentId =
+    article.id;
 
   state.draft = {
 
@@ -1438,8 +1475,6 @@ function renderEditor() {
 
   const d =
     state.draft;
-
-  activeBlockEl = null;
 
   main.innerHTML = `
 
@@ -1546,7 +1581,6 @@ function renderEditor() {
       <button
         data-cmd="bold"
         title="Жирный"
-        type="button"
       >
         B
       </button>
@@ -1554,7 +1588,6 @@ function renderEditor() {
       <button
         data-cmd="italic"
         title="Курсив"
-        type="button"
       >
         i
       </button>
@@ -1562,7 +1595,6 @@ function renderEditor() {
       <button
         data-cmd="underline"
         title="Подчёркнутый"
-        type="button"
       >
         U
       </button>
@@ -1589,6 +1621,7 @@ function renderEditor() {
 
 
     <!-- Обложка -->
+
     <input
       type="file"
       accept="image/*"
@@ -1598,6 +1631,7 @@ function renderEditor() {
 
 
     <!-- Обычные картинки -->
+
     <input
       type="file"
       accept="image/*"
@@ -1624,6 +1658,7 @@ function renderEditor() {
     .addEventListener(
       'input',
       e => {
+
         d.title =
           e.target.value;
       }
@@ -1649,8 +1684,6 @@ function renderEditor() {
             return;
           }
 
-          activeBlockEl.focus();
-
           document.execCommand(
             btn.dataset.cmd,
             false,
@@ -1658,9 +1691,7 @@ function renderEditor() {
           );
 
           activeBlockEl.dispatchEvent(
-            new Event('input', {
-              bubbles: true
-            })
+            new Event('input')
           );
         }
       );
@@ -1722,11 +1753,6 @@ function renderEditor() {
 
         d.cover = null;
 
-        /*
-         * Обложка не связана с фокусом
-         * текстового блока, поэтому здесь
-         * полный рендер допустим.
-         */
         renderEditor();
 
         showToast(
@@ -1771,7 +1797,8 @@ function renderEditor() {
               0.84
             );
 
-          d.cover = dataUrl;
+          d.cover =
+            dataUrl;
 
           renderEditor();
 
@@ -1784,45 +1811,16 @@ function renderEditor() {
           );
         }
 
+        const currentHint =
+          document.getElementById(
+            'editorHint'
+          );
+
+        if (currentHint) {
+          currentHint.textContent = '';
+        }
+
         e.target.value = '';
-      }
-    );
-
-
-  // =======================================================
-  // Add text to END
-  // =======================================================
-
-  document
-    .getElementById('addTextBtn')
-    .addEventListener(
-      'click',
-      () => {
-
-        addTextBlockAfter(
-          d.blocks.length - 1,
-          true
-        );
-      }
-    );
-
-
-  // =======================================================
-  // Add image to END
-  // =======================================================
-
-  document
-    .getElementById('addImageBtn')
-    .addEventListener(
-      'click',
-      () => {
-
-        pendingImageInsertIndex =
-          d.blocks.length - 1;
-
-        document
-          .getElementById('fileInput')
-          .click();
       }
     );
 
@@ -1851,13 +1849,6 @@ function renderEditor() {
             'editorHint'
           );
 
-        const addImageBtn =
-          document.getElementById(
-            'addImageBtn'
-          );
-
-        addImageBtn.disabled = true;
-
         hint.textContent =
           files.length === 1
             ? 'Обрабатываем изображение…'
@@ -1865,12 +1856,22 @@ function renderEditor() {
 
         try {
 
-          let insertIndex =
+          /*
+           * ВАЖНО:
+           * Здесь больше нет d.blocks.push().
+           *
+           * Изображения вставляются в конкретную
+           * позицию, которую передал пользователь.
+           */
+
+          const insertIndex =
             Number.isInteger(
-              pendingImageInsertIndex
+              state.pendingImageInsertIndex
             )
-              ? pendingImageInsertIndex
-              : d.blocks.length - 1;
+              ? state.pendingImageInsertIndex
+              : d.blocks.length;
+
+          const newBlocks = [];
 
           for (
             const file
@@ -1882,31 +1883,31 @@ function renderEditor() {
                 file
               );
 
-            const block = {
+            newBlocks.push({
               type: 'image',
               src: dataUrl,
               caption: '',
               _pendingFile: true
-            };
-
-            d.blocks.splice(
-              insertIndex + 1,
-              0,
-              block
-            );
-
-            const newIndex =
-              insertIndex + 1;
-
-            insertBlockElementAt(
-              newIndex
-            );
-
-            insertIndex =
-              newIndex;
+            });
           }
 
-          updateAllBlockIndices();
+          d.blocks.splice(
+            insertIndex,
+            0,
+            ...newBlocks
+          );
+
+          state.pendingImageInsertIndex =
+            null;
+
+          /*
+           * Не перерисовываем весь редактор.
+           * Только обновляем список блоков.
+           */
+          renderBlocks({
+            focusIndex:
+              insertIndex
+          });
 
         } catch (err) {
 
@@ -1915,15 +1916,20 @@ function renderEditor() {
           showToast(
             'Не удалось обработать одно из изображений'
           );
+
+        } finally {
+
+          const currentHint =
+            document.getElementById(
+              'editorHint'
+            );
+
+          if (currentHint) {
+            currentHint.textContent = '';
+          }
+
+          e.target.value = '';
         }
-
-        hint.textContent = '';
-
-        addImageBtn.disabled = false;
-
-        pendingImageInsertIndex = null;
-
-        e.target.value = '';
       }
     );
 
@@ -1940,609 +1946,159 @@ function renderEditor() {
     );
 
 
+  // =======================================================
+  // Blocks
+  // =======================================================
+
   renderBlocks();
 }
 
 
 // =========================================================
-// Create block HTML
+// Insert block without full editor rerender
 // =========================================================
 
-function getBlockHtml(block, index) {
-
-  if (
-    block.type === 'text'
-  ) {
-
-    return `
-
-      <div
-        class="block"
-        data-i="${index}"
-      >
-
-        <button
-          class="block-remove"
-          data-act="del"
-          type="button"
-          aria-label="Удалить блок"
-          title="Удалить блок"
-        >
-          ✕
-        </button>
-
-        <div
-          class="block-text"
-          contenteditable="true"
-          data-i="${index}"
-          data-placeholder="Текст абзаца…"
-        >
-          ${sanitizeHtml(
-            block.html || ''
-          )}
-        </div>
-
-        <div class="block-add-row">
-
-          <button
-            class="block-add-btn"
-            data-act="add-text"
-            type="button"
-          >
-            ＋ Текст
-          </button>
-
-          <button
-            class="block-add-btn"
-            data-act="add-image"
-            type="button"
-          >
-            ＋ Картинка
-          </button>
-
-        </div>
-
-      </div>
-    `;
-  }
-
-
-  if (
-    block.type === 'image'
-  ) {
-
-    return `
-
-      <div
-        class="block block-image-wrap"
-        data-i="${index}"
-      >
-
-        <button
-          class="block-remove"
-          data-act="del"
-          type="button"
-          aria-label="Удалить блок"
-          title="Удалить блок"
-        >
-          ✕
-        </button>
-
-        <img
-          src="${escapeHtml(
-            block.src || ''
-          )}"
-          alt=""
-        >
-
-        <input
-          class="block-caption"
-          data-i="${index}"
-          placeholder="Подпись (необязательно)"
-          value="${escapeHtml(
-            block.caption || ''
-          )}"
-        >
-
-        <div class="block-add-row">
-
-          <button
-            class="block-add-btn"
-            data-act="add-text"
-            type="button"
-          >
-            ＋ Текст
-          </button>
-
-          <button
-            class="block-add-btn"
-            data-act="add-image"
-            type="button"
-          >
-            ＋ Картинка
-          </button>
-
-        </div>
-
-      </div>
-    `;
-  }
-
-  return '';
-}
-
-
-// =========================================================
-// Bind one block
-// =========================================================
-
-function bindBlockElement(blockEl) {
-
-  if (!blockEl) {
-    return;
-  }
-
-  const d =
-    state.draft;
-
-  const textEl =
-    blockEl.querySelector(
-      '.block-text'
-    );
-
-  if (textEl) {
-
-    textEl.addEventListener(
-      'focus',
-      () => {
-        activeBlockEl = textEl;
-      }
-    );
-
-    textEl.addEventListener(
-      'click',
-      () => {
-        activeBlockEl = textEl;
-      }
-    );
-
-    textEl.addEventListener(
-      'input',
-      e => {
-
-        const index =
-          Number(
-            e.target.dataset.i
-          );
-
-        if (
-          !d.blocks[index] ||
-          d.blocks[index].type !== 'text'
-        ) {
-          return;
-        }
-
-        d.blocks[index].html =
-          sanitizeHtml(
-            e.target.innerHTML
-          );
-      }
-    );
-  }
-
-
-  const captionEl =
-    blockEl.querySelector(
-      '.block-caption'
-    );
-
-  if (captionEl) {
-
-    captionEl.addEventListener(
-      'input',
-      e => {
-
-        const index =
-          Number(
-            e.target.dataset.i
-          );
-
-        if (
-          !d.blocks[index] ||
-          d.blocks[index].type !== 'image'
-        ) {
-          return;
-        }
-
-        d.blocks[index].caption =
-          e.target.value;
-      }
-    );
-  }
-
-
-  const deleteBtn =
-    blockEl.querySelector(
-      '[data-act="del"]'
-    );
-
-  if (deleteBtn) {
-
-    deleteBtn.addEventListener(
-      'click',
-      () => {
-
-        deleteBlock(
-          Number(
-            blockEl.dataset.i
-          )
-        );
-      }
-    );
-  }
-
-
-  blockEl
-    .querySelectorAll(
-      '[data-act="add-text"]'
-    )
-    .forEach(btn => {
-
-      btn.addEventListener(
-        'click',
-        () => {
-
-          addTextBlockAfter(
-            Number(
-              blockEl.dataset.i
-            ),
-            true
-          );
-        }
-      );
-    });
-
-
-  blockEl
-    .querySelectorAll(
-      '[data-act="add-image"]'
-    )
-    .forEach(btn => {
-
-      btn.addEventListener(
-        'click',
-        () => {
-
-          pendingImageInsertIndex =
-            Number(
-              blockEl.dataset.i
-            );
-
-          const input =
-            document.getElementById(
-              'fileInput'
-            );
-
-          if (input) {
-            input.click();
-          }
-        }
-      );
-    });
-}
-
-
-// =========================================================
-// Insert one block DOM element
-// =========================================================
-
-function insertBlockElementAt(index) {
-
-  const host =
-    document.getElementById(
-      'blocksHost'
-    );
-
-  if (!host) {
-    return null;
-  }
-
-  const block =
-    state.draft.blocks[index];
-
-  if (!block) {
-    return null;
-  }
-
-  const wrapper =
-    document.createElement('div');
-
-  wrapper.innerHTML =
-    getBlockHtml(
-      block,
-      index
-    ).trim();
-
-  const blockEl =
-    wrapper.firstElementChild;
-
-  if (!blockEl) {
-    return null;
-  }
-
-  const allBlocks =
-    host.querySelectorAll(
-      '.block'
-    );
-
-  if (
-    index >= allBlocks.length
-  ) {
-
-    host.appendChild(
-      blockEl
-    );
-
-  } else {
-
-    host.insertBefore(
-      blockEl,
-      allBlocks[index]
-    );
-  }
-
-  bindBlockElement(
-    blockEl
-  );
-
-  return blockEl;
-}
-
-
-// =========================================================
-// Update data-i without rerendering
-// =========================================================
-
-function updateAllBlockIndices() {
-
-  const host =
-    document.getElementById(
-      'blocksHost'
-    );
-
-  if (!host) {
-    return;
-  }
-
-  host
-    .querySelectorAll('.block')
-    .forEach(
-      (blockEl, index) => {
-
-        blockEl.dataset.i =
-          index;
-
-        const text =
-          blockEl.querySelector(
-            '.block-text'
-          );
-
-        if (text) {
-          text.dataset.i =
-            index;
-        }
-
-        const caption =
-          blockEl.querySelector(
-            '.block-caption'
-          );
-
-        if (caption) {
-          caption.dataset.i =
-            index;
-        }
-      }
-    );
-}
-
-
-// =========================================================
-// Add text block after another block
-// =========================================================
-
-function addTextBlockAfter(
-  afterIndex,
-  focusNew = true
+function insertBlockAfter(
+  index,
+  block
 ) {
 
   const d =
     state.draft;
 
-  if (!d) {
+  const insertIndex =
+    index + 1;
+
+  d.blocks.splice(
+    insertIndex,
+    0,
+    block
+  );
+
+  renderBlocks({
+    focusIndex:
+      block.type === 'text'
+        ? insertIndex
+        : null
+  });
+}
+
+
+// =========================================================
+// Open image picker at specific position
+// =========================================================
+
+function openImagePicker(
+  insertIndex
+) {
+
+  state.pendingImageInsertIndex =
+    insertIndex;
+
+  const input =
+    document.getElementById(
+      'fileInput'
+    );
+
+  if (!input) {
     return;
   }
 
-  const safeIndex =
-    Math.max(
-      -1,
-      Math.min(
-        afterIndex,
-        d.blocks.length - 1
-      )
+  input.value = '';
+
+  input.click();
+}
+
+
+// =========================================================
+// Add controls under block
+// =========================================================
+
+function createBlockAddControls(
+  index
+) {
+
+  const row =
+    document.createElement('div');
+
+  row.className =
+    'block-add-row';
+
+  row.innerHTML = `
+
+    <button
+      class="block-add-btn"
+      type="button"
+      data-add="text"
+    >
+      ＋ Текст
+    </button>
+
+    <button
+      class="block-add-btn"
+      type="button"
+      data-add="image"
+    >
+      ＋ Картинка
+    </button>
+
+  `;
+
+  const textBtn =
+    row.querySelector(
+      '[data-add="text"]'
     );
 
-  const newIndex =
-    safeIndex + 1;
-
-  d.blocks.splice(
-    newIndex,
-    0,
-    {
-      type: 'text',
-      html: ''
-    }
-  );
-
-  const blockEl =
-    insertBlockElementAt(
-      newIndex
+  const imageBtn =
+    row.querySelector(
+      '[data-add="image"]'
     );
 
-  updateAllBlockIndices();
 
-  if (
-    focusNew &&
-    blockEl
-  ) {
+  // =======================================================
+  // Add text
+  // =======================================================
 
-    const text =
-      blockEl.querySelector(
-        '.block-text'
-      );
+  textBtn.addEventListener(
+    'click',
+    () => {
 
-    if (text) {
-
-      activeBlockEl =
-        text;
-
-      requestAnimationFrame(
-        () => {
-
-          text.focus();
-
-          try {
-
-            const range =
-              document.createRange();
-
-            range.selectNodeContents(
-              text
-            );
-
-            range.collapse(
-              false
-            );
-
-            const selection =
-              window.getSelection();
-
-            selection.removeAllRanges();
-
-            selection.addRange(
-              range
-            );
-
-          } catch (err) {
-            console.warn(
-              'Selection:',
-              err
-            );
-          }
+      insertBlockAfter(
+        index,
+        {
+          type: 'text',
+          html: ''
         }
       );
     }
-  }
-}
-
-
-// =========================================================
-// Delete block
-// =========================================================
-
-function deleteBlock(index) {
-
-  const d =
-    state.draft;
-
-  if (
-    !d ||
-    !d.blocks[index]
-  ) {
-    return;
-  }
-
-  /*
-   * Сохраняем фокус/позицию максимально
-   * аккуратно: после удаления стараемся
-   * сфокусировать соседний текстовый блок.
-   */
-
-  const host =
-    document.getElementById(
-      'blocksHost'
-    );
-
-  const blockEl =
-    host &&
-    host.querySelector(
-      `.block[data-i="${index}"]`
-    );
-
-  const nextText =
-    blockEl &&
-    blockEl.nextElementSibling
-      ? blockEl.nextElementSibling
-          .querySelector('.block-text')
-      : null;
-
-  const prevText =
-    blockEl &&
-    blockEl.previousElementSibling
-      ? blockEl.previousElementSibling
-          .querySelector('.block-text')
-      : null;
-
-  d.blocks.splice(
-    index,
-    1
   );
 
-  if (
-    !d.blocks.length
-  ) {
 
-    d.blocks.push({
-      type: 'text',
-      html: ''
-    });
-  }
+  // =======================================================
+  // Add image
+  // =======================================================
 
-  if (blockEl) {
-    blockEl.remove();
-  }
+  imageBtn.addEventListener(
+    'click',
+    () => {
 
-  /*
-   * После удаления меняются индексы,
-   * но сам редактор НЕ перерисовывается.
-   */
-  updateAllBlockIndices();
+      openImagePicker(
+        index + 1
+      );
+    }
+  );
 
-  const focusTarget =
-    nextText ||
-    prevText ||
-    document.querySelector(
-      '.block-text'
-    );
-
-  if (focusTarget) {
-
-    activeBlockEl =
-      focusTarget;
-
-    requestAnimationFrame(
-      () => {
-        focusTarget.focus();
-      }
-    );
-  }
+  return row;
 }
 
 
 // =========================================================
-// Blocks — initial render only
+// Blocks
 // =========================================================
 
-function renderBlocks() {
+function renderBlocks(
+  options = {}
+) {
 
   const host =
     document.getElementById(
@@ -2553,21 +2109,587 @@ function renderBlocks() {
     return;
   }
 
-  host.innerHTML = '';
-
   const d =
     state.draft;
 
-  d.blocks.forEach(
-    (block, index) => {
+  /*
+   * Сохраняем состояние текущего текстового
+   * блока перед обновлением DOM.
+   */
+  const oldActiveEl =
+    activeBlockEl;
 
-      insertBlockElementAt(
-        index
+  let activeIndex =
+    null;
+
+  let selectionOffset =
+    null;
+
+  if (
+    oldActiveEl &&
+    oldActiveEl.isConnected &&
+    oldActiveEl.dataset.i !== undefined
+  ) {
+
+    activeIndex =
+      Number(
+        oldActiveEl.dataset.i
+      );
+
+    try {
+
+      const selection =
+        window.getSelection();
+
+      if (
+        selection &&
+        selection.rangeCount
+      ) {
+
+        const range =
+          selection.getRangeAt(0);
+
+        if (
+          oldActiveEl.contains(
+            range.startContainer
+          )
+        ) {
+
+          selectionOffset =
+            getCaretOffset(
+              oldActiveEl,
+              range
+            );
+        }
+      }
+
+    } catch (err) {
+
+      console.warn(
+        'Не удалось сохранить курсор:',
+        err
+      );
+    }
+  }
+
+
+  host.innerHTML = '';
+
+
+  d.blocks.forEach(
+    (b, i) => {
+
+      const block =
+        document.createElement(
+          'div'
+        );
+
+      block.className =
+        'block';
+
+      block.dataset.i =
+        i;
+
+
+      // ===================================================
+      // Text block
+      // ===================================================
+
+      if (
+        b.type === 'text'
+      ) {
+
+        block.innerHTML = `
+
+          <button
+            class="block-remove"
+            data-act="del"
+            data-i="${i}"
+            type="button"
+          >
+            ✕
+          </button>
+
+          <div
+            class="block-text"
+            contenteditable="true"
+            data-i="${i}"
+            data-placeholder="Текст абзаца…"
+          >
+            ${sanitizeHtml(
+              b.html || ''
+            )}
+          </div>
+
+        `;
+      }
+
+
+      // ===================================================
+      // Image block
+      // ===================================================
+
+      else if (
+        b.type === 'image'
+      ) {
+
+        block.className =
+          'block block-image-wrap';
+
+        block.innerHTML = `
+
+          <button
+            class="block-remove"
+            data-act="del"
+            data-i="${i}"
+            type="button"
+          >
+            ✕
+          </button>
+
+          <img
+            src="${escapeHtml(
+              b.src || ''
+            )}"
+            alt=""
+          >
+
+          <input
+            class="block-caption"
+            data-i="${i}"
+            placeholder="Подпись (необязательно)"
+            value="${escapeHtml(
+              b.caption || ''
+            )}"
+          >
+
+        `;
+      }
+
+
+      else {
+        return;
+      }
+
+
+      // Add block itself
+      host.appendChild(
+        block
+      );
+
+
+      // Add controls directly below it
+      host.appendChild(
+        createBlockAddControls(
+          i
+        )
       );
     }
   );
 
-  updateAllBlockIndices();
+
+  // =======================================================
+  // Text event listeners
+  // =======================================================
+
+  host
+    .querySelectorAll('.block-text')
+    .forEach(el => {
+
+      el.addEventListener(
+        'focus',
+        () => {
+
+          activeBlockEl =
+            el;
+        }
+      );
+
+
+      el.addEventListener(
+        'input',
+        e => {
+
+          const index =
+            Number(
+              e.target.dataset.i
+            );
+
+          if (
+            !d.blocks[index] ||
+            d.blocks[index].type !== 'text'
+          ) {
+            return;
+          }
+
+          d.blocks[index].html =
+            sanitizeHtml(
+              e.target.innerHTML
+            );
+        }
+      );
+
+
+      el.addEventListener(
+        'keyup',
+        () => {
+
+          activeBlockEl =
+            el;
+        }
+      );
+
+
+      el.addEventListener(
+        'mouseup',
+        () => {
+
+          activeBlockEl =
+            el;
+        }
+      );
+    });
+
+
+  // =======================================================
+  // Captions
+  // =======================================================
+
+  host
+    .querySelectorAll('.block-caption')
+    .forEach(el => {
+
+      el.addEventListener(
+        'input',
+        e => {
+
+          const index =
+            Number(
+              e.target.dataset.i
+            );
+
+          if (
+            !d.blocks[index] ||
+            d.blocks[index].type !== 'image'
+          ) {
+            return;
+          }
+
+          d.blocks[index].caption =
+            e.target.value;
+        }
+      );
+    });
+
+
+  // =======================================================
+  // Delete block
+  // =======================================================
+
+  host
+    .querySelectorAll(
+      '[data-act="del"]'
+    )
+    .forEach(el => {
+
+      el.addEventListener(
+        'click',
+        () => {
+
+          const index =
+            Number(
+              el.dataset.i
+            );
+
+          if (
+            !d.blocks[index]
+          ) {
+            return;
+          }
+
+
+          const wasActive =
+            activeIndex === index;
+
+
+          d.blocks.splice(
+            index,
+            1
+          );
+
+
+          if (
+            !d.blocks.length
+          ) {
+
+            d.blocks.push({
+              type: 'text',
+              html: ''
+            });
+          }
+
+
+          /*
+           * Не перерисовываем весь editor.
+           * renderBlocks обновляет только блоки.
+           */
+
+          let focusIndex =
+            null;
+
+          if (wasActive) {
+
+            focusIndex =
+              Math.min(
+                index,
+                d.blocks.length - 1
+              );
+
+          } else if (
+            activeIndex !== null
+          ) {
+
+            if (
+              activeIndex > index
+            ) {
+
+              focusIndex =
+                activeIndex - 1;
+
+            } else {
+
+              focusIndex =
+                activeIndex;
+            }
+          }
+
+
+          renderBlocks({
+            focusIndex
+          });
+        }
+      );
+    });
+
+
+  // =======================================================
+  // Restore focus / caret
+  // =======================================================
+
+  if (
+    options.focusIndex !== undefined &&
+    options.focusIndex !== null
+  ) {
+
+    const focusIndex =
+      options.focusIndex;
+
+    const target =
+      host.querySelector(
+        `.block-text[data-i="${focusIndex}"]`
+      );
+
+    if (target) {
+
+      requestAnimationFrame(
+        () => {
+
+          target.focus();
+
+          activeBlockEl =
+            target;
+
+          placeCaretAtEnd(
+            target
+          );
+        }
+      );
+
+      return;
+    }
+  }
+
+
+  /*
+   * Если это обычное обновление после ввода,
+   * возвращаем старый фокус и позицию курсора.
+   */
+
+  if (
+    activeIndex !== null &&
+    activeIndex >= 0 &&
+    activeIndex < d.blocks.length
+  ) {
+
+    const target =
+      host.querySelector(
+        `.block-text[data-i="${activeIndex}"]`
+      );
+
+    if (
+      target &&
+      document.activeElement === document.body
+    ) {
+
+      target.focus();
+
+      activeBlockEl =
+        target;
+
+      if (
+        selectionOffset !== null
+      ) {
+
+        setCaretOffset(
+          target,
+          selectionOffset
+        );
+      }
+    }
+  }
+}
+
+
+// =========================================================
+// Caret helpers
+// =========================================================
+
+function getCaretOffset(
+  element,
+  range
+) {
+
+  const preRange =
+    range.cloneRange();
+
+  preRange.selectNodeContents(
+    element
+  );
+
+  preRange.setEnd(
+    range.startContainer,
+    range.startOffset
+  );
+
+  return preRange.toString().length;
+}
+
+
+function setCaretOffset(
+  element,
+  offset
+) {
+
+  const selection =
+    window.getSelection();
+
+  if (!selection) {
+    return;
+  }
+
+  const range =
+    document.createRange();
+
+  let currentOffset =
+    0;
+
+  let found = false;
+
+
+  function walk(node) {
+
+    if (found) {
+      return;
+    }
+
+    if (
+      node.nodeType === 3
+    ) {
+
+      const length =
+        node.nodeValue.length;
+
+      if (
+        currentOffset + length >=
+        offset
+      ) {
+
+        range.setStart(
+          node,
+          Math.max(
+            0,
+            offset -
+            currentOffset
+          )
+        );
+
+        range.collapse(true);
+
+        found = true;
+
+        return;
+      }
+
+      currentOffset +=
+        length;
+
+      return;
+    }
+
+
+    node.childNodes.forEach(
+      child => {
+        walk(child);
+      }
+    );
+  }
+
+
+  walk(element);
+
+
+  if (!found) {
+    placeCaretAtEnd(
+      element
+    );
+
+    return;
+  }
+
+
+  selection.removeAllRanges();
+
+  selection.addRange(
+    range
+  );
+}
+
+
+function placeCaretAtEnd(
+  element
+) {
+
+  const selection =
+    window.getSelection();
+
+  if (!selection) {
+    return;
+  }
+
+  const range =
+    document.createRange();
+
+  range.selectNodeContents(
+    element
+  );
+
+  range.collapse(false);
+
+  selection.removeAllRanges();
+
+  selection.addRange(
+    range
+  );
 }
 
 
@@ -2646,6 +2768,7 @@ async function publishDraft() {
       await ensureProfile(true);
 
     if (!profile) {
+
       throw new Error(
         'Необходимо указать ник'
       );
@@ -2692,7 +2815,8 @@ async function publishDraft() {
             'image.jpg'
           );
 
-        block.src = url;
+        block.src =
+          url;
 
         delete block._pendingFile;
       }
