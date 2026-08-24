@@ -440,3 +440,52 @@ button{ font-family:'Inter',sans-serif; cursor:pointer; border:none; background:
   }
 
 }
+
+/* =========================================================
+   Основная навигация — Статья / Профиль
+   ========================================================= */
+
+.main-navigation {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  width: 100%;
+}
+
+.main-navigation .btn {
+  flex: 0 0 auto;
+}
+
+
+/* Если навигация находится в topbar */
+.topbar .main-navigation {
+  margin-left: 12px;
+}
+
+
+/* Кнопка профиля */
+#profileBtn {
+  flex: 0 0 auto;
+}
+
+
+/* Активность кнопок */
+#homeLink:active,
+#profileBtn:active,
+#newArticleBtn:active {
+  transform: scale(0.97);
+}
+
+
+/* На маленьких экранах оставляем небольшой промежуток */
+@media (max-width: 520px) {
+  .main-navigation {
+    gap: 6px;
+  }
+
+  .main-navigation .btn {
+    padding-left: 11px;
+    padding-right: 11px;
+  }
+}
