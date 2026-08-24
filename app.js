@@ -53,6 +53,9 @@ const state = {
 
 let activeBlockEl = null;
 
+// Индекс, после которого нужно вставить загружаемые картинки.
+let pendingImageInsertIndex = null;
+
 
 // =========================================================
 // Toast
@@ -982,10 +985,7 @@ async function openReader(id) {
   }
 
   /*
-   * ВАЖНО:
-   * article.cover здесь НЕ выводится.
-   * Обложка существует только для главной
-   * страницы и редактора автора.
+   * Обложка здесь намеренно НЕ выводится.
    */
 
   const bodyHtml =
@@ -1286,10 +1286,6 @@ function newDraft() {
 
     title: '',
 
-    /*
-     * Обложка теперь отдельное свойство.
-     * Она НЕ является блоком статьи.
-     */
     cover: null,
 
     blocks: [
@@ -1389,10 +1385,6 @@ function editArticle(article) {
     title:
       article.title || '',
 
-    /*
-     * Загружаем существующую обложку
-     * отдельно от блоков.
-     */
     cover:
       article.cover || null,
 
@@ -1446,6 +1438,8 @@ function renderEditor() {
 
   const d =
     state.draft;
+
+  activeBlockEl = null;
 
   main.innerHTML = `
 
@@ -1552,6 +1546,7 @@ function renderEditor() {
       <button
         data-cmd="bold"
         title="Жирный"
+        type="button"
       >
         B
       </button>
@@ -1559,6 +1554,7 @@ function renderEditor() {
       <button
         data-cmd="italic"
         title="Курсив"
+        type="button"
       >
         i
       </button>
@@ -1566,6 +1562,7 @@ function renderEditor() {
       <button
         data-cmd="underline"
         title="Подчёркнутый"
+        type="button"
       >
         U
       </button>
@@ -1585,7 +1582,7 @@ function renderEditor() {
         id="addTextBtn"
         type="button"
       >
-        ＋ Текст
+        ＋ Текст в конец
       </button>
 
       <button
@@ -1593,7 +1590,7 @@ function renderEditor() {
         id="addImageBtn"
         type="button"
       >
-        ＋ Картинка
+        ＋ Картинка в конец
       </button>
 
     </div>
@@ -1673,6 +1670,8 @@ function renderEditor() {
             return;
           }
 
+          activeBlockEl.focus();
+
           document.execCommand(
             btn.dataset.cmd,
             false,
@@ -1680,7 +1679,9 @@ function renderEditor() {
           );
 
           activeBlockEl.dispatchEvent(
-            new Event('input')
+            new Event('input', {
+              bubbles: true
+            })
           );
         }
       );
@@ -1742,6 +1743,11 @@ function renderEditor() {
 
         d.cover = null;
 
+        /*
+         * Обложка не связана с фокусом
+         * текстового блока, поэтому здесь
+         * полный рендер допустим.
+         */
         renderEditor();
 
         showToast(
@@ -1799,15 +1805,13 @@ function renderEditor() {
           );
         }
 
-        hint.textContent = '';
-
         e.target.value = '';
       }
     );
 
 
   // =======================================================
-  // Add text
+  // Add text to END
   // =======================================================
 
   document
@@ -1816,18 +1820,16 @@ function renderEditor() {
       'click',
       () => {
 
-        d.blocks.push({
-          type: 'text',
-          html: ''
-        });
-
-        renderBlocks();
+        addTextBlockAfter(
+          d.blocks.length - 1,
+          true
+        );
       }
     );
 
 
   // =======================================================
-  // Add image
+  // Add image to END
   // =======================================================
 
   document
@@ -1835,6 +1837,9 @@ function renderEditor() {
     .addEventListener(
       'click',
       () => {
+
+        pendingImageInsertIndex =
+          d.blocks.length - 1;
 
         document
           .getElementById('fileInput')
@@ -1844,7 +1849,7 @@ function renderEditor() {
 
 
   // =======================================================
-  // Image files — MULTIPLE
+  // Image files
   // =======================================================
 
   document
@@ -1881,6 +1886,13 @@ function renderEditor() {
 
         try {
 
+          let insertIndex =
+            Number.isInteger(
+              pendingImageInsertIndex
+            )
+              ? pendingImageInsertIndex
+              : d.blocks.length - 1;
+
           for (
             const file
             of files
@@ -1891,18 +1903,31 @@ function renderEditor() {
                 file
               );
 
-            d.blocks.push({
+            const block = {
               type: 'image',
-
               src: dataUrl,
-
               caption: '',
-
               _pendingFile: true
-            });
+            };
+
+            d.blocks.splice(
+              insertIndex + 1,
+              0,
+              block
+            );
+
+            const newIndex =
+              insertIndex + 1;
+
+            insertBlockElementAt(
+              newIndex
+            );
+
+            insertIndex =
+              newIndex;
           }
 
-          renderBlocks();
+          updateAllBlockIndices();
 
         } catch (err) {
 
@@ -1916,6 +1941,8 @@ function renderEditor() {
         hint.textContent = '';
 
         addImageBtn.disabled = false;
+
+        pendingImageInsertIndex = null;
 
         e.target.value = '';
       }
@@ -1939,7 +1966,601 @@ function renderEditor() {
 
 
 // =========================================================
-// Blocks
+// Create block HTML
+// =========================================================
+
+function getBlockHtml(block, index) {
+
+  if (
+    block.type === 'text'
+  ) {
+
+    return `
+
+      <div
+        class="block"
+        data-i="${index}"
+      >
+
+        <button
+          class="block-remove"
+          data-act="del"
+          type="button"
+          aria-label="Удалить блок"
+          title="Удалить блок"
+        >
+          ✕
+        </button>
+
+        <div
+          class="block-text"
+          contenteditable="true"
+          data-i="${index}"
+          data-placeholder="Текст абзаца…"
+        >
+          ${sanitizeHtml(
+            block.html || ''
+          )}
+        </div>
+
+        <div class="block-add-row">
+
+          <button
+            class="block-add-btn"
+            data-act="add-text"
+            type="button"
+          >
+            ＋ Текст
+          </button>
+
+          <button
+            class="block-add-btn"
+            data-act="add-image"
+            type="button"
+          >
+            ＋ Картинка
+          </button>
+
+        </div>
+
+      </div>
+    `;
+  }
+
+
+  if (
+    block.type === 'image'
+  ) {
+
+    return `
+
+      <div
+        class="block block-image-wrap"
+        data-i="${index}"
+      >
+
+        <button
+          class="block-remove"
+          data-act="del"
+          type="button"
+          aria-label="Удалить блок"
+          title="Удалить блок"
+        >
+          ✕
+        </button>
+
+        <img
+          src="${escapeHtml(
+            block.src || ''
+          )}"
+          alt=""
+        >
+
+        <input
+          class="block-caption"
+          data-i="${index}"
+          placeholder="Подпись (необязательно)"
+          value="${escapeHtml(
+            block.caption || ''
+          )}"
+        >
+
+        <div class="block-add-row">
+
+          <button
+            class="block-add-btn"
+            data-act="add-text"
+            type="button"
+          >
+            ＋ Текст
+          </button>
+
+          <button
+            class="block-add-btn"
+            data-act="add-image"
+            type="button"
+          >
+            ＋ Картинка
+          </button>
+
+        </div>
+
+      </div>
+    `;
+  }
+
+  return '';
+}
+
+
+// =========================================================
+// Bind one block
+// =========================================================
+
+function bindBlockElement(blockEl) {
+
+  if (!blockEl) {
+    return;
+  }
+
+  const d =
+    state.draft;
+
+  const textEl =
+    blockEl.querySelector(
+      '.block-text'
+    );
+
+  if (textEl) {
+
+    textEl.addEventListener(
+      'focus',
+      () => {
+        activeBlockEl = textEl;
+      }
+    );
+
+    textEl.addEventListener(
+      'click',
+      () => {
+        activeBlockEl = textEl;
+      }
+    );
+
+    textEl.addEventListener(
+      'input',
+      e => {
+
+        const index =
+          Number(
+            e.target.dataset.i
+          );
+
+        if (
+          !d.blocks[index] ||
+          d.blocks[index].type !== 'text'
+        ) {
+          return;
+        }
+
+        d.blocks[index].html =
+          sanitizeHtml(
+            e.target.innerHTML
+          );
+      }
+    );
+  }
+
+
+  const captionEl =
+    blockEl.querySelector(
+      '.block-caption'
+    );
+
+  if (captionEl) {
+
+    captionEl.addEventListener(
+      'input',
+      e => {
+
+        const index =
+          Number(
+            e.target.dataset.i
+          );
+
+        if (
+          !d.blocks[index] ||
+          d.blocks[index].type !== 'image'
+        ) {
+          return;
+        }
+
+        d.blocks[index].caption =
+          e.target.value;
+      }
+    );
+  }
+
+
+  const deleteBtn =
+    blockEl.querySelector(
+      '[data-act="del"]'
+    );
+
+  if (deleteBtn) {
+
+    deleteBtn.addEventListener(
+      'click',
+      () => {
+
+        deleteBlock(
+          Number(
+            blockEl.dataset.i
+          )
+        );
+      }
+    );
+  }
+
+
+  blockEl
+    .querySelectorAll(
+      '[data-act="add-text"]'
+    )
+    .forEach(btn => {
+
+      btn.addEventListener(
+        'click',
+        () => {
+
+          addTextBlockAfter(
+            Number(
+              blockEl.dataset.i
+            ),
+            true
+          );
+        }
+      );
+    });
+
+
+  blockEl
+    .querySelectorAll(
+      '[data-act="add-image"]'
+    )
+    .forEach(btn => {
+
+      btn.addEventListener(
+        'click',
+        () => {
+
+          pendingImageInsertIndex =
+            Number(
+              blockEl.dataset.i
+            );
+
+          const input =
+            document.getElementById(
+              'fileInput'
+            );
+
+          if (input) {
+            input.click();
+          }
+        }
+      );
+    });
+}
+
+
+// =========================================================
+// Insert one block DOM element
+// =========================================================
+
+function insertBlockElementAt(index) {
+
+  const host =
+    document.getElementById(
+      'blocksHost'
+    );
+
+  if (!host) {
+    return null;
+  }
+
+  const block =
+    state.draft.blocks[index];
+
+  if (!block) {
+    return null;
+  }
+
+  const wrapper =
+    document.createElement('div');
+
+  wrapper.innerHTML =
+    getBlockHtml(
+      block,
+      index
+    ).trim();
+
+  const blockEl =
+    wrapper.firstElementChild;
+
+  if (!blockEl) {
+    return null;
+  }
+
+  const allBlocks =
+    host.querySelectorAll(
+      '.block'
+    );
+
+  if (
+    index >= allBlocks.length
+  ) {
+
+    host.appendChild(
+      blockEl
+    );
+
+  } else {
+
+    host.insertBefore(
+      blockEl,
+      allBlocks[index]
+    );
+  }
+
+  bindBlockElement(
+    blockEl
+  );
+
+  return blockEl;
+}
+
+
+// =========================================================
+// Update data-i without rerendering
+// =========================================================
+
+function updateAllBlockIndices() {
+
+  const host =
+    document.getElementById(
+      'blocksHost'
+    );
+
+  if (!host) {
+    return;
+  }
+
+  host
+    .querySelectorAll('.block')
+    .forEach(
+      (blockEl, index) => {
+
+        blockEl.dataset.i =
+          index;
+
+        const text =
+          blockEl.querySelector(
+            '.block-text'
+          );
+
+        if (text) {
+          text.dataset.i =
+            index;
+        }
+
+        const caption =
+          blockEl.querySelector(
+            '.block-caption'
+          );
+
+        if (caption) {
+          caption.dataset.i =
+            index;
+        }
+      }
+    );
+}
+
+
+// =========================================================
+// Add text block after another block
+// =========================================================
+
+function addTextBlockAfter(
+  afterIndex,
+  focusNew = true
+) {
+
+  const d =
+    state.draft;
+
+  if (!d) {
+    return;
+  }
+
+  const safeIndex =
+    Math.max(
+      -1,
+      Math.min(
+        afterIndex,
+        d.blocks.length - 1
+      )
+    );
+
+  const newIndex =
+    safeIndex + 1;
+
+  d.blocks.splice(
+    newIndex,
+    0,
+    {
+      type: 'text',
+      html: ''
+    }
+  );
+
+  const blockEl =
+    insertBlockElementAt(
+      newIndex
+    );
+
+  updateAllBlockIndices();
+
+  if (
+    focusNew &&
+    blockEl
+  ) {
+
+    const text =
+      blockEl.querySelector(
+        '.block-text'
+      );
+
+    if (text) {
+
+      activeBlockEl =
+        text;
+
+      requestAnimationFrame(
+        () => {
+
+          text.focus();
+
+          try {
+
+            const range =
+              document.createRange();
+
+            range.selectNodeContents(
+              text
+            );
+
+            range.collapse(
+              false
+            );
+
+            const selection =
+              window.getSelection();
+
+            selection.removeAllRanges();
+
+            selection.addRange(
+              range
+            );
+
+          } catch (err) {
+            console.warn(
+              'Selection:',
+              err
+            );
+          }
+        }
+      );
+    }
+  }
+}
+
+
+// =========================================================
+// Delete block
+// =========================================================
+
+function deleteBlock(index) {
+
+  const d =
+    state.draft;
+
+  if (
+    !d ||
+    !d.blocks[index]
+  ) {
+    return;
+  }
+
+  /*
+   * Сохраняем фокус/позицию максимально
+   * аккуратно: после удаления стараемся
+   * сфокусировать соседний текстовый блок.
+   */
+
+  const host =
+    document.getElementById(
+      'blocksHost'
+    );
+
+  const blockEl =
+    host &&
+    host.querySelector(
+      `.block[data-i="${index}"]`
+    );
+
+  const nextText =
+    blockEl &&
+    blockEl.nextElementSibling
+      ? blockEl.nextElementSibling
+          .querySelector('.block-text')
+      : null;
+
+  const prevText =
+    blockEl &&
+    blockEl.previousElementSibling
+      ? blockEl.previousElementSibling
+          .querySelector('.block-text')
+      : null;
+
+  d.blocks.splice(
+    index,
+    1
+  );
+
+  if (
+    !d.blocks.length
+  ) {
+
+    d.blocks.push({
+      type: 'text',
+      html: ''
+    });
+  }
+
+  if (blockEl) {
+    blockEl.remove();
+  }
+
+  /*
+   * После удаления меняются индексы,
+   * но сам редактор НЕ перерисовывается.
+   */
+  updateAllBlockIndices();
+
+  const focusTarget =
+    nextText ||
+    prevText ||
+    document.querySelector(
+      '.block-text'
+    );
+
+  if (focusTarget) {
+
+    activeBlockEl =
+      focusTarget;
+
+    requestAnimationFrame(
+      () => {
+        focusTarget.focus();
+      }
+    );
+  }
+}
+
+
+// =========================================================
+// Blocks — initial render only
 // =========================================================
 
 function renderBlocks() {
@@ -1953,178 +2574,21 @@ function renderBlocks() {
     return;
   }
 
+  host.innerHTML = '';
+
   const d =
     state.draft;
 
-  host.innerHTML =
-    d.blocks
-      .map((b, i) => {
+  d.blocks.forEach(
+    (block, index) => {
 
-        if (
-          b.type === 'text'
-        ) {
-
-          return `
-
-            <div
-              class="block"
-              data-i="${i}"
-            >
-
-              <button
-                class="block-remove"
-                data-act="del"
-                data-i="${i}"
-                type="button"
-              >
-                ✕
-              </button>
-
-              <div
-                class="block-text"
-                contenteditable="true"
-                data-i="${i}"
-                data-placeholder="Текст абзаца…"
-              >
-                ${sanitizeHtml(
-                  b.html || ''
-                )}
-              </div>
-
-            </div>
-          `;
-        }
-
-
-        if (
-          b.type === 'image'
-        ) {
-
-          return `
-
-            <div
-              class="block block-image-wrap"
-              data-i="${i}"
-            >
-
-              <button
-                class="block-remove"
-                data-act="del"
-                data-i="${i}"
-                type="button"
-              >
-                ✕
-              </button>
-
-              <img
-                src="${escapeHtml(
-                  b.src || ''
-                )}"
-                alt=""
-              >
-
-              <input
-                class="block-caption"
-                data-i="${i}"
-                placeholder="Подпись (необязательно)"
-                value="${escapeHtml(
-                  b.caption || ''
-                )}"
-              >
-
-            </div>
-          `;
-        }
-
-        return '';
-      })
-      .join('');
-
-
-  // =======================================================
-  // Text
-  // =======================================================
-
-  host
-    .querySelectorAll('.block-text')
-    .forEach(el => {
-
-      el.addEventListener(
-        'focus',
-        () => {
-          activeBlockEl = el;
-        }
+      insertBlockElementAt(
+        index
       );
+    }
+  );
 
-      el.addEventListener(
-        'input',
-        e => {
-
-          d.blocks[
-            +e.target.dataset.i
-          ].html =
-            sanitizeHtml(
-              e.target.innerHTML
-            );
-        }
-      );
-    });
-
-
-  // =======================================================
-  // Captions
-  // =======================================================
-
-  host
-    .querySelectorAll('.block-caption')
-    .forEach(el => {
-
-      el.addEventListener(
-        'input',
-        e => {
-
-          d.blocks[
-            +e.target.dataset.i
-          ].caption =
-            e.target.value;
-        }
-      );
-    });
-
-
-  // =======================================================
-  // Delete block
-  // =======================================================
-
-  host
-    .querySelectorAll(
-      '[data-act="del"]'
-    )
-    .forEach(el => {
-
-      el.addEventListener(
-        'click',
-        () => {
-
-          d.blocks.splice(
-            +el.dataset.i,
-            1
-          );
-
-          if (
-            !d.blocks.length
-          ) {
-
-            d.blocks.push({
-              type: 'text',
-              html: ''
-            });
-          }
-
-          renderBlocks();
-        }
-      );
-    });
+  updateAllBlockIndices();
 }
 
 
@@ -2216,13 +2680,6 @@ async function publishDraft() {
     let finalCover =
       d.cover || null;
 
-    /*
-     * Если обложка ещё является data URL,
-     * загружаем её в Supabase Storage.
-     *
-     * Если это уже URL — оставляем как есть.
-     */
-
     if (
       finalCover &&
       finalCover.startsWith('data:')
@@ -2299,15 +2756,9 @@ async function publishDraft() {
 
       excerpt,
 
-      /*
-       * Обложка хранится отдельно.
-       */
       cover:
         finalCover,
 
-      /*
-       * В blocks НИКОГДА не попадает cover.
-       */
       blocks:
         d.blocks
     };
