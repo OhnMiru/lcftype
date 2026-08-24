@@ -3,8 +3,8 @@
 // =========================================================
 
 // ---- Настройки, которые нужно поменять под себя ----
-const BOT_USERNAME = 'your_bot_username'; // без @, из BotFather
-const MINIAPP_SHORT_NAME = 'letopis';     // short name Web App, из BotFather
+const BOT_USERNAME = 'lcftype_bot'; // без @, из BotFather
+const MINIAPP_SHORT_NAME = 'lcftype';     // short name Web App, из BotFather
 
 // ---- Инициализация ----
 const supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
