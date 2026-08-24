@@ -565,6 +565,11 @@ img{
   margin-bottom:10px;
 }
 
+
+/* ---------------------------------------------------------
+   TEXT BLOCK
+   --------------------------------------------------------- */
+
 .block-text{
   width:100%;
 
@@ -610,6 +615,8 @@ img{
 
 .block-image-wrap{
   position:relative;
+
+  margin-bottom:10px;
 }
 
 .block-image-wrap img{
@@ -683,14 +690,36 @@ img{
 
   align-items:center;
 
-  gap:6px;
+  justify-content:center;
 
-  margin-top:8px;
+  gap:7px;
 
-  min-height:30px;
+  margin-top:7px;
+
+  margin-bottom:18px;
 }
 
 .block-add-btn{
+  display:inline-flex;
+
+  align-items:center;
+
+  justify-content:center;
+
+  gap:3px;
+
+  min-height:30px;
+
+  padding:6px 10px;
+
+  border:1px solid var(--line);
+
+  border-radius:6px;
+
+  background:transparent;
+
+  color:var(--ink-soft);
+
   font-family:'Inter', sans-serif;
 
   font-size:11px;
@@ -699,86 +728,46 @@ img{
 
   line-height:1;
 
-  color:var(--ink-soft);
-
-  border:1px solid transparent;
-
-  border-radius:5px;
-
-  padding:6px 8px;
-
-  background:transparent;
+  white-space:nowrap;
 
   transition:
-    color .15s ease,
     background .15s ease,
-    border-color .15s ease;
+    border-color .15s ease,
+    color .15s ease,
+    transform .15s ease;
 }
 
 .block-add-btn:hover{
-  color:var(--indigo);
-
   background:var(--paper-dim);
 
-  border-color:var(--line);
+  color:var(--indigo);
+
+  border-color:var(--indigo);
 }
 
 .block-add-btn:active{
-  transform:scale(.97);
+  transform:scale(.96);
 
-  background:var(--ochre-soft);
+  background:var(--paper-dim);
+}
+
+.block-add-btn .plus{
+  font-size:14px;
+
+  line-height:1;
+
+  font-weight:400;
 }
 
 
 /*
- * Немного отделяем кнопки от текста,
- * но не превращаем их в большие панели.
+ * Небольшой разделитель между самими блоками.
+ * Кнопки остаются визуально привязанными
+ * к конкретному блоку.
  */
-.block-text + .block-add-row{
-  margin-top:3px;
-}
 
-.block-image-wrap .block-add-row{
-  margin-top:9px;
-}
-
-
-/* =========================================================
-   ADD BLOCKS — BOTTOM
-   ========================================================= */
-
-.add-row{
-  display:flex;
-
-  gap:10px;
-
-  margin:18px 0 28px;
-}
-
-.add-btn{
-  flex:1;
-
-  font-family:'Inter', sans-serif;
-
-  font-size:13px;
-
-  font-weight:600;
-
-  color:var(--indigo);
-
-  border:1px dashed var(--line);
-
-  border-radius:var(--radius);
-
-  padding:12px;
-
-  text-align:center;
-
-  background:transparent;
-}
-
-.add-btn:active{
-  background:var(--paper-dim);
+.block + .block{
+  margin-top:2px;
 }
 
 
@@ -788,6 +777,8 @@ img{
 
 .publish-btn{
   width:100%;
+
+  margin-top:2px;
 }
 
 .hint{
@@ -1273,15 +1264,17 @@ img{
   }
 
 
+  /* -------------------------------------------------------
+     COVER
+     ------------------------------------------------------- */
+
   .cover-preview img{
     max-height:190px;
   }
 
-
   .cover-editor{
     padding:10px;
   }
-
 
   .cover-change-btn{
     font-size:10px;
@@ -1290,45 +1283,50 @@ img{
   }
 
 
+  /* -------------------------------------------------------
+     EDITOR
+     ------------------------------------------------------- */
+
   .editor-title-input{
     font-size:26px;
   }
 
 
+  /*
+   * Кнопки добавления под блоками
+   * на мобильном становятся ещё компактнее.
+   */
+
+  .block-add-row{
+    gap:6px;
+
+    margin-top:6px;
+
+    margin-bottom:16px;
+  }
+
+  .block-add-btn{
+    min-height:29px;
+
+    padding:6px 9px;
+
+    font-size:10.5px;
+  }
+
+  .block-add-btn .plus{
+    font-size:13px;
+  }
+
+
+  /* -------------------------------------------------------
+     READER
+     ------------------------------------------------------- */
+
   .reader h1{
     font-size:28px;
   }
 
-
   .reader-body p{
     font-size:17px;
-  }
-
-
-  /*
-   * На мобильном кнопки под блоками
-   * остаются маленькими и не занимают
-   * лишнее место.
-   */
-  .block-add-row{
-    gap:4px;
-
-    margin-top:5px;
-  }
-
-  .block-add-btn{
-    font-size:10.5px;
-
-    padding:6px 7px;
-  }
-
-  .add-row{
-    gap:7px;
-  }
-
-  .add-btn{
-    font-size:12px;
-
-    padding:10px 7px;
   }
 }
