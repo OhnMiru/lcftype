@@ -10,21 +10,19 @@ const MINIAPP_SHORT_NAME = 'lcftype';
 // Supabase
 // =========================================================
 
-const db =
-  window.supabase.createClient(
-    window.SUPABASE_URL,
-    window.SUPABASE_ANON_KEY
-  );
+const db = window.supabase.createClient(
+  window.SUPABASE_URL,
+  window.SUPABASE_ANON_KEY
+);
 
 
 // =========================================================
 // Telegram
 // =========================================================
 
-const tg =
-  window.Telegram
-    ? window.Telegram.WebApp
-    : null;
+const tg = window.Telegram
+  ? window.Telegram.WebApp
+  : null;
 
 if (tg) {
   tg.ready();
@@ -45,20 +43,22 @@ const tgUser =
 
 const state = {
   view: 'feed',
-
   articles: [],
-
   draft: null,
-
   currentId: null,
-
   profile: null,
 
+  // Поиск
   searchQuery: '',
 
-  selectedAuthors: [],
+  // Выбранные авторы
+  selectedAuthors: new Set(),
 
-  filterOpen: false
+  // Открыт ли фильтр
+  filterOpen: false,
+
+  // Позиция вставки изображения
+  pendingImageInsertIndex: null
 };
 
 let activeBlockEl = null;
@@ -69,9 +69,7 @@ let activeBlockEl = null;
 // =========================================================
 
 function showToast(msg) {
-
-  const t =
-    document.getElementById('toast');
+  const t = document.getElementById('toast');
 
   if (!t) {
     console.log(msg);
@@ -79,7 +77,6 @@ function showToast(msg) {
   }
 
   t.textContent = msg;
-
   t.classList.add('show');
 
   setTimeout(() => {
@@ -93,7 +90,6 @@ function showToast(msg) {
 // =========================================================
 
 function fmtDate(iso) {
-
   if (!iso) {
     return '';
   }
@@ -114,13 +110,8 @@ function fmtDate(iso) {
 // =========================================================
 
 function escapeHtml(s) {
-
-  const d =
-    document.createElement('div');
-
-  d.textContent =
-    s || '';
-
+  const d = document.createElement('div');
+  d.textContent = s || '';
   return d.innerHTML;
 }
 
@@ -129,81 +120,54 @@ function escapeHtml(s) {
 // Sanitize HTML
 // =========================================================
 
-const ALLOWED_TAGS =
-  new Set([
-    'B',
-    'STRONG',
-    'I',
-    'EM',
-    'U',
-    'BR',
-    'SPAN',
-    'DIV'
-  ]);
-
+const ALLOWED_TAGS = new Set([
+  'B',
+  'STRONG',
+  'I',
+  'EM',
+  'U',
+  'BR',
+  'SPAN',
+  'DIV'
+]);
 
 function sanitizeHtml(html) {
+  const doc = document.createElement('div');
 
-  const doc =
-    document.createElement('div');
-
-  doc.innerHTML =
-    html || '';
+  doc.innerHTML = html || '';
 
   (function clean(node) {
-
-    [
-      ...node.childNodes
-    ].forEach(child => {
+    [...node.childNodes].forEach(child => {
 
       if (child.nodeType === 1) {
 
-        if (
-          !ALLOWED_TAGS.has(
-            child.tagName
-          )
-        ) {
+        if (!ALLOWED_TAGS.has(child.tagName)) {
 
-          const parent =
-            child.parentNode;
+          const parent = child.parentNode;
 
           while (child.firstChild) {
-
             parent.insertBefore(
               child.firstChild,
               child
             );
           }
 
-          parent.removeChild(
-            child
-          );
+          parent.removeChild(child);
 
           return;
         }
 
-        [
-          ...child.attributes
-        ].forEach(attr => {
-
-          child.removeAttribute(
-            attr.name
-          );
+        [...child.attributes].forEach(attr => {
+          child.removeAttribute(attr.name);
         });
 
         clean(child);
 
-      } else if (
-        child.nodeType !== 3
-      ) {
+      } else if (child.nodeType !== 3) {
 
-        child.parentNode.removeChild(
-          child
-        );
+        child.parentNode.removeChild(child);
       }
-
     });
-
   })(doc);
 
   return doc.innerHTML;
@@ -211,7 +175,7 @@ function sanitizeHtml(html) {
 
 
 // =========================================================
-// Edge Function
+// Telegram API
 // =========================================================
 
 async function callTelegramApi(
@@ -219,20 +183,13 @@ async function callTelegramApi(
   extra = {}
 ) {
 
-  if (
-    !tg ||
-    !tg.initData
-  ) {
-
+  if (!tg || !tg.initData) {
     throw new Error(
       'Откройте приложение внутри Telegram'
     );
   }
 
-  const {
-    data,
-    error
-  } =
+  const { data, error } =
     await db.functions.invoke(
       'telegram-api',
       {
@@ -257,14 +214,8 @@ async function callTelegramApi(
     );
   }
 
-  if (
-    data &&
-    data.error
-  ) {
-
-    throw new Error(
-      data.error
-    );
+  if (data && data.error) {
+    throw new Error(data.error);
   }
 
   return data;
@@ -396,9 +347,7 @@ function openUsernameDialog(
       </div>
     `;
 
-    document.body.appendChild(
-      overlay
-    );
+    document.body.appendChild(overlay);
 
     const input =
       overlay.querySelector(
@@ -416,18 +365,14 @@ function openUsernameDialog(
       );
 
     setTimeout(() => {
-
       input.focus();
       input.select();
-
     }, 50);
 
     cancelBtn.addEventListener(
       'click',
       () => {
-
         overlay.remove();
-
         resolve(null);
       }
     );
@@ -441,31 +386,21 @@ function openUsernameDialog(
             .trim()
             .replace(/\s+/g, ' ');
 
-        if (
-          username.length < 2
-        ) {
-
+        if (username.length < 2) {
           showToast(
             'Минимум 2 символа'
           );
-
           return;
         }
 
-        if (
-          username.length > 30
-        ) {
-
+        if (username.length > 30) {
           showToast(
             'Максимум 30 символов'
           );
-
           return;
         }
 
-        saveBtn.disabled =
-          true;
-
+        saveBtn.disabled = true;
         saveBtn.textContent =
           'Сохраняем…';
 
@@ -493,9 +428,7 @@ function openUsernameDialog(
             'Не удалось сохранить ник'
           );
 
-          saveBtn.disabled =
-            false;
-
+          saveBtn.disabled = false;
           saveBtn.textContent =
             'Сохранить';
         }
@@ -506,22 +439,15 @@ function openUsernameDialog(
       'keydown',
       e => {
 
-        if (
-          e.key === 'Enter'
-        ) {
-
+        if (e.key === 'Enter') {
           saveBtn.click();
         }
 
-        if (
-          e.key === 'Escape'
-        ) {
-
+        if (e.key === 'Escape') {
           cancelBtn.click();
         }
       }
     );
-
   });
 }
 
@@ -532,11 +458,9 @@ function openUsernameDialog(
 
 async function openProfile() {
 
-  state.view =
-    'profile';
-
-  state.currentId =
-    null;
+  state.view = 'profile';
+  state.currentId = null;
+  state.filterOpen = false;
 
   setBackButton(
     true,
@@ -544,9 +468,7 @@ async function openProfile() {
   );
 
   const main =
-    document.getElementById(
-      'main'
-    );
+    document.getElementById('main');
 
   main.innerHTML =
     '<div class="loading">Загрузка профиля…</div>';
@@ -753,454 +675,378 @@ async function fetchArticle(id) {
 
 
 // =========================================================
-// Feed search/filter UI
+// Search / filter helpers
 // =========================================================
 
-function ensureFeedControls() {
+function normalizeSearchText(value) {
 
-  const mainNavigation =
-    document.querySelector(
-      '.main-navigation'
-    );
-
-  if (!mainNavigation) {
-    return;
-  }
-
-  /*
-   * ВАЖНО:
-   * Не создаём кнопку + Статья.
-   * Она уже существует в HTML:
-   * #newArticleBtn
-   */
-
-  let controls =
-    document.getElementById(
-      'feedControls'
-    );
-
-  if (!controls) {
-
-    controls =
-      document.createElement(
-        'div'
-      );
-
-    controls.id =
-      'feedControls';
-
-    controls.className =
-      'feed-controls';
-
-    /*
-     * Вставляем controls ПЕРЕД
-     * существующей кнопкой + Статья.
-     */
-
-    const newArticleBtn =
-      document.getElementById(
-        'newArticleBtn'
-      );
-
-    if (
-      newArticleBtn &&
-      newArticleBtn.parentNode ===
-        mainNavigation
-    ) {
-
-      mainNavigation.insertBefore(
-        controls,
-        newArticleBtn
-      );
-
-    } else {
-
-      mainNavigation.appendChild(
-        controls
-      );
-    }
-
-    controls.innerHTML = `
-
-      <button
-        class="feed-tool-btn"
-        id="searchToggleBtn"
-        type="button"
-        aria-label="Поиск"
-        title="Поиск"
-      >
-        <span class="feed-tool-icon">⌕</span>
-      </button>
-
-      <button
-        class="feed-tool-btn"
-        id="filterToggleBtn"
-        type="button"
-        aria-label="Фильтр по авторам"
-        title="Фильтр по авторам"
-      >
-        <span class="feed-tool-icon">☷</span>
-        <span
-          class="filter-count"
-          id="filterCount"
-        ></span>
-      </button>
-
-      <div
-        class="search-panel"
-        id="searchPanel"
-      >
-
-        <input
-          type="search"
-          id="articleSearchInput"
-          placeholder="Поиск по названию…"
-          autocomplete="off"
-          enterkeyhint="search"
-        >
-
-        <button
-          class="search-clear-btn"
-          id="searchClearBtn"
-          type="button"
-          aria-label="Очистить поиск"
-        >
-          ×
-        </button>
-
-      </div>
-
-      <div
-        class="author-filter-panel"
-        id="authorFilterPanel"
-      >
-
-        <div class="filter-panel-header">
-
-          <span>
-            Авторы
-          </span>
-
-          <button
-            type="button"
-            id="clearAuthorsBtn"
-          >
-            Сбросить
-          </button>
-
-        </div>
-
-        <div
-          class="author-filter-list"
-          id="authorFilterList"
-        ></div>
-
-      </div>
-    `;
-
-    bindFeedControls();
-  }
-
-  updateFeedControls();
+  return String(value || '')
+    .trim()
+    .toLocaleLowerCase('ru-RU');
 }
 
-
-function bindFeedControls() {
-
-  const searchToggleBtn =
-    document.getElementById(
-      'searchToggleBtn'
-    );
-
-  const filterToggleBtn =
-    document.getElementById(
-      'filterToggleBtn'
-    );
-
-  const searchInput =
-    document.getElementById(
-      'articleSearchInput'
-    );
-
-  const searchClearBtn =
-    document.getElementById(
-      'searchClearBtn'
-    );
-
-  const clearAuthorsBtn =
-    document.getElementById(
-      'clearAuthorsBtn'
-    );
-
-  if (
-    searchToggleBtn
-  ) {
-
-    searchToggleBtn.addEventListener(
-      'click',
-      () => {
-
-        const controls =
-          document.getElementById(
-            'feedControls'
-          );
-
-        if (!controls) {
-          return;
-        }
-
-        controls.classList.toggle(
-          'search-open'
-        );
-
-        if (
-          controls.classList.contains(
-            'search-open'
-          )
-        ) {
-
-          requestAnimationFrame(
-            () => {
-
-              searchInput.focus();
-            }
-          );
-        }
-      }
-    );
-  }
-
-
-  if (
-    filterToggleBtn
-  ) {
-
-    filterToggleBtn.addEventListener(
-      'click',
-      () => {
-
-        const controls =
-          document.getElementById(
-            'feedControls'
-          );
-
-        if (!controls) {
-          return;
-        }
-
-        controls.classList.toggle(
-          'filter-open'
-        );
-      }
-    );
-  }
-
-
-  if (
-    searchInput
-  ) {
-
-    searchInput.addEventListener(
-      'input',
-      e => {
-
-        state.searchQuery =
-          e.target.value;
-
-        updateFeedResults();
-        updateFeedControls();
-      }
-    );
-  }
-
-
-  if (
-    searchClearBtn
-  ) {
-
-    searchClearBtn.addEventListener(
-      'click',
-      () => {
-
-        state.searchQuery =
-          '';
-
-        if (searchInput) {
-          searchInput.value =
-            '';
-        }
-
-        updateFeedResults();
-        updateFeedControls();
-
-        if (searchInput) {
-          searchInput.focus();
-        }
-      }
-    );
-  }
-
-
-  if (
-    clearAuthorsBtn
-  ) {
-
-    clearAuthorsBtn.addEventListener(
-      'click',
-      () => {
-
-        state.selectedAuthors =
-          [];
-
-        updateAuthorFilterList();
-
-        updateFeedResults();
-
-        updateFeedControls();
-      }
-    );
-  }
-}
-
-
-// =========================================================
-// Authors
-// =========================================================
 
 function getAvailableAuthors() {
 
-  const map =
-    new Map();
+  const map = new Map();
 
-  state.articles.forEach(
-    article => {
+  state.articles.forEach(article => {
 
-      const name =
-        String(
-          article.author_name ||
-          ''
-        ).trim();
+    const name =
+      String(
+        article.author_name || ''
+      ).trim();
 
-      if (!name) {
-        return;
-      }
-
-      const key =
-        name.toLocaleLowerCase(
-          'ru-RU'
-        );
-
-      if (!map.has(key)) {
-
-        map.set(
-          key,
-          name
-        );
-      }
+    if (!name) {
+      return;
     }
-  );
 
-  return Array
-    .from(map.entries())
+    const key =
+      name.toLocaleLowerCase('ru-RU');
+
+    if (!map.has(key)) {
+      map.set(key, name);
+    }
+  });
+
+  return [...map.values()]
     .sort(
       (a, b) =>
-        a[1].localeCompare(
-          b[1],
-          'ru',
+        a.localeCompare(
+          b,
+          'ru-RU',
           {
-            sensitivity:
-              'base'
+            sensitivity: 'base'
           }
         )
-    )
-    .map(
-      entry => entry[1]
     );
 }
 
 
-// =========================================================
-// Author filter list
-// =========================================================
+function getFilteredArticles() {
 
-function updateAuthorFilterList() {
-
-  const list =
-    document.getElementById(
-      'authorFilterList'
+  const query =
+    normalizeSearchText(
+      state.searchQuery
     );
 
-  if (!list) {
+  return state.articles.filter(article => {
+
+    const title =
+      normalizeSearchText(
+        article.title
+      );
+
+    if (
+      query &&
+      !title.includes(query)
+    ) {
+      return false;
+    }
+
+    if (
+      state.selectedAuthors.size
+    ) {
+
+      const author =
+        String(
+          article.author_name || ''
+        ).trim();
+
+      const key =
+        author.toLocaleLowerCase(
+          'ru-RU'
+        );
+
+      if (
+        !state.selectedAuthors.has(
+          key
+        )
+      ) {
+        return false;
+      }
+    }
+
+    return true;
+  });
+}
+
+
+// =========================================================
+// Feed controls
+// =========================================================
+
+function renderFeedControls() {
+
+  const wrapper =
+    document.createElement('div');
+
+  wrapper.className =
+    'feed-controls';
+
+  const selectedCount =
+    state.selectedAuthors.size;
+
+  wrapper.innerHTML = `
+
+    <div class="feed-search-wrap">
+
+      <span class="feed-search-icon">
+        ⌕
+      </span>
+
+      <input
+        type="search"
+        class="feed-search"
+        id="feedSearch"
+        placeholder="Поиск по названию"
+        value="${escapeHtml(
+          state.searchQuery
+        )}"
+        autocomplete="off"
+      >
+
+      ${
+        state.searchQuery
+          ? `
+            <button
+              class="feed-search-clear"
+              id="clearSearchBtn"
+              type="button"
+              aria-label="Очистить поиск"
+            >
+              ×
+            </button>
+          `
+          : ''
+      }
+
+    </div>
+
+    <button
+      class="
+        feed-filter-btn
+        ${selectedCount ? 'has-selection' : ''}
+      "
+      id="feedFilterBtn"
+      type="button"
+    >
+
+      <span class="feed-filter-icon">
+        ☷
+      </span>
+
+      <span>
+        Фильтр
+      </span>
+
+      ${
+        selectedCount
+          ? `
+            <span class="filter-count">
+              ${selectedCount}
+            </span>
+          `
+          : ''
+      }
+
+    </button>
+
+  `;
+
+  const search =
+    wrapper.querySelector(
+      '#feedSearch'
+    );
+
+  const clear =
+    wrapper.querySelector(
+      '#clearSearchBtn'
+    );
+
+  const filter =
+    wrapper.querySelector(
+      '#feedFilterBtn'
+    );
+
+  search.addEventListener(
+    'input',
+    e => {
+
+      state.searchQuery =
+        e.target.value;
+
+      renderFeedResultsOnly();
+    }
+  );
+
+  if (clear) {
+
+    clear.addEventListener(
+      'click',
+      () => {
+
+        state.searchQuery = '';
+
+        renderFeed();
+      }
+    );
+  }
+
+  filter.addEventListener(
+    'click',
+    () => {
+      toggleFilterPanel(wrapper);
+    }
+  );
+
+  return wrapper;
+}
+
+
+// =========================================================
+// Filter panel
+// =========================================================
+
+function toggleFilterPanel(
+  controlsWrapper
+) {
+
+  const existing =
+    controlsWrapper.querySelector(
+      '.filter-panel'
+    );
+
+  if (existing) {
+
+    existing.remove();
+
+    state.filterOpen = false;
+
     return;
   }
+
+  state.filterOpen = true;
 
   const authors =
     getAvailableAuthors();
 
-  /*
-   * Если автор исчез из текущего набора,
-   * удаляем его из выбранных.
-   */
+  const panel =
+    document.createElement('div');
 
-  state.selectedAuthors =
-    state.selectedAuthors.filter(
-      selected =>
-        authors.some(
-          author =>
-            author === selected
-        )
-    );
+  panel.className =
+    'filter-panel chrome';
 
   if (!authors.length) {
 
-    list.innerHTML = `
-      <div class="author-filter-empty">
-        Пока нет статей с указанным автором
+    panel.innerHTML = `
+
+      <div class="filter-empty">
+        Пока нет статей с указанным автором.
       </div>
+
     `;
+
+    controlsWrapper.appendChild(panel);
 
     return;
   }
 
-  list.innerHTML =
-    authors
-      .map(author => {
+  const allSelected =
+    authors.every(author =>
+      state.selectedAuthors.has(
+        author.toLocaleLowerCase('ru-RU')
+      )
+    );
+
+  panel.innerHTML = `
+
+    <div class="filter-panel-header">
+
+      <div class="filter-panel-title">
+        Авторы
+      </div>
+
+      <button
+        class="filter-reset-btn"
+        id="filterResetBtn"
+        type="button"
+      >
+        Сбросить
+      </button>
+
+    </div>
+
+    <div class="filter-panel-actions">
+
+      <button
+        type="button"
+        class="filter-small-btn"
+        id="filterAllBtn"
+      >
+        ${
+          allSelected
+            ? 'Снять все'
+            : 'Выбрать всех'
+        }
+      </button>
+
+    </div>
+
+    <div class="filter-authors">
+
+      ${authors.map(author => {
+
+        const key =
+          author.toLocaleLowerCase(
+            'ru-RU'
+          );
 
         const checked =
-          state.selectedAuthors.includes(
-            author
+          state.selectedAuthors.has(
+            key
           );
 
         return `
 
-          <label
-            class="author-filter-option"
-          >
+          <label class="filter-author">
 
             <input
               type="checkbox"
               value="${escapeHtml(
-                author
+                key
               )}"
               ${checked ? 'checked' : ''}
             >
 
-            <span class="author-filter-check">
-              ${checked ? '✓' : ''}
+            <span class="filter-check">
+              ✓
             </span>
 
-            <span class="author-filter-name">
+            <span class="filter-author-name">
               ${escapeHtml(
                 author
               )}
             </span>
 
           </label>
-        `;
-      })
-      .join('');
 
-  list
+        `;
+
+      }).join('')}
+
+    </div>
+
+  `;
+
+  controlsWrapper.appendChild(panel);
+
+
+  // ---------------------------------------------------------
+  // Checkboxes
+  // ---------------------------------------------------------
+
+  panel
     .querySelectorAll(
       'input[type="checkbox"]'
     )
@@ -1210,209 +1056,130 @@ function updateAuthorFilterList() {
         'change',
         () => {
 
-          const author =
-            input.value;
+          if (input.checked) {
 
-          if (
-            input.checked
-          ) {
-
-            if (
-              !state.selectedAuthors.includes(
-                author
-              )
-            ) {
-
-              state.selectedAuthors.push(
-                author
-              );
-            }
+            state.selectedAuthors.add(
+              input.value
+            );
 
           } else {
 
-            state.selectedAuthors =
-              state.selectedAuthors.filter(
-                item =>
-                  item !== author
-              );
+            state.selectedAuthors.delete(
+              input.value
+            );
           }
 
-          updateAuthorFilterList();
-
-          updateFeedResults();
-
-          updateFeedControls();
+          renderFeed();
         }
       );
     });
+
+
+  // ---------------------------------------------------------
+  // Reset
+  // ---------------------------------------------------------
+
+  panel
+    .querySelector(
+      '#filterResetBtn'
+    )
+    .addEventListener(
+      'click',
+      () => {
+
+        state.selectedAuthors.clear();
+
+        state.filterOpen = false;
+
+        renderFeed();
+      }
+    );
+
+
+  // ---------------------------------------------------------
+  // Select all
+  // ---------------------------------------------------------
+
+  panel
+    .querySelector(
+      '#filterAllBtn'
+    )
+    .addEventListener(
+      'click',
+      () => {
+
+        const everySelected =
+          authors.every(author =>
+            state.selectedAuthors.has(
+              author.toLocaleLowerCase(
+                'ru-RU'
+              )
+            )
+          );
+
+        if (everySelected) {
+
+          state.selectedAuthors.clear();
+
+        } else {
+
+          authors.forEach(author => {
+
+            state.selectedAuthors.add(
+              author.toLocaleLowerCase(
+                'ru-RU'
+              )
+            );
+
+          });
+        }
+
+        renderFeed();
+      }
+    );
 }
 
 
 // =========================================================
-// Feed controls state
+// Feed results only
 // =========================================================
 
-function updateFeedControls() {
+function renderFeedResultsOnly() {
 
-  const controls =
+  const results =
+    getFilteredArticles();
+
+  const resultsHost =
     document.getElementById(
-      'feedControls'
+      'feedResults'
     );
 
-  if (!controls) {
+  if (!resultsHost) {
+    renderFeed();
     return;
   }
 
-  const count =
-    document.getElementById(
-      'filterCount'
-    );
-
-  if (count) {
-
-    if (
-      state.selectedAuthors.length
-    ) {
-
-      count.textContent =
-        state.selectedAuthors.length;
-
-      count.classList.add(
-        'visible'
-      );
-
-    } else {
-
-      count.textContent =
-        '';
-
-      count.classList.remove(
-        'visible'
-      );
-    }
-  }
-
-  const clear =
-    document.getElementById(
-      'searchClearBtn'
-    );
-
-  if (clear) {
-
-    clear.classList.toggle(
-      'visible',
-      Boolean(
-        state.searchQuery
-      )
-    );
-  }
-}
-
-
-// =========================================================
-// Filter articles
-// =========================================================
-
-function getFilteredArticles() {
-
-  const query =
-    state.searchQuery
-      .trim()
-      .toLocaleLowerCase(
-        'ru-RU'
-      );
-
-  const authors =
-    state.selectedAuthors;
-
-  return state.articles.filter(
-    article => {
-
-      const title =
-        String(
-          article.title || ''
-        ).toLocaleLowerCase(
-          'ru-RU'
-        );
-
-      const matchesSearch =
-        !query ||
-        title.includes(
-          query
-        );
-
-      const matchesAuthor =
-        !authors.length ||
-        authors.includes(
-          String(
-            article.author_name ||
-            ''
-          ).trim()
-        );
-
-      return (
-        matchesSearch &&
-        matchesAuthor
-      );
-    }
+  renderFeedResults(
+    resultsHost,
+    results
   );
 }
 
 
 // =========================================================
-// Render filtered results
+// Render feed results
 // =========================================================
 
-function updateFeedResults() {
-
-  if (
-    state.view !== 'feed'
-  ) {
-    return;
-  }
-
-  const main =
-    document.getElementById(
-      'main'
-    );
-
-  if (!main) {
-    return;
-  }
-
-  const articles =
-    getFilteredArticles();
-
-  if (!state.articles.length) {
-
-    main.innerHTML = `
-
-      <div class="empty-state">
-
-        <h2>
-          Здесь пока пусто
-        </h2>
-
-        <p>
-          Нажмите «+ Статья»,
-          чтобы опубликовать первую запись.
-        </p>
-
-      </div>
-    `;
-
-    return;
-  }
+function renderFeedResults(
+  host,
+  articles
+) {
 
   if (!articles.length) {
 
-    main.innerHTML = `
+    host.innerHTML = `
 
-      <div class="empty-state feed-no-results">
-
-        <div class="no-results-icon">
-          ⌕
-        </div>
+      <div class="empty-state feed-empty">
 
         <h2>
           Ничего не найдено
@@ -1420,33 +1187,17 @@ function updateFeedResults() {
 
         <p>
           Попробуйте изменить запрос
-          или снять фильтр по автору.
+          или параметры фильтра.
         </p>
 
-        <button
-          class="btn btn-secondary"
-          id="resetFeedFiltersBtn"
-          type="button"
-        >
-          Сбросить фильтры
-        </button>
-
       </div>
-    `;
 
-    document
-      .getElementById(
-        'resetFeedFiltersBtn'
-      )
-      ?.addEventListener(
-        'click',
-        resetFeedFilters
-      );
+    `;
 
     return;
   }
 
-  main.innerHTML =
+  host.innerHTML =
     articles
       .map(article => `
 
@@ -1504,13 +1255,12 @@ function updateFeedResults() {
           </p>
 
         </div>
+
       `)
       .join('');
 
-  main
-    .querySelectorAll(
-      '.feed-item'
-    )
+  host
+    .querySelectorAll('.feed-item')
     .forEach(el => {
 
       el.addEventListener(
@@ -1527,80 +1277,207 @@ function updateFeedResults() {
 
 
 // =========================================================
-// Reset filters
-// =========================================================
-
-function resetFeedFilters() {
-
-  state.searchQuery =
-    '';
-
-  state.selectedAuthors =
-    [];
-
-  const input =
-    document.getElementById(
-      'articleSearchInput'
-    );
-
-  if (input) {
-    input.value = '';
-  }
-
-  updateAuthorFilterList();
-
-  updateFeedControls();
-
-  updateFeedResults();
-}
-
-
-// =========================================================
-// Feed screen
+// Render feed
 // =========================================================
 
 async function renderFeed() {
 
-  state.view =
-    'feed';
-
-  state.currentId =
-    null;
+  state.view = 'feed';
+  state.currentId = null;
 
   setBackButton(false);
 
-  /*
-   * Сбрасываем фильтры при возврате
-   * на главную.
-   */
-
-  state.searchQuery =
-    '';
-
-  state.selectedAuthors =
-    [];
-
-  state.filterOpen =
-    false;
-
   const main =
-    document.getElementById(
-      'main'
-    );
+    document.getElementById('main');
 
   main.innerHTML =
     '<div class="loading">Загрузка статей…</div>';
 
-  ensureFeedControls();
-
   state.articles =
     await fetchFeed();
 
-  updateAuthorFilterList();
+  state.filterOpen = false;
 
-  updateFeedControls();
+  const controls =
+    renderFeedControls();
 
-  updateFeedResults();
+  const resultsHost =
+    document.createElement('div');
+
+  resultsHost.id =
+    'feedResults';
+
+  main.innerHTML = '';
+
+  main.appendChild(
+    controls
+  );
+
+  main.appendChild(
+    resultsHost
+  );
+
+  const results =
+    getFilteredArticles();
+
+  renderFeedResults(
+    resultsHost,
+    results
+  );
+}
+
+
+// =========================================================
+// Upload image
+// =========================================================
+
+async function uploadImage(
+  dataUrl,
+  filename
+) {
+
+  const res =
+    await fetch(dataUrl);
+
+  const blob =
+    await res.blob();
+
+  const safeFilename =
+    String(filename || 'image.jpg')
+      .replace(
+        /[^a-zA-Z0-9._-]/g,
+        '_'
+      );
+
+  const path =
+    `${Date.now()}-${Math.random()
+      .toString(36)
+      .slice(2, 8)}-${safeFilename}`;
+
+  const { error } =
+    await db
+      .storage
+      .from('images')
+      .upload(
+        path,
+        blob,
+        {
+          contentType:
+            blob.type ||
+            'image/jpeg',
+          upsert: false
+        }
+      );
+
+  if (error) {
+    throw error;
+  }
+
+  const { data } =
+    db
+      .storage
+      .from('images')
+      .getPublicUrl(path);
+
+  return data.publicUrl;
+}
+
+
+// =========================================================
+// Compress image
+// =========================================================
+
+function compressImageFile(
+  file,
+  maxW = 1200,
+  quality = 0.82
+) {
+
+  return new Promise(
+    (resolve, reject) => {
+
+      const reader =
+        new FileReader();
+
+      reader.onload = e => {
+
+        const img =
+          new Image();
+
+        img.onload = () => {
+
+          let w = img.width;
+          let h = img.height;
+
+          if (w > maxW) {
+
+            h =
+              Math.round(
+                h *
+                (maxW / w)
+              );
+
+            w = maxW;
+          }
+
+          const canvas =
+            document.createElement(
+              'canvas'
+            );
+
+          canvas.width = w;
+          canvas.height = h;
+
+          canvas
+            .getContext('2d')
+            .drawImage(
+              img,
+              0,
+              0,
+              w,
+              h
+            );
+
+          resolve(
+            canvas.toDataURL(
+              'image/jpeg',
+              quality
+            )
+          );
+        };
+
+        img.onerror = reject;
+
+        img.src =
+          e.target.result;
+      };
+
+      reader.onerror = reject;
+
+      reader.readAsDataURL(file);
+    }
+  );
+}
+
+
+// =========================================================
+// Is owner
+// =========================================================
+
+function isArticleOwner(article) {
+
+  if (
+    !tgUser ||
+    !article ||
+    !article.author_id
+  ) {
+    return false;
+  }
+
+  return (
+    Number(article.author_id) ===
+    Number(tgUser.id)
+  );
 }
 
 
@@ -1610,11 +1487,9 @@ async function renderFeed() {
 
 async function openReader(id) {
 
-  state.view =
-    'reader';
-
-  state.currentId =
-    id;
+  state.view = 'reader';
+  state.currentId = id;
+  state.filterOpen = false;
 
   setBackButton(
     true,
@@ -1622,9 +1497,7 @@ async function openReader(id) {
   );
 
   const main =
-    document.getElementById(
-      'main'
-    );
+    document.getElementById('main');
 
   main.innerHTML =
     '<div class="loading">Открываем статью…</div>';
@@ -1647,15 +1520,14 @@ async function openReader(id) {
         </p>
 
       </div>
+
     `;
 
     return;
   }
 
   const bodyHtml =
-    (
-      article.blocks || []
-    )
+    (article.blocks || [])
       .map(block => {
 
         if (
@@ -1681,6 +1553,7 @@ async function openReader(id) {
         ) {
 
           return `
+
             <figure>
 
               <img
@@ -1703,6 +1576,7 @@ async function openReader(id) {
               }
 
             </figure>
+
           `;
         }
 
@@ -1806,14 +1680,10 @@ async function openReader(id) {
   `;
 
 
-  // =======================================================
   // Share
-  // =======================================================
 
   document
-    .getElementById(
-      'shareBtn'
-    )
+    .getElementById('shareBtn')
     .addEventListener(
       'click',
       async () => {
@@ -1841,14 +1711,11 @@ async function openReader(id) {
             return;
           }
 
-          if (
-            navigator.share
-          ) {
+          if (navigator.share) {
 
             await navigator.share({
               title:
                 article.title,
-
               url:
                 shareUrl
             });
@@ -1858,9 +1725,7 @@ async function openReader(id) {
 
           await navigator
             .clipboard
-            .writeText(
-              shareUrl
-            );
+            .writeText(shareUrl);
 
           showToast(
             'Ссылка скопирована'
@@ -1874,16 +1739,12 @@ async function openReader(id) {
     );
 
 
-  // =======================================================
   // Edit / Delete
-  // =======================================================
 
   if (owner) {
 
     document
-      .getElementById(
-        'editBtn'
-      )
+      .getElementById('editBtn')
       .addEventListener(
         'click',
         () => {
@@ -1892,9 +1753,7 @@ async function openReader(id) {
       );
 
     document
-      .getElementById(
-        'deleteBtn'
-      )
+      .getElementById('deleteBtn')
       .addEventListener(
         'click',
         async () => {
@@ -1912,8 +1771,7 @@ async function openReader(id) {
               'deleteBtn'
             );
 
-          btn.disabled =
-            true;
+          btn.disabled = true;
 
           btn.textContent =
             'Удаляем…';
@@ -1938,8 +1796,7 @@ async function openReader(id) {
 
             console.error(err);
 
-            btn.disabled =
-              false;
+            btn.disabled = false;
 
             btn.textContent =
               'Удалить';
@@ -2006,14 +1863,9 @@ async function openEditor() {
       return;
     }
 
-    state.view =
-      'editor';
-
-    state.currentId =
-      null;
-
-    state.draft =
-      newDraft();
+    state.view = 'editor';
+    state.currentId = null;
+    state.draft = newDraft();
 
     setBackButton(
       true,
@@ -2061,11 +1913,8 @@ function editArticle(article) {
     return;
   }
 
-  state.view =
-    'editor';
-
-  state.currentId =
-    article.id;
+  state.view = 'editor';
+  state.currentId = article.id;
 
   state.draft = {
 
@@ -2086,9 +1935,7 @@ function editArticle(article) {
       )
   };
 
-  if (
-    !state.draft.blocks.length
-  ) {
+  if (!state.draft.blocks.length) {
 
     state.draft.blocks = [
       {
@@ -2120,199 +1967,13 @@ function editArticle(article) {
 
 
 // =========================================================
-// Upload image
-// =========================================================
-
-async function uploadImage(
-  dataUrl,
-  filename
-) {
-
-  const res =
-    await fetch(dataUrl);
-
-  const blob =
-    await res.blob();
-
-  const safeFilename =
-    String(
-      filename ||
-      'image.jpg'
-    )
-      .replace(
-        /[^a-zA-Z0-9._-]/g,
-        '_'
-      );
-
-  const path =
-    `${Date.now()}-${Math.random()
-      .toString(36)
-      .slice(2, 8)}-${safeFilename}`;
-
-  const {
-    error
-  } =
-    await db
-      .storage
-      .from('images')
-      .upload(
-        path,
-        blob,
-        {
-          contentType:
-            blob.type ||
-            'image/jpeg',
-
-          upsert: false
-        }
-      );
-
-  if (error) {
-    throw error;
-  }
-
-  const {
-    data
-  } =
-    db
-      .storage
-      .from('images')
-      .getPublicUrl(
-        path
-      );
-
-  return data.publicUrl;
-}
-
-
-// =========================================================
-// Compress image
-// =========================================================
-
-function compressImageFile(
-  file,
-  maxW = 1200,
-  quality = 0.82
-) {
-
-  return new Promise(
-    (resolve, reject) => {
-
-      const reader =
-        new FileReader();
-
-      reader.onload = e => {
-
-        const img =
-          new Image();
-
-        img.onload = () => {
-
-          let w =
-            img.width;
-
-          let h =
-            img.height;
-
-          if (
-            w > maxW
-          ) {
-
-            h =
-              Math.round(
-                h *
-                (maxW / w)
-              );
-
-            w =
-              maxW;
-          }
-
-          const canvas =
-            document.createElement(
-              'canvas'
-            );
-
-          canvas.width =
-            w;
-
-          canvas.height =
-            h;
-
-          canvas
-            .getContext('2d')
-            .drawImage(
-              img,
-              0,
-              0,
-              w,
-              h
-            );
-
-          resolve(
-            canvas.toDataURL(
-              'image/jpeg',
-              quality
-            )
-          );
-        };
-
-        img.onerror =
-          reject;
-
-        img.src =
-          e.target.result;
-      };
-
-      reader.onerror =
-        reject;
-
-      reader.readAsDataURL(
-        file
-      );
-    }
-  );
-}
-
-
-// =========================================================
-// Is owner
-// =========================================================
-
-function isArticleOwner(
-  article
-) {
-
-  if (
-    !tgUser ||
-    !article ||
-    !article.author_id
-  ) {
-
-    return false;
-  }
-
-  return (
-    Number(
-      article.author_id
-    ) ===
-    Number(
-      tgUser.id
-    )
-  );
-}
-
-
-// =========================================================
 // Editor
 // =========================================================
 
 function renderEditor() {
 
   const main =
-    document.getElementById(
-      'main'
-    );
+    document.getElementById('main');
 
   const d =
     state.draft;
@@ -2468,30 +2129,28 @@ function renderEditor() {
       class="hint chrome"
       id="editorHint"
     ></div>
+
   `;
 
 
+  // Title
+
   document
-    .getElementById(
-      'titleInput'
-    )
+    .getElementById('titleInput')
     .addEventListener(
       'input',
       e => {
-
         d.title =
           e.target.value;
       }
     );
 
 
+  // Toolbar
+
   document
-    .getElementById(
-      'toolbar'
-    )
-    .querySelectorAll(
-      'button'
-    )
+    .getElementById('toolbar')
+    .querySelectorAll('button')
     .forEach(btn => {
 
       btn.addEventListener(
@@ -2500,9 +2159,7 @@ function renderEditor() {
 
           e.preventDefault();
 
-          if (
-            !activeBlockEl
-          ) {
+          if (!activeBlockEl) {
             return;
           }
 
@@ -2513,14 +2170,14 @@ function renderEditor() {
           );
 
           activeBlockEl.dispatchEvent(
-            new Event(
-              'input'
-            )
+            new Event('input')
           );
         }
       );
     });
 
+
+  // Cover buttons
 
   const addCoverBtn =
     document.getElementById(
@@ -2532,11 +2189,8 @@ function renderEditor() {
     addCoverBtn.addEventListener(
       'click',
       () => {
-
         document
-          .getElementById(
-            'coverInput'
-          )
+          .getElementById('coverInput')
           .click();
       }
     );
@@ -2553,11 +2207,8 @@ function renderEditor() {
     changeCoverBtn.addEventListener(
       'click',
       () => {
-
         document
-          .getElementById(
-            'coverInput'
-          )
+          .getElementById('coverInput')
           .click();
       }
     );
@@ -2575,8 +2226,7 @@ function renderEditor() {
       'click',
       () => {
 
-        d.cover =
-          null;
+        d.cover = null;
 
         renderEditor();
 
@@ -2588,10 +2238,10 @@ function renderEditor() {
   }
 
 
+  // Cover file
+
   document
-    .getElementById(
-      'coverInput'
-    )
+    .getElementById('coverInput')
     .addEventListener(
       'change',
       async e => {
@@ -2634,26 +2284,15 @@ function renderEditor() {
           );
         }
 
-        const currentHint =
-          document.getElementById(
-            'editorHint'
-          );
-
-        if (currentHint) {
-          currentHint.textContent =
-            '';
-        }
-
-        e.target.value =
-          '';
+        e.target.value = '';
       }
     );
 
 
+  // Images
+
   document
-    .getElementById(
-      'fileInput'
-    )
+    .getElementById('fileInput')
     .addEventListener(
       'change',
       async e => {
@@ -2686,12 +2325,10 @@ function renderEditor() {
               ? state.pendingImageInsertIndex
               : d.blocks.length;
 
-          const newBlocks =
-            [];
+          const newBlocks = [];
 
           for (
-            const file
-            of files
+            const file of files
           ) {
 
             const dataUrl =
@@ -2737,21 +2374,17 @@ function renderEditor() {
             );
 
           if (currentHint) {
-            currentHint.textContent =
-              '';
+            currentHint.textContent = '';
           }
 
-          e.target.value =
-            '';
+          e.target.value = '';
         }
       }
     );
 
 
   document
-    .getElementById(
-      'publishBtn'
-    )
+    .getElementById('publishBtn')
     .addEventListener(
       'click',
       publishDraft
@@ -2792,7 +2425,7 @@ function insertBlockAfter(
 
 
 // =========================================================
-// Open image picker
+// Image picker
 // =========================================================
 
 function openImagePicker(
@@ -2811,9 +2444,7 @@ function openImagePicker(
     return;
   }
 
-  input.value =
-    '';
-
+  input.value = '';
   input.click();
 }
 
@@ -2827,9 +2458,7 @@ function createBlockAddControls(
 ) {
 
   const row =
-    document.createElement(
-      'div'
-    );
+    document.createElement('div');
 
   row.className =
     'block-add-row';
@@ -2851,6 +2480,7 @@ function createBlockAddControls(
     >
       ＋ Картинка
     </button>
+
   `;
 
   row
@@ -2912,17 +2542,13 @@ function renderBlocks(
   const oldActiveEl =
     activeBlockEl;
 
-  let activeIndex =
-    null;
-
-  let selectionOffset =
-    null;
+  let activeIndex = null;
+  let selectionOffset = null;
 
   if (
     oldActiveEl &&
     oldActiveEl.isConnected &&
-    oldActiveEl.dataset.i !==
-      undefined
+    oldActiveEl.dataset.i !== undefined
   ) {
 
     activeIndex =
@@ -2958,7 +2584,6 @@ function renderBlocks(
       }
 
     } catch (err) {
-
       console.warn(
         'Не удалось сохранить курсор:',
         err
@@ -2966,8 +2591,7 @@ function renderBlocks(
     }
   }
 
-  host.innerHTML =
-    '';
+  host.innerHTML = '';
 
   d.blocks.forEach(
     (b, i) => {
@@ -3008,9 +2632,11 @@ function renderBlocks(
               b.html || ''
             )}
           </div>
-        `;
 
-      } else if (
+        `;
+      }
+
+      else if (
         b.type === 'image'
       ) {
 
@@ -3043,16 +2669,15 @@ function renderBlocks(
               b.caption || ''
             )}"
           >
+
         `;
+      }
 
-      } else {
-
+      else {
         return;
       }
 
-      host.appendChild(
-        block
-      );
+      host.appendChild(block);
 
       host.appendChild(
         createBlockAddControls(
@@ -3063,18 +2688,16 @@ function renderBlocks(
   );
 
 
+  // Text listeners
+
   host
-    .querySelectorAll(
-      '.block-text'
-    )
+    .querySelectorAll('.block-text')
     .forEach(el => {
 
       el.addEventListener(
         'focus',
         () => {
-
-          activeBlockEl =
-            el;
+          activeBlockEl = el;
         }
       );
 
@@ -3089,10 +2712,8 @@ function renderBlocks(
 
           if (
             !d.blocks[index] ||
-            d.blocks[index].type !==
-              'text'
+            d.blocks[index].type !== 'text'
           ) {
-
             return;
           }
 
@@ -3106,27 +2727,23 @@ function renderBlocks(
       el.addEventListener(
         'keyup',
         () => {
-
-          activeBlockEl =
-            el;
+          activeBlockEl = el;
         }
       );
 
       el.addEventListener(
         'mouseup',
         () => {
-
-          activeBlockEl =
-            el;
+          activeBlockEl = el;
         }
       );
     });
 
 
+  // Captions
+
   host
-    .querySelectorAll(
-      '.block-caption'
-    )
+    .querySelectorAll('.block-caption')
     .forEach(el => {
 
       el.addEventListener(
@@ -3140,10 +2757,8 @@ function renderBlocks(
 
           if (
             !d.blocks[index] ||
-            d.blocks[index].type !==
-              'image'
+            d.blocks[index].type !== 'image'
           ) {
-
             return;
           }
 
@@ -3153,6 +2768,8 @@ function renderBlocks(
       );
     });
 
+
+  // Delete
 
   host
     .querySelectorAll(
@@ -3169,24 +2786,19 @@ function renderBlocks(
               el.dataset.i
             );
 
-          if (
-            !d.blocks[index]
-          ) {
+          if (!d.blocks[index]) {
             return;
           }
 
           const wasActive =
-            activeIndex ===
-            index;
+            activeIndex === index;
 
           d.blocks.splice(
             index,
             1
           );
 
-          if (
-            !d.blocks.length
-          ) {
+          if (!d.blocks.length) {
 
             d.blocks.push({
               type: 'text',
@@ -3194,8 +2806,7 @@ function renderBlocks(
             });
           }
 
-          let focusIndex =
-            null;
+          let focusIndex = null;
 
           if (wasActive) {
 
@@ -3210,8 +2821,7 @@ function renderBlocks(
           ) {
 
             if (
-              activeIndex >
-              index
+              activeIndex > index
             ) {
 
               focusIndex =
@@ -3232,19 +2842,16 @@ function renderBlocks(
     });
 
 
-  if (
-    options.focusIndex !==
-      undefined &&
-    options.focusIndex !==
-      null
-  ) {
+  // Restore focus
 
-    const focusIndex =
-      options.focusIndex;
+  if (
+    options.focusIndex !== undefined &&
+    options.focusIndex !== null
+  ) {
 
     const target =
       host.querySelector(
-        `.block-text[data-i="${focusIndex}"]`
+        `.block-text[data-i="${options.focusIndex}"]`
       );
 
     if (target) {
@@ -3271,8 +2878,7 @@ function renderBlocks(
   if (
     activeIndex !== null &&
     activeIndex >= 0 &&
-    activeIndex <
-      d.blocks.length
+    activeIndex < d.blocks.length
   ) {
 
     const target =
@@ -3282,8 +2888,7 @@ function renderBlocks(
 
     if (
       target &&
-      document.activeElement ===
-        document.body
+      document.activeElement === document.body
     ) {
 
       target.focus();
@@ -3345,11 +2950,8 @@ function setCaretOffset(
   const range =
     document.createRange();
 
-  let currentOffset =
-    0;
-
-  let found =
-    false;
+  let currentOffset = 0;
+  let found = false;
 
   function walk(node) {
 
@@ -3357,16 +2959,13 @@ function setCaretOffset(
       return;
     }
 
-    if (
-      node.nodeType === 3
-    ) {
+    if (node.nodeType === 3) {
 
       const length =
         node.nodeValue.length;
 
       if (
-        currentOffset +
-          length >=
+        currentOffset + length >=
         offset
       ) {
 
@@ -3375,20 +2974,18 @@ function setCaretOffset(
           Math.max(
             0,
             offset -
-              currentOffset
+            currentOffset
           )
         );
 
         range.collapse(true);
 
-        found =
-          true;
+        found = true;
 
         return;
       }
 
-      currentOffset +=
-        length;
+      currentOffset += length;
 
       return;
     }
@@ -3412,10 +3009,7 @@ function setCaretOffset(
   }
 
   selection.removeAllRanges();
-
-  selection.addRange(
-    range
-  );
+  selection.addRange(range);
 }
 
 
@@ -3440,10 +3034,7 @@ function placeCaretAtEnd(
   range.collapse(false);
 
   selection.removeAllRanges();
-
-  selection.addRange(
-    range
-  );
+  selection.addRange(range);
 }
 
 
@@ -3460,32 +3051,28 @@ async function publishDraft() {
     Boolean(
       d.title.trim()
     ) ||
-    Boolean(
-      d.cover
-    ) ||
-    d.blocks.some(
-      b => {
+    Boolean(d.cover) ||
+    d.blocks.some(b => {
 
-        if (
-          b.type === 'text'
-        ) {
-
-          return (
-            b.html
-              .replace(
-                /<[^>]+>/g,
-                ''
-              )
-              .trim()
-              .length > 0
-          );
-        }
+      if (
+        b.type === 'text'
+      ) {
 
         return (
-          b.type === 'image'
+          b.html
+            .replace(
+              /<[^>]+>/g,
+              ''
+            )
+            .trim()
+            .length > 0
         );
       }
-    );
+
+      return (
+        b.type === 'image'
+      );
+    });
 
   if (!hasContent) {
 
@@ -3506,8 +3093,7 @@ async function publishDraft() {
       'publishBtn'
     );
 
-  button.disabled =
-    true;
+  button.disabled = true;
 
   hint.textContent =
     d.id
@@ -3526,14 +3112,15 @@ async function publishDraft() {
       );
     }
 
+
+    // Cover
+
     let finalCover =
       d.cover || null;
 
     if (
       finalCover &&
-      finalCover.startsWith(
-        'data:'
-      )
+      finalCover.startsWith('data:')
     ) {
 
       finalCover =
@@ -3543,9 +3130,11 @@ async function publishDraft() {
         );
     }
 
+
+    // Images
+
     for (
-      const block
-      of d.blocks
+      const block of d.blocks
     ) {
 
       if (
@@ -3566,6 +3155,9 @@ async function publishDraft() {
       }
     }
 
+
+    // Excerpt
+
     const firstText =
       d.blocks.find(
         b =>
@@ -3582,11 +3174,9 @@ async function publishDraft() {
               ''
             )
             .trim()
-            .slice(
-              0,
-              140
-            )
+            .slice(0, 140)
         : '';
+
 
     const payload = {
 
@@ -3602,6 +3192,9 @@ async function publishDraft() {
       blocks:
         d.blocks
     };
+
+
+    // Create
 
     if (!d.id) {
 
@@ -3624,6 +3217,9 @@ async function publishDraft() {
 
       return;
     }
+
+
+    // Update
 
     const result =
       await callTelegramApi(
@@ -3656,13 +3252,11 @@ async function publishDraft() {
       'Ошибка публикации'
     );
 
-    hint.textContent =
-      '';
+    hint.textContent = '';
 
   } finally {
 
-    button.disabled =
-      false;
+    button.disabled = false;
   }
 }
 
@@ -3685,7 +3279,6 @@ function setBackButton(
     typeof tg.BackButton.show !==
       'function'
   ) {
-
     return;
   }
 
@@ -3741,6 +3334,11 @@ function setBackButton(
 // Navigation
 // =========================================================
 
+// ВАЖНО:
+// Эти кнопки уже существуют в index.html.
+// Мы только подключаем обработчики.
+// Никаких новых кнопок здесь не создаём.
+
 const homeLink =
   document.getElementById(
     'homeLink'
@@ -3754,15 +3352,6 @@ if (homeLink) {
   );
 }
 
-
-/*
- * ВАЖНО:
- * Никакой второй кнопки + Статья
- * здесь не создаём.
- *
- * Используется существующая:
- * #newArticleBtn
- */
 
 const newArticleBtn =
   document.getElementById(
@@ -3799,14 +3388,6 @@ if (profileBtn) {
 (async function init() {
 
   try {
-
-    /*
-     * Сразу создаём поиск/фильтр,
-     * чтобы они существовали и на
-     * мобильном, и на desktop.
-     */
-
-    ensureFeedControls();
 
     const startParam =
       tg &&
