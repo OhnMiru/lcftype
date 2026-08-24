@@ -1575,27 +1575,6 @@ function renderEditor() {
     ></div>
 
 
-    <div class="add-row">
-
-      <button
-        class="add-btn"
-        id="addTextBtn"
-        type="button"
-      >
-        ＋ Текст в конец
-      </button>
-
-      <button
-        class="add-btn"
-        id="addImageBtn"
-        type="button"
-      >
-        ＋ Картинка в конец
-      </button>
-
-    </div>
-
-
     <button
       class="btn btn-primary publish-btn"
       id="publishBtn"
