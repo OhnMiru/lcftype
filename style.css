@@ -113,7 +113,6 @@ img{
   color:var(--indigo);
 }
 
-
 .topbar-actions{
   margin-left:auto;
 
@@ -122,7 +121,6 @@ img{
 
   gap:8px;
 }
-
 
 .btn{
   font-family:'Inter', sans-serif;
@@ -422,11 +420,6 @@ img{
 
   width:100%;
 
-  /*
-   * Главное ограничение:
-   * обложка в редакторе НЕ открывается
-   * огромной на весь экран.
-   */
   max-height:260px;
 
   object-fit:cover;
@@ -569,7 +562,7 @@ img{
 .block{
   position:relative;
 
-  margin-bottom:14px;
+  margin-bottom:10px;
 }
 
 .block-text{
@@ -682,7 +675,76 @@ img{
 
 
 /* =========================================================
-   ADD BLOCKS
+   ADD BUTTONS UNDER EACH BLOCK
+   ========================================================= */
+
+.block-add-row{
+  display:flex;
+
+  align-items:center;
+
+  gap:6px;
+
+  margin-top:8px;
+
+  min-height:30px;
+}
+
+.block-add-btn{
+  font-family:'Inter', sans-serif;
+
+  font-size:11px;
+
+  font-weight:600;
+
+  line-height:1;
+
+  color:var(--ink-soft);
+
+  border:1px solid transparent;
+
+  border-radius:5px;
+
+  padding:6px 8px;
+
+  background:transparent;
+
+  transition:
+    color .15s ease,
+    background .15s ease,
+    border-color .15s ease;
+}
+
+.block-add-btn:hover{
+  color:var(--indigo);
+
+  background:var(--paper-dim);
+
+  border-color:var(--line);
+}
+
+.block-add-btn:active{
+  transform:scale(.97);
+
+  background:var(--ochre-soft);
+}
+
+
+/*
+ * Немного отделяем кнопки от текста,
+ * но не превращаем их в большие панели.
+ */
+.block-text + .block-add-row{
+  margin-top:3px;
+}
+
+.block-image-wrap .block-add-row{
+  margin-top:9px;
+}
+
+
+/* =========================================================
+   ADD BLOCKS — BOTTOM
    ========================================================= */
 
 .add-row{
@@ -1211,10 +1273,6 @@ img{
   }
 
 
-  /*
-   * На телефоне обложка в редакторе
-   * ещё компактнее.
-   */
   .cover-preview img{
     max-height:190px;
   }
@@ -1244,5 +1302,33 @@ img{
 
   .reader-body p{
     font-size:17px;
+  }
+
+
+  /*
+   * На мобильном кнопки под блоками
+   * остаются маленькими и не занимают
+   * лишнее место.
+   */
+  .block-add-row{
+    gap:4px;
+
+    margin-top:5px;
+  }
+
+  .block-add-btn{
+    font-size:10.5px;
+
+    padding:6px 7px;
+  }
+
+  .add-row{
+    gap:7px;
+  }
+
+  .add-btn{
+    font-size:12px;
+
+    padding:10px 7px;
   }
 }
