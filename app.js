@@ -31,7 +31,6 @@ if (tg) {
   tg.expand();
 }
 
-
 const tgUser =
   tg &&
   tg.initDataUnsafe &&
@@ -45,23 +44,12 @@ const tgUser =
 // =========================================================
 
 const state = {
-
   view: 'feed',
-
   articles: [],
-
   draft: null,
-
   currentId: null,
-
   profile: null
 };
-
-
-// Последний выбранный текстовый блок.
-// Используется для вставки новых блоков
-// в нужное место статьи.
-let activeBlockIndex = null;
 
 let activeBlockEl = null;
 
@@ -71,11 +59,7 @@ let activeBlockEl = null;
 // =========================================================
 
 function showToast(msg) {
-
-  const t =
-    document.getElementById(
-      'toast'
-    );
+  const t = document.getElementById('toast');
 
   if (!t) {
     console.log(msg);
@@ -84,18 +68,11 @@ function showToast(msg) {
 
   t.textContent = msg;
 
-  t.classList.add(
-    'show'
-  );
+  t.classList.add('show');
 
-  setTimeout(
-    () => {
-      t.classList.remove(
-        'show'
-      );
-    },
-    2500
-  );
+  setTimeout(() => {
+    t.classList.remove('show');
+  }, 2500);
 }
 
 
@@ -104,14 +81,11 @@ function showToast(msg) {
 // =========================================================
 
 function fmtDate(iso) {
-
   if (!iso) {
     return '';
   }
 
-  return new Date(
-    iso
-  ).toLocaleDateString(
+  return new Date(iso).toLocaleDateString(
     'ru-RU',
     {
       day: 'numeric',
@@ -127,14 +101,9 @@ function fmtDate(iso) {
 // =========================================================
 
 function escapeHtml(s) {
+  const d = document.createElement('div');
 
-  const d =
-    document.createElement(
-      'div'
-    );
-
-  d.textContent =
-    s || '';
+  d.textContent = s || '';
 
   return d.innerHTML;
 }
@@ -158,81 +127,48 @@ const ALLOWED_TAGS =
 
 
 function sanitizeHtml(html) {
-
   const doc =
-    document.createElement(
-      'div'
-    );
+    document.createElement('div');
 
-  doc.innerHTML =
-    html || '';
-
+  doc.innerHTML = html || '';
 
   (function clean(node) {
-
     [
       ...node.childNodes
-    ].forEach(
-      child => {
+    ].forEach(child => {
 
-        if (
-          child.nodeType === 1
-        ) {
+      if (child.nodeType === 1) {
 
-          if (
-            !ALLOWED_TAGS.has(
-              child.tagName
-            )
-          ) {
+        if (!ALLOWED_TAGS.has(child.tagName)) {
 
-            const parent =
-              child.parentNode;
+          const parent = child.parentNode;
 
-            while (
-              child.firstChild
-            ) {
-
-              parent.insertBefore(
-                child.firstChild,
-                child
-              );
-            }
-
-            parent.removeChild(
+          while (child.firstChild) {
+            parent.insertBefore(
+              child.firstChild,
               child
             );
-
-            return;
           }
 
+          parent.removeChild(child);
 
-          [
-            ...child.attributes
-          ].forEach(
-            attr => {
-              child.removeAttribute(
-                attr.name
-              );
-            }
-          );
-
-
-          clean(child);
-
-        } else if (
-          child.nodeType !== 3
-        ) {
-
-          child.parentNode
-            .removeChild(
-              child
-            );
+          return;
         }
+
+        [
+          ...child.attributes
+        ].forEach(attr => {
+          child.removeAttribute(attr.name);
+        });
+
+        clean(child);
+
+      } else if (child.nodeType !== 3) {
+
+        child.parentNode.removeChild(child);
       }
-    );
-
+    });
   })(doc);
-
 
   return doc.innerHTML;
 }
@@ -246,17 +182,11 @@ async function callTelegramApi(
   action,
   extra = {}
 ) {
-
-  if (
-    !tg ||
-    !tg.initData
-  ) {
-
+  if (!tg || !tg.initData) {
     throw new Error(
       'Откройте приложение внутри Telegram'
     );
   }
-
 
   const {
     data,
@@ -267,16 +197,13 @@ async function callTelegramApi(
       {
         body: {
           action,
-          initData:
-            tg.initData,
+          initData: tg.initData,
           ...extra
         }
       }
     );
 
-
   if (error) {
-
     console.error(
       'telegram-api:',
       error
@@ -288,17 +215,9 @@ async function callTelegramApi(
     );
   }
 
-
-  if (
-    data &&
-    data.error
-  ) {
-
-    throw new Error(
-      data.error
-    );
+  if (data && data.error) {
+    throw new Error(data.error);
   }
-
 
   return data;
 }
@@ -309,7 +228,6 @@ async function callTelegramApi(
 // =========================================================
 
 async function getProfile() {
-
   const result =
     await callTelegramApi(
       'get-profile'
@@ -322,10 +240,7 @@ async function getProfile() {
 }
 
 
-async function saveProfile(
-  username
-) {
-
+async function saveProfile(username) {
   const result =
     await callTelegramApi(
       'set-profile',
@@ -341,266 +256,198 @@ async function saveProfile(
 }
 
 
-// =========================================================
-// Ensure profile
-// =========================================================
-
 async function ensureProfile(
   askIfMissing = true
 ) {
-
   const existing =
     await getProfile();
-
 
   if (existing) {
     return existing;
   }
 
-
   if (!askIfMissing) {
     return null;
   }
 
-
-  return openUsernameDialog(
-    null
-  );
+  return openUsernameDialog(null);
 }
 
 
 // =========================================================
-// Username dialog
+// Диалог ника
 // =========================================================
 
 function openUsernameDialog(
   currentUsername
 ) {
+  return new Promise(resolve => {
 
-  return new Promise(
-    resolve => {
+    const overlay =
+      document.createElement('div');
 
-      const overlay =
-        document.createElement(
-          'div'
-        );
+    overlay.className =
+      'profile-overlay';
 
-      overlay.className =
-        'profile-overlay';
+    overlay.innerHTML = `
 
+      <div class="profile-dialog">
 
-      overlay.innerHTML = `
+        <div class="profile-dialog-title">
+          ${
+            currentUsername
+              ? 'Изменить ник'
+              : 'Создать профиль'
+          }
+        </div>
 
-        <div class="profile-dialog">
+        <div class="profile-dialog-text">
+          Придумайте имя автора.
+          Его будут видеть рядом
+          с вашими статьями.
+        </div>
 
-          <div class="profile-dialog-title">
-            ${
-              currentUsername
-                ? 'Изменить ник'
-                : 'Создать профиль'
-            }
-          </div>
+        <input
+          class="profile-input"
+          id="profileUsernameInput"
+          maxlength="30"
+          placeholder="Например: Анна"
+          value="${
+            escapeHtml(
+              currentUsername || ''
+            )
+          }"
+        >
 
+        <div class="profile-hint">
+          Можно использовать русские
+          и латинские буквы, цифры,
+          пробел и _
+        </div>
 
-          <div class="profile-dialog-text">
-            Придумайте имя автора.
-            Его будут видеть рядом
-            с вашими статьями.
-          </div>
+        <div class="profile-dialog-actions">
 
-
-          <input
-            class="profile-input"
-            id="profileUsernameInput"
-            maxlength="30"
-            placeholder="Например: Анна"
-            value="${
-              escapeHtml(
-                currentUsername || ''
-              )
-            }"
+          <button
+            class="btn btn-secondary"
+            id="profileCancelBtn"
           >
+            Отмена
+          </button>
 
-
-          <div class="profile-hint">
-            Можно использовать русские
-            и латинские буквы, цифры,
-            пробел и _
-          </div>
-
-
-          <div class="profile-dialog-actions">
-
-            <button
-              class="btn btn-secondary"
-              id="profileCancelBtn"
-            >
-              Отмена
-            </button>
-
-            <button
-              class="btn btn-primary"
-              id="profileSaveBtn"
-            >
-              Сохранить
-            </button>
-
-          </div>
+          <button
+            class="btn btn-primary"
+            id="profileSaveBtn"
+          >
+            Сохранить
+          </button>
 
         </div>
-      `;
 
+      </div>
+    `;
 
-      document.body.appendChild(
-        overlay
+    document.body.appendChild(overlay);
+
+    const input =
+      overlay.querySelector(
+        '#profileUsernameInput'
       );
 
-
-      const input =
-        overlay.querySelector(
-          '#profileUsernameInput'
-        );
-
-      const saveBtn =
-        overlay.querySelector(
-          '#profileSaveBtn'
-        );
-
-      const cancelBtn =
-        overlay.querySelector(
-          '#profileCancelBtn'
-        );
-
-
-      setTimeout(
-        () => {
-          input.focus();
-          input.select();
-        },
-        50
+    const saveBtn =
+      overlay.querySelector(
+        '#profileSaveBtn'
       );
 
+    const cancelBtn =
+      overlay.querySelector(
+        '#profileCancelBtn'
+      );
 
-      cancelBtn.addEventListener(
-        'click',
-        () => {
+    setTimeout(() => {
+      input.focus();
+      input.select();
+    }, 50);
+
+    cancelBtn.addEventListener(
+      'click',
+      () => {
+        overlay.remove();
+        resolve(null);
+      }
+    );
+
+    saveBtn.addEventListener(
+      'click',
+      async () => {
+
+        const username =
+          input.value
+            .trim()
+            .replace(/\s+/g, ' ');
+
+        if (username.length < 2) {
+          showToast(
+            'Минимум 2 символа'
+          );
+          return;
+        }
+
+        if (username.length > 30) {
+          showToast(
+            'Максимум 30 символов'
+          );
+          return;
+        }
+
+        saveBtn.disabled = true;
+        saveBtn.textContent =
+          'Сохраняем…';
+
+        try {
+
+          const profile =
+            await saveProfile(
+              username
+            );
 
           overlay.remove();
 
-          resolve(null);
-        }
-      );
+          showToast(
+            'Ник сохранён'
+          );
 
+          resolve(profile);
 
-      saveBtn.addEventListener(
-        'click',
-        async () => {
+        } catch (err) {
 
-          const username =
-            input.value
-              .trim()
-              .replace(
-                /\s+/g,
-                ' '
-              );
+          console.error(err);
 
+          showToast(
+            err.message ||
+            'Не удалось сохранить ник'
+          );
 
-          if (
-            username.length < 2
-          ) {
-
-            showToast(
-              'Минимум 2 символа'
-            );
-
-            return;
-          }
-
-
-          if (
-            username.length > 30
-          ) {
-
-            showToast(
-              'Максимум 30 символов'
-            );
-
-            return;
-          }
-
-
-          saveBtn.disabled =
-            true;
-
+          saveBtn.disabled = false;
           saveBtn.textContent =
-            'Сохраняем…';
-
-
-          try {
-
-            const profile =
-              await saveProfile(
-                username
-              );
-
-
-            overlay.remove();
-
-            showToast(
-              'Ник сохранён'
-            );
-
-
-            resolve(
-              profile
-            );
-
-
-          } catch (err) {
-
-            console.error(
-              err
-            );
-
-
-            showToast(
-              err.message ||
-              'Не удалось сохранить ник'
-            );
-
-
-            saveBtn.disabled =
-              false;
-
-            saveBtn.textContent =
-              'Сохранить';
-          }
+            'Сохранить';
         }
-      );
+      }
+    );
 
+    input.addEventListener(
+      'keydown',
+      e => {
 
-      input.addEventListener(
-        'keydown',
-        e => {
-
-          if (
-            e.key === 'Enter'
-          ) {
-
-            saveBtn.click();
-          }
-
-
-          if (
-            e.key === 'Escape'
-          ) {
-
-            cancelBtn.click();
-          }
+        if (e.key === 'Enter') {
+          saveBtn.click();
         }
-      );
-    }
-  );
+
+        if (e.key === 'Escape') {
+          cancelBtn.click();
+        }
+      }
+    );
+  });
 }
 
 
@@ -609,37 +456,24 @@ function openUsernameDialog(
 // =========================================================
 
 async function openProfile() {
-
-  state.view =
-    'profile';
-
-  state.currentId =
-    null;
-
+  state.view = 'profile';
+  state.currentId = null;
 
   setBackButton(
     true,
     renderFeed
   );
 
-
   const main =
-    document.getElementById(
-      'main'
-    );
-
+    document.getElementById('main');
 
   main.innerHTML =
     '<div class="loading">Загрузка профиля…</div>';
 
-
   try {
 
     const profile =
-      await ensureProfile(
-        false
-      );
-
+      await ensureProfile(false);
 
     if (!profile) {
 
@@ -673,7 +507,6 @@ async function openProfile() {
         </div>
       `;
 
-
       document
         .getElementById(
           'createProfileBtn'
@@ -683,9 +516,7 @@ async function openProfile() {
           async () => {
 
             const created =
-              await ensureProfile(
-                true
-              );
+              await ensureProfile(true);
 
             if (created) {
               openProfile();
@@ -693,17 +524,14 @@ async function openProfile() {
           }
         );
 
-
       return;
     }
-
 
     const firstChar =
       profile.username
         .trim()
         .charAt(0)
         .toUpperCase();
-
 
     main.innerHTML = `
 
@@ -717,11 +545,9 @@ async function openProfile() {
             )}
           </div>
 
-
           <div class="profile-label">
             Ваш ник
           </div>
-
 
           <div class="profile-username">
             ${escapeHtml(
@@ -729,14 +555,12 @@ async function openProfile() {
             )}
           </div>
 
-
           <button
             class="btn btn-primary profile-edit-btn"
             id="changeUsernameBtn"
           >
             Изменить ник
           </button>
-
 
           <div class="profile-description">
             Этот ник отображается
@@ -747,7 +571,6 @@ async function openProfile() {
 
       </div>
     `;
-
 
     document
       .getElementById(
@@ -762,19 +585,15 @@ async function openProfile() {
               profile.username
             );
 
-
           if (changed) {
             openProfile();
           }
         }
       );
 
-
   } catch (err) {
 
-    console.error(
-      err
-    );
+    console.error(err);
 
     main.innerHTML = `
 
@@ -787,8 +606,7 @@ async function openProfile() {
         <p>
           ${
             escapeHtml(
-              err.message ||
-              ''
+              err.message || ''
             )
           }
         </p>
@@ -804,7 +622,6 @@ async function openProfile() {
 // =========================================================
 
 async function fetchFeed() {
-
   const {
     data,
     error
@@ -821,29 +638,16 @@ async function fetchFeed() {
         }
       );
 
-
   if (error) {
-
-    console.error(
-      error
-    );
-
+    console.error(error);
     return [];
   }
-
 
   return data || [];
 }
 
 
-// =========================================================
-// Fetch article
-// =========================================================
-
-async function fetchArticle(
-  id
-) {
-
+async function fetchArticle(id) {
   const {
     data,
     error
@@ -851,22 +655,13 @@ async function fetchArticle(
     await db
       .from('articles')
       .select('*')
-      .eq(
-        'id',
-        id
-      )
+      .eq('id', id)
       .single();
 
-
   if (error) {
-
-    console.error(
-      error
-    );
-
+    console.error(error);
     return null;
   }
-
 
   return data;
 }
@@ -880,32 +675,23 @@ async function uploadImage(
   dataUrl,
   filename
 ) {
-
   const res =
-    await fetch(
-      dataUrl
-    );
+    await fetch(dataUrl);
 
   const blob =
     await res.blob();
 
-
-  const safeName =
-    String(
-      filename ||
-      'image.jpg'
-    )
+  const safeFilename =
+    String(filename || 'image.jpg')
       .replace(
         /[^a-zA-Z0-9._-]/g,
-        '-'
+        '_'
       );
-
 
   const path =
     `${Date.now()}-${Math.random()
       .toString(36)
-      .slice(2, 8)}-${safeName}`;
-
+      .slice(2, 8)}-${safeFilename}`;
 
   const {
     error
@@ -920,16 +706,13 @@ async function uploadImage(
           contentType:
             blob.type ||
             'image/jpeg',
-          upsert:
-            false
+          upsert: false
         }
       );
-
 
   if (error) {
     throw error;
   }
-
 
   const {
     data
@@ -937,10 +720,7 @@ async function uploadImage(
     db
       .storage
       .from('images')
-      .getPublicUrl(
-        path
-      );
-
+      .getPublicUrl(path);
 
   return data.publicUrl;
 }
@@ -952,105 +732,71 @@ async function uploadImage(
 
 function compressImageFile(
   file,
-  maxW = 1600,
-  quality = 0.84
+  maxW = 1200,
+  quality = 0.82
 ) {
-
   return new Promise(
     (resolve, reject) => {
 
       const reader =
         new FileReader();
 
+      reader.onload = e => {
 
-      reader.onload =
-        e => {
+        const img =
+          new Image();
 
-          const img =
-            new Image();
+        img.onload = () => {
 
+          let w = img.width;
+          let h = img.height;
 
-          img.onload =
-            () => {
+          if (w > maxW) {
 
-              let w =
-                img.width;
-
-              let h =
-                img.height;
-
-
-              if (
-                w > maxW
-              ) {
-
-                h =
-                  Math.round(
-                    h *
-                    (
-                      maxW /
-                      w
-                    )
-                  );
-
-                w =
-                  maxW;
-              }
-
-
-              const canvas =
-                document.createElement(
-                  'canvas'
-                );
-
-
-              canvas.width =
-                w;
-
-              canvas.height =
-                h;
-
-
-              const ctx =
-                canvas.getContext(
-                  '2d'
-                );
-
-
-              ctx.drawImage(
-                img,
-                0,
-                0,
-                w,
-                h
+            h =
+              Math.round(
+                h *
+                (maxW / w)
               );
 
+            w = maxW;
+          }
 
-              resolve(
-                canvas.toDataURL(
-                  'image/jpeg',
-                  quality
-                )
-              );
-            };
+          const canvas =
+            document.createElement(
+              'canvas'
+            );
 
+          canvas.width = w;
+          canvas.height = h;
 
-          img.onerror =
-            reject;
+          canvas
+            .getContext('2d')
+            .drawImage(
+              img,
+              0,
+              0,
+              w,
+              h
+            );
 
-
-          img.src =
-            e.target.result;
+          resolve(
+            canvas.toDataURL(
+              'image/jpeg',
+              quality
+            )
+          );
         };
 
+        img.onerror = reject;
 
-      reader.onerror =
-        reject;
+        img.src =
+          e.target.result;
+      };
 
+      reader.onerror = reject;
 
-      reader.readAsDataURL(
-        file
-      );
+      reader.readAsDataURL(file);
     }
   );
 }
@@ -1060,27 +806,18 @@ function compressImageFile(
 // Is owner
 // =========================================================
 
-function isArticleOwner(
-  article
-) {
-
+function isArticleOwner(article) {
   if (
     !tgUser ||
     !article ||
     !article.author_id
   ) {
-
     return false;
   }
 
-
   return (
-    Number(
-      article.author_id
-    ) ===
-    Number(
-      tgUser.id
-    )
+    Number(article.author_id) ===
+    Number(tgUser.id)
   );
 }
 
@@ -1090,36 +827,21 @@ function isArticleOwner(
 // =========================================================
 
 async function renderFeed() {
+  state.view = 'feed';
+  state.currentId = null;
 
-  state.view =
-    'feed';
-
-  state.currentId =
-    null;
-
-
-  setBackButton(
-    false
-  );
-
+  setBackButton(false);
 
   const main =
-    document.getElementById(
-      'main'
-    );
-
+    document.getElementById('main');
 
   main.innerHTML =
     '<div class="loading">Загрузка статей…</div>';
 
-
   state.articles =
     await fetchFeed();
 
-
-  if (
-    !state.articles.length
-  ) {
+  if (!state.articles.length) {
 
     main.innerHTML = `
 
@@ -1140,93 +862,80 @@ async function renderFeed() {
     return;
   }
 
-
   main.innerHTML =
     state.articles
-      .map(
-        article => `
+      .map(article => `
 
-          <div
-            class="feed-item"
-            data-id="${escapeHtml(
-              article.id
-            )}"
-          >
+        <div
+          class="feed-item"
+          data-id="${escapeHtml(
+            article.id
+          )}"
+        >
+
+          ${
+            article.cover
+              ? `
+                <img
+                  class="thumb"
+                  src="${escapeHtml(
+                    article.cover
+                  )}"
+                  alt=""
+                >
+              `
+              : ''
+          }
+
+          <div class="feed-meta">
+
+            ${fmtDate(
+              article.created_at
+            )}
 
             ${
-              article.cover
+              article.author_name
                 ? `
-                  <img
-                    class="thumb"
-                    src="${escapeHtml(
-                      article.cover
-                    )}"
-                    alt=""
-                  >
+                  ·
+                  ${escapeHtml(
+                    article.author_name
+                  )}
                 `
                 : ''
             }
 
-
-            <div class="feed-meta">
-
-              ${fmtDate(
-                article.created_at
-              )}
-
-              ${
-                article.author_name
-                  ? `
-                    ·
-                    ${escapeHtml(
-                      article.author_name
-                    )}
-                  `
-                  : ''
-              }
-
-            </div>
-
-
-            <h3>
-              ${escapeHtml(
-                article.title ||
-                'Без названия'
-              )}
-            </h3>
-
-
-            <p>
-              ${escapeHtml(
-                article.excerpt ||
-                ''
-              )}
-            </p>
-
           </div>
-        `
-      )
+
+          <h3>
+            ${escapeHtml(
+              article.title ||
+              'Без названия'
+            )}
+          </h3>
+
+          <p>
+            ${escapeHtml(
+              article.excerpt || ''
+            )}
+          </p>
+
+        </div>
+      `)
       .join('');
 
-
   main
-    .querySelectorAll(
-      '.feed-item'
-    )
-    .forEach(
-      el => {
+    .querySelectorAll('.feed-item')
+    .forEach(el => {
 
-        el.addEventListener(
-          'click',
-          () => {
-
-            openReader(
-              el.dataset.id
-            );
-          }
-        );
-      }
-    );
+      el.addEventListener(
+        'click',
+        () => {
+          openReader(
+            el.dataset.id
+          );
+        }
+      );
+    });
 }
 
 
@@ -1234,38 +943,23 @@ async function renderFeed() {
 // Reader
 // =========================================================
 
-async function openReader(
-  id
-) {
-
-  state.view =
-    'reader';
-
-  state.currentId =
-    id;
-
+async function openReader(id) {
+  state.view = 'reader';
+  state.currentId = id;
 
   setBackButton(
     true,
     renderFeed
   );
 
-
   const main =
-    document.getElementById(
-      'main'
-    );
-
+    document.getElementById('main');
 
   main.innerHTML =
     '<div class="loading">Открываем статью…</div>';
 
-
   const article =
-    await fetchArticle(
-      id
-    );
-
+    await fetchArticle(id);
 
   if (!article) {
 
@@ -1287,83 +981,76 @@ async function openReader(
     return;
   }
 
+  /*
+   * ВАЖНО:
+   * article.cover здесь НЕ выводится.
+   * Обложка существует только для главной
+   * страницы и редактора автора.
+   */
 
   const bodyHtml =
     (
-      article.blocks ||
-      []
+      article.blocks || []
     )
-      .map(
-        block => {
+      .map(block => {
 
-          if (
-            block.type ===
-            'text'
-          ) {
+        if (
+          block.type === 'text'
+        ) {
 
-            return (
-              block.html &&
-              block.html.trim()
-            )
-              ? `
-                <p>
-                  ${sanitizeHtml(
-                    block.html
-                  )}
-                </p>
-              `
-              : '';
-          }
-
-
-          if (
-            block.type ===
-            'image'
-          ) {
-
-            return `
-              <figure>
-
-                <img
-                  src="${escapeHtml(
-                    block.src ||
-                    ''
-                  )}"
-                  alt=""
-                >
-
-                ${
-                  block.caption
-                    ? `
-                      <figcaption>
-                        ${escapeHtml(
-                          block.caption
-                        )}
-                      </figcaption>
-                    `
-                    : ''
-                }
-
-              </figure>
-            `;
-          }
-
-
-          return '';
+          return (
+            block.html &&
+            block.html.trim()
+          )
+            ? `
+              <p>
+                ${sanitizeHtml(
+                  block.html
+                )}
+              </p>
+            `
+            : '';
         }
-      )
-      .join('');
 
+        if (
+          block.type === 'image'
+        ) {
+
+          return `
+            <figure>
+
+              <img
+                src="${escapeHtml(
+                  block.src || ''
+                )}"
+                alt=""
+              >
+
+              ${
+                block.caption
+                  ? `
+                    <figcaption>
+                      ${escapeHtml(
+                        block.caption
+                      )}
+                    </figcaption>
+                  `
+                  : ''
+              }
+
+            </figure>
+          `;
+        }
+
+        return '';
+      })
+      .join('');
 
   const shareUrl =
     `https://t.me/${BOT_USERNAME}/${MINIAPP_SHORT_NAME}?startapp=${article.id}`;
 
-
   const owner =
-    isArticleOwner(
-      article
-    );
-
+    isArticleOwner(article);
 
   main.innerHTML = `
 
@@ -1390,7 +1077,6 @@ async function openReader(
 
         </span>
 
-
         ${
           owner
             ? `
@@ -1402,7 +1088,6 @@ async function openReader(
                 >
                   Редактировать
                 </button>
-
 
                 <button
                   class="btn btn-danger"
@@ -1418,14 +1103,12 @@ async function openReader(
 
       </div>
 
-
       <h1>
         ${escapeHtml(
           article.title ||
           'Без названия'
         )}
       </h1>
-
 
       <div class="reader-body">
 
@@ -1440,13 +1123,11 @@ async function openReader(
 
       </div>
 
-
       <div class="share-box chrome">
 
         <div class="share-box-label">
           Поделиться
         </div>
-
 
         <button
           class="btn btn-primary"
@@ -1461,14 +1142,12 @@ async function openReader(
   `;
 
 
-  // -----------------------------------------------
+  // =======================================================
   // Share
-  // -----------------------------------------------
+  // =======================================================
 
   document
-    .getElementById(
-      'shareBtn'
-    )
+    .getElementById('shareBtn')
     .addEventListener(
       'click',
       async () => {
@@ -1496,76 +1175,50 @@ async function openReader(
             return;
           }
 
+          if (navigator.share) {
 
-          if (
-            navigator.share
-          ) {
-
-            await navigator.share(
-              {
-                title:
-                  article.title,
-                url:
-                  shareUrl
-              }
-            );
+            await navigator.share({
+              title:
+                article.title,
+              url:
+                shareUrl
+            });
 
             return;
           }
 
-
           await navigator
             .clipboard
-            .writeText(
-              shareUrl
-            );
-
+            .writeText(shareUrl);
 
           showToast(
             'Ссылка скопирована'
           );
 
-        } catch (
-          err
-        ) {
-
-          console.error(
-            err
-          );
+        } catch (err) {
+          console.error(err);
         }
       }
     );
 
 
-  // -----------------------------------------------
-  // Edit
-  // -----------------------------------------------
+  // =======================================================
+  // Edit / Delete
+  // =======================================================
 
   if (owner) {
 
     document
-      .getElementById(
-        'editBtn'
-      )
+      .getElementById('editBtn')
       .addEventListener(
         'click',
         () => {
-
-          editArticle(
-            article
-          );
+          editArticle(article);
         }
       );
 
-
-    // ---------------------------------------------
-    // Delete
-    // ---------------------------------------------
-
     document
-      .getElementById(
-        'deleteBtn'
-      )
+      .getElementById('deleteBtn')
       .addEventListener(
         'click',
         async () => {
@@ -1578,19 +1231,14 @@ async function openReader(
             return;
           }
 
-
           const btn =
             document.getElementById(
               'deleteBtn'
             );
 
-
-          btn.disabled =
-            true;
-
+          btn.disabled = true;
           btn.textContent =
             'Удаляем…';
-
 
           try {
 
@@ -1602,29 +1250,19 @@ async function openReader(
               }
             );
 
-
             showToast(
               'Статья удалена'
             );
 
-
             await renderFeed();
 
-          } catch (
-            err
-          ) {
+          } catch (err) {
 
-            console.error(
-              err
-            );
+            console.error(err);
 
-
-            btn.disabled =
-              false;
-
+            btn.disabled = false;
             btn.textContent =
               'Удалить';
-
 
             showToast(
               err.message ||
@@ -1638,17 +1276,20 @@ async function openReader(
 
 
 // =========================================================
-// Draft
+// New draft
 // =========================================================
 
 function newDraft() {
-
   return {
 
     id: null,
 
     title: '',
 
+    /*
+     * Обложка теперь отдельное свойство.
+     * Она НЕ является блоком статьи.
+     */
     cover: null,
 
     blocks: [
@@ -1681,28 +1322,16 @@ async function openEditor() {
       return;
     }
 
+    const profile =
+      await ensureProfile(true);
 
-    await ensureProfile(
-      true
-    );
+    if (!profile) {
+      return;
+    }
 
-
-    state.view =
-      'editor';
-
-    state.currentId =
-      null;
-
-    state.draft =
-      newDraft();
-
-
-    activeBlockIndex =
-      0;
-
-    activeBlockEl =
-      null;
-
+    state.view = 'editor';
+    state.currentId = null;
+    state.draft = newDraft();
 
     setBackButton(
       true,
@@ -1713,24 +1342,16 @@ async function openEditor() {
             'Отменить редактирование? Черновик будет потерян.'
           )
         ) {
-
           renderFeed();
         }
       }
     );
 
-
     renderEditor();
 
+  } catch (err) {
 
-  } catch (
-    err
-  ) {
-
-    console.error(
-      err
-    );
-
+    console.error(err);
 
     showToast(
       err.message ||
@@ -1744,14 +1365,10 @@ async function openEditor() {
 // Edit article
 // =========================================================
 
-function editArticle(
-  article
-) {
+function editArticle(article) {
 
   if (
-    !isArticleOwner(
-      article
-    )
+    !isArticleOwner(article)
   ) {
 
     showToast(
@@ -1761,13 +1378,8 @@ function editArticle(
     return;
   }
 
-
-  state.view =
-    'editor';
-
-  state.currentId =
-    article.id;
-
+  state.view = 'editor';
+  state.currentId = article.id;
 
   state.draft = {
 
@@ -1775,44 +1387,32 @@ function editArticle(
       article.id,
 
     title:
-      article.title ||
-      '',
+      article.title || '',
 
+    /*
+     * Загружаем существующую обложку
+     * отдельно от блоков.
+     */
     cover:
-      article.cover ||
-      null,
+      article.cover || null,
 
     blocks:
       JSON.parse(
         JSON.stringify(
-          article.blocks ||
-          []
+          article.blocks || []
         )
       )
   };
 
-
-  if (
-    !state.draft.blocks.length
-  ) {
+  if (!state.draft.blocks.length) {
 
     state.draft.blocks = [
       {
-        type:
-          'text',
-        html:
-          ''
+        type: 'text',
+        html: ''
       }
     ];
   }
-
-
-  activeBlockIndex =
-    0;
-
-  activeBlockEl =
-    null;
-
 
   setBackButton(
     true,
@@ -1831,86 +1431,7 @@ function editArticle(
     }
   );
 
-
   renderEditor();
-}
-
-
-// =========================================================
-// Insert blocks
-// =========================================================
-
-function getInsertIndex() {
-
-  const d =
-    state.draft;
-
-
-  if (
-    !d ||
-    !Array.isArray(
-      d.blocks
-    )
-  ) {
-
-    return 0;
-  }
-
-
-  if (
-    activeBlockIndex === null ||
-    activeBlockIndex < 0 ||
-    activeBlockIndex >=
-      d.blocks.length
-  ) {
-
-    return d.blocks.length;
-  }
-
-
-  return (
-    activeBlockIndex + 1
-  );
-}
-
-
-function insertBlocks(
-  blocks
-) {
-
-  const d =
-    state.draft;
-
-
-  if (
-    !d ||
-    !Array.isArray(
-      d.blocks
-    )
-  ) {
-
-    return;
-  }
-
-
-  const index =
-    getInsertIndex();
-
-
-  d.blocks.splice(
-    index,
-    0,
-    ...blocks
-  );
-
-
-  activeBlockIndex =
-    index +
-    blocks.length -
-    1;
-
-
-  renderBlocks();
 }
 
 
@@ -1921,62 +1442,12 @@ function insertBlocks(
 function renderEditor() {
 
   const main =
-    document.getElementById(
-      'main'
-    );
-
+    document.getElementById('main');
 
   const d =
     state.draft;
 
-
   main.innerHTML = `
-
-    <div class="editor-cover-section">
-
-      <div class="editor-section-label">
-        Обложка статьи
-      </div>
-
-
-      <div
-        class="editor-cover"
-        id="editorCover"
-      >
-
-        ${
-          d.cover
-            ? `
-              <img
-                src="${escapeHtml(
-                  d.cover
-                )}"
-                alt=""
-              >
-
-              <button
-                class="editor-cover-remove"
-                id="removeCoverBtn"
-                type="button"
-              >
-                ✕
-              </button>
-            `
-            : `
-              <button
-                class="editor-cover-empty"
-                id="chooseCoverBtn"
-                type="button"
-              >
-                ＋ Добавить обложку
-              </button>
-            `
-        }
-
-      </div>
-
-    </div>
-
 
     <input
       class="editor-title-input"
@@ -1988,6 +1459,91 @@ function renderEditor() {
     >
 
 
+    <!-- ===============================================
+         COVER
+         =============================================== -->
+
+    <div
+      class="cover-editor"
+      id="coverEditor"
+    >
+
+      <div class="cover-editor-header">
+
+        <div>
+
+          <div class="cover-editor-title">
+            Обложка
+          </div>
+
+          <div class="cover-editor-subtitle">
+            Она будет видна на главной,
+            но не внутри статьи.
+          </div>
+
+        </div>
+
+        ${
+          d.cover
+            ? `
+              <button
+                class="cover-remove-btn"
+                id="removeCoverBtn"
+                type="button"
+              >
+                Убрать
+              </button>
+            `
+            : ''
+        }
+
+      </div>
+
+
+      ${
+        d.cover
+          ? `
+            <div class="cover-preview">
+
+              <img
+                src="${escapeHtml(
+                  d.cover
+                )}"
+                alt=""
+              >
+
+              <button
+                class="cover-change-btn"
+                id="changeCoverBtn"
+                type="button"
+              >
+                Заменить обложку
+              </button>
+
+            </div>
+          `
+          : `
+            <button
+              class="cover-empty"
+              id="addCoverBtn"
+              type="button"
+            >
+
+              <span class="cover-empty-icon">
+                ＋
+              </span>
+
+              <span>
+                Добавить обложку
+              </span>
+
+            </button>
+          `
+      }
+
+    </div>
+
+
     <div
       class="toolbar chrome"
       id="toolbar"
@@ -1996,25 +1552,20 @@ function renderEditor() {
       <button
         data-cmd="bold"
         title="Жирный"
-        type="button"
       >
         B
       </button>
 
-
       <button
         data-cmd="italic"
         title="Курсив"
-        type="button"
       >
         i
       </button>
 
-
       <button
         data-cmd="underline"
         title="Подчёркнутый"
-        type="button"
       >
         U
       </button>
@@ -2027,9 +1578,7 @@ function renderEditor() {
     ></div>
 
 
-    <div
-      class="add-row"
-    >
+    <div class="add-row">
 
       <button
         class="add-btn"
@@ -2038,7 +1587,6 @@ function renderEditor() {
       >
         ＋ Текст
       </button>
-
 
       <button
         class="add-btn"
@@ -2052,7 +1600,7 @@ function renderEditor() {
 
 
     <button
-      class="btn btn-primary"
+      class="btn btn-primary publish-btn"
       id="publishBtn"
       type="button"
     >
@@ -2064,19 +1612,21 @@ function renderEditor() {
     </button>
 
 
-    <input
-      type="file"
-      accept="image/*"
-      id="fileInput"
-      multiple
-      style="display:none"
-    >
-
-
+    <!-- Обложка -->
     <input
       type="file"
       accept="image/*"
       id="coverInput"
+      style="display:none"
+    >
+
+
+    <!-- Обычные картинки -->
+    <input
+      type="file"
+      accept="image/*"
+      multiple
+      id="fileInput"
       style="display:none"
     >
 
@@ -2089,32 +1639,94 @@ function renderEditor() {
   `;
 
 
-  // -----------------------------------------------
+  // =======================================================
   // Title
-  // -----------------------------------------------
+  // =======================================================
 
   document
-    .getElementById(
-      'titleInput'
-    )
+    .getElementById('titleInput')
     .addEventListener(
       'input',
       e => {
-
         d.title =
           e.target.value;
       }
     );
 
 
-  // -----------------------------------------------
-  // Cover
-  // -----------------------------------------------
+  // =======================================================
+  // Toolbar
+  // =======================================================
 
-  const chooseCoverBtn =
+  document
+    .getElementById('toolbar')
+    .querySelectorAll('button')
+    .forEach(btn => {
+
+      btn.addEventListener(
+        'mousedown',
+        e => {
+
+          e.preventDefault();
+
+          if (!activeBlockEl) {
+            return;
+          }
+
+          document.execCommand(
+            btn.dataset.cmd,
+            false,
+            null
+          );
+
+          activeBlockEl.dispatchEvent(
+            new Event('input')
+          );
+        }
+      );
+    });
+
+
+  // =======================================================
+  // Cover buttons
+  // =======================================================
+
+  const addCoverBtn =
     document.getElementById(
-      'chooseCoverBtn'
+      'addCoverBtn'
     );
+
+  if (addCoverBtn) {
+
+    addCoverBtn.addEventListener(
+      'click',
+      () => {
+
+        document
+          .getElementById('coverInput')
+          .click();
+      }
+    );
+  }
+
+
+  const changeCoverBtn =
+    document.getElementById(
+      'changeCoverBtn'
+    );
+
+  if (changeCoverBtn) {
+
+    changeCoverBtn.addEventListener(
+      'click',
+      () => {
+
+        document
+          .getElementById('coverInput')
+          .click();
+      }
+    );
+  }
 
 
   const removeCoverBtn =
@@ -2122,223 +1734,121 @@ function renderEditor() {
       'removeCoverBtn'
     );
 
-
-  const coverInput =
-    document.getElementById(
-      'coverInput'
-    );
-
-
-  if (chooseCoverBtn) {
-
-    chooseCoverBtn.addEventListener(
-      'click',
-      () => {
-
-        coverInput.click();
-      }
-    );
-  }
-
-
   if (removeCoverBtn) {
 
     removeCoverBtn.addEventListener(
       'click',
       () => {
 
-        d.cover =
-          null;
+        d.cover = null;
 
         renderEditor();
+
+        showToast(
+          'Обложка убрана'
+        );
       }
     );
   }
 
 
-  coverInput.addEventListener(
-    'change',
-    async e => {
+  // =======================================================
+  // Cover file
+  // =======================================================
 
-      const file =
-        e.target.files[0];
+  document
+    .getElementById('coverInput')
+    .addEventListener(
+      'change',
+      async e => {
 
+        const file =
+          e.target.files[0];
 
-      if (!file) {
-        return;
-      }
+        if (!file) {
+          return;
+        }
 
-
-      const hint =
-        document.getElementById(
-          'editorHint'
-        );
-
-
-      hint.textContent =
-        'Обрабатываем обложку…';
-
-
-      try {
-
-        const dataUrl =
-          await compressImageFile(
-            file,
-            1600,
-            0.86
-          );
-
-
-        d.cover = {
-
-          src:
-            dataUrl,
-
-          _pendingFile:
-            true
-        };
-
-
-        renderEditor();
-
-
-      } catch (
-        err
-      ) {
-
-        console.error(
-          err
-        );
-
-
-        showToast(
-          'Не удалось обработать обложку'
-        );
-
-
-      } finally {
-
-        const currentHint =
+        const hint =
           document.getElementById(
             'editorHint'
           );
 
+        hint.textContent =
+          'Обрабатываем обложку…';
 
-        if (currentHint) {
-          currentHint.textContent =
-            '';
+        try {
+
+          const dataUrl =
+            await compressImageFile(
+              file,
+              1600,
+              0.84
+            );
+
+          d.cover = dataUrl;
+
+          renderEditor();
+
+        } catch (err) {
+
+          console.error(err);
+
+          showToast(
+            'Не удалось обработать обложку'
+          );
         }
-      }
 
+        hint.textContent = '';
 
-      e.target.value =
-        '';
-    }
-  );
-
-
-  // -----------------------------------------------
-  // Formatting
-  // -----------------------------------------------
-
-  document
-    .getElementById(
-      'toolbar'
-    )
-    .querySelectorAll(
-      'button'
-    )
-    .forEach(
-      btn => {
-
-        btn.addEventListener(
-          'mousedown',
-          e => {
-
-            e.preventDefault();
-
-
-            if (
-              !activeBlockEl
-            ) {
-              return;
-            }
-
-
-            document.execCommand(
-              btn.dataset.cmd,
-              false,
-              null
-            );
-
-
-            activeBlockEl.dispatchEvent(
-              new Event(
-                'input'
-              )
-            );
-          }
-        );
+        e.target.value = '';
       }
     );
 
 
-  // -----------------------------------------------
+  // =======================================================
   // Add text
-  // -----------------------------------------------
+  // =======================================================
 
   document
-    .getElementById(
-      'addTextBtn'
-    )
+    .getElementById('addTextBtn')
     .addEventListener(
       'click',
       () => {
 
-        insertBlocks(
-          [
-            {
-              type:
-                'text',
+        d.blocks.push({
+          type: 'text',
+          html: ''
+        });
 
-              html:
-                ''
-            }
-          ]
-        );
+        renderBlocks();
       }
     );
 
 
-  // -----------------------------------------------
+  // =======================================================
   // Add image
-  // -----------------------------------------------
+  // =======================================================
 
   document
-    .getElementById(
-      'addImageBtn'
-    )
+    .getElementById('addImageBtn')
     .addEventListener(
       'click',
       () => {
 
         document
-          .getElementById(
-            'fileInput'
-          )
+          .getElementById('fileInput')
           .click();
       }
     );
 
 
-  // -----------------------------------------------
-  // Image files
-  // -----------------------------------------------
+  // =======================================================
+  // Image files — MULTIPLE
+  // =======================================================
 
   document
-    .getElementById(
-      'fileInput'
-    )
+    .getElementById('fileInput')
     .addEventListener(
       'change',
       async e => {
@@ -2348,108 +1858,76 @@ function renderEditor() {
             e.target.files || []
           );
 
-
         if (!files.length) {
           return;
         }
-
 
         const hint =
           document.getElementById(
             'editorHint'
           );
 
+        const addImageBtn =
+          document.getElementById(
+            'addImageBtn'
+          );
 
-        const total =
-          files.length;
+        addImageBtn.disabled = true;
 
+        hint.textContent =
+          files.length === 1
+            ? 'Обрабатываем изображение…'
+            : `Обрабатываем ${files.length} изображений…`;
 
         try {
 
-          const newBlocks =
-            [];
-
-
           for (
-            let i = 0;
-            i < files.length;
-            i++
+            const file
+            of files
           ) {
-
-            const file =
-              files[i];
-
-
-            hint.textContent =
-              total === 1
-                ? 'Обрабатываем изображение…'
-                : `Обрабатываем изображение ${i + 1} из ${total}…`;
-
 
             const dataUrl =
               await compressImageFile(
                 file
               );
 
+            d.blocks.push({
+              type: 'image',
 
-            newBlocks.push(
-              {
-                type:
-                  'image',
+              src: dataUrl,
 
-                src:
-                  dataUrl,
+              caption: '',
 
-                caption:
-                  '',
-
-                _pendingFile:
-                  true
-              }
-            );
+              _pendingFile: true
+            });
           }
 
+          renderBlocks();
 
-          insertBlocks(
-            newBlocks
-          );
+        } catch (err) {
 
-
-        } catch (
-          err
-        ) {
-
-          console.error(
-            err
-          );
-
+          console.error(err);
 
           showToast(
             'Не удалось обработать одно из изображений'
           );
-
-
-        } finally {
-
-          hint.textContent =
-            '';
-
-
-          e.target.value =
-            '';
         }
+
+        hint.textContent = '';
+
+        addImageBtn.disabled = false;
+
+        e.target.value = '';
       }
     );
 
 
-  // -----------------------------------------------
+  // =======================================================
   // Publish
-  // -----------------------------------------------
+  // =======================================================
 
   document
-    .getElementById(
-      'publishBtn'
-    )
+    .getElementById('publishBtn')
     .addEventListener(
       'click',
       publishDraft
@@ -2471,386 +1949,182 @@ function renderBlocks() {
       'blocksHost'
     );
 
-
   if (!host) {
     return;
   }
 
-
   const d =
     state.draft;
 
-
   host.innerHTML =
     d.blocks
-      .map(
-        (b, i) => {
+      .map((b, i) => {
 
-          if (
-            b.type ===
-            'text'
-          ) {
+        if (
+          b.type === 'text'
+        ) {
 
-            return `
+          return `
+
+            <div
+              class="block"
+              data-i="${i}"
+            >
+
+              <button
+                class="block-remove"
+                data-act="del"
+                data-i="${i}"
+                type="button"
+              >
+                ✕
+              </button>
 
               <div
-                class="block"
+                class="block-text"
+                contenteditable="true"
                 data-i="${i}"
+                data-placeholder="Текст абзаца…"
               >
-
-                <button
-                  class="block-remove"
-                  data-act="del"
-                  data-i="${i}"
-                  type="button"
-                >
-                  ✕
-                </button>
-
-
-                <div
-                  class="block-text"
-                  contenteditable="true"
-                  data-i="${i}"
-                  data-placeholder="Текст абзаца…"
-                >
-                  ${sanitizeHtml(
-                    b.html ||
-                    ''
-                  )}
-                </div>
-
+                ${sanitizeHtml(
+                  b.html || ''
+                )}
               </div>
-            `;
-          }
 
-
-          if (
-            b.type ===
-            'image'
-          ) {
-
-            return `
-
-              <div
-                class="block block-image-wrap"
-                data-i="${i}"
-              >
-
-                <button
-                  class="block-remove"
-                  data-act="del"
-                  data-i="${i}"
-                  type="button"
-                >
-                  ✕
-                </button>
-
-
-                <img
-                  src="${escapeHtml(
-                    b.src ||
-                    ''
-                  )}"
-                  alt=""
-                >
-
-
-                <input
-                  class="block-caption"
-                  data-i="${i}"
-                  placeholder="Подпись (необязательно)"
-                  value="${escapeHtml(
-                    b.caption ||
-                    ''
-                  )}"
-                >
-
-              </div>
-            `;
-          }
-
-
-          return '';
+            </div>
+          `;
         }
-      )
+
+
+        if (
+          b.type === 'image'
+        ) {
+
+          return `
+
+            <div
+              class="block block-image-wrap"
+              data-i="${i}"
+            >
+
+              <button
+                class="block-remove"
+                data-act="del"
+                data-i="${i}"
+                type="button"
+              >
+                ✕
+              </button>
+
+              <img
+                src="${escapeHtml(
+                  b.src || ''
+                )}"
+                alt=""
+              >
+
+              <input
+                class="block-caption"
+                data-i="${i}"
+                placeholder="Подпись (необязательно)"
+                value="${escapeHtml(
+                  b.caption || ''
+                )}"
+              >
+
+            </div>
+          `;
+        }
+
+        return '';
+      })
       .join('');
 
 
-  // -----------------------------------------------
+  // =======================================================
   // Text
-  // -----------------------------------------------
+  // =======================================================
 
   host
-    .querySelectorAll(
-      '.block-text'
-    )
-    .forEach(
-      el => {
+    .querySelectorAll('.block-text')
+    .forEach(el => {
 
-        el.addEventListener(
-          'focus',
-          () => {
+      el.addEventListener(
+        'focus',
+        () => {
+          activeBlockEl = el;
+        }
+      );
 
-            activeBlockEl =
-              el;
+      el.addEventListener(
+        'input',
+        e => {
 
-            activeBlockIndex =
-              Number(
-                el.dataset.i
-              );
-          }
-        );
-
-
-        el.addEventListener(
-          'click',
-          () => {
-
-            activeBlockEl =
-              el;
-
-            activeBlockIndex =
-              Number(
-                el.dataset.i
-              );
-          }
-        );
+          d.blocks[
+            +e.target.dataset.i
+          ].html =
+            sanitizeHtml(
+              e.target.innerHTML
+            );
+        }
+      );
+    });
 
 
-        el.addEventListener(
-          'input',
-          e => {
-
-            const index =
-              Number(
-                e.target.dataset.i
-              );
-
-
-            d.blocks[index].html =
-              sanitizeHtml(
-                e.target.innerHTML
-              );
-
-
-            activeBlockIndex =
-              index;
-          }
-        );
-      }
-    );
-
-
-  // -----------------------------------------------
-  // Images
-  // -----------------------------------------------
-
-  host
-    .querySelectorAll(
-      '.block-image-wrap'
-    )
-    .forEach(
-      el => {
-
-        el.addEventListener(
-          'click',
-          e => {
-
-            if (
-              e.target.closest(
-                '.block-remove'
-              ) ||
-              e.target.closest(
-                '.block-caption'
-              )
-            ) {
-
-              return;
-            }
-
-
-            activeBlockIndex =
-              Number(
-                el.dataset.i
-              );
-
-            activeBlockEl =
-              null;
-          }
-        );
-      }
-    );
-
-
-  // -----------------------------------------------
+  // =======================================================
   // Captions
-  // -----------------------------------------------
+  // =======================================================
 
   host
-    .querySelectorAll(
-      '.block-caption'
-    )
-    .forEach(
-      el => {
+    .querySelectorAll('.block-caption')
+    .forEach(el => {
 
-        el.addEventListener(
-          'focus',
-          () => {
+      el.addEventListener(
+        'input',
+        e => {
 
-            activeBlockIndex =
-              Number(
-                el.dataset.i
-              );
-
-            activeBlockEl =
-              null;
-          }
-        );
+          d.blocks[
+            +e.target.dataset.i
+          ].caption =
+            e.target.value;
+        }
+      );
+    });
 
 
-        el.addEventListener(
-          'input',
-          e => {
-
-            d.blocks[
-              +e.target.dataset.i
-            ].caption =
-              e.target.value;
-          }
-        );
-      }
-    );
-
-
-  // -----------------------------------------------
+  // =======================================================
   // Delete block
-  // -----------------------------------------------
+  // =======================================================
 
   host
     .querySelectorAll(
       '[data-act="del"]'
     )
-    .forEach(
-      el => {
+    .forEach(el => {
 
-        el.addEventListener(
-          'click',
-          e => {
+      el.addEventListener(
+        'click',
+        () => {
 
-            e.preventDefault();
+          d.blocks.splice(
+            +el.dataset.i,
+            1
+          );
 
-            e.stopPropagation();
+          if (
+            !d.blocks.length
+          ) {
 
-
-            const index =
-              Number(
-                el.dataset.i
-              );
-
-
-            d.blocks.splice(
-              index,
-              1
-            );
-
-
-            if (
-              !d.blocks.length
-            ) {
-
-              d.blocks.push(
-                {
-                  type:
-                    'text',
-
-                  html:
-                    ''
-                }
-              );
-            }
-
-
-            if (
-              activeBlockIndex !==
-              null
-            ) {
-
-              if (
-                activeBlockIndex >=
-                d.blocks.length
-              ) {
-
-                activeBlockIndex =
-                  d.blocks.length -
-                  1;
-
-              } else if (
-                activeBlockIndex >
-                index
-              ) {
-
-                activeBlockIndex--;
-              }
-            }
-
-
-            activeBlockEl =
-              null;
-
-
-            renderBlocks();
+            d.blocks.push({
+              type: 'text',
+              html: ''
+            });
           }
-        );
-      }
-    );
-}
 
-
-// =========================================================
-// Prepare cover
-// =========================================================
-
-async function prepareCover(
-  cover
-) {
-
-  if (!cover) {
-    return null;
-  }
-
-
-  if (
-    typeof cover ===
-    'string'
-  ) {
-
-    return cover;
-  }
-
-
-  if (
-    cover._pendingFile &&
-    cover.src
-  ) {
-
-    const url =
-      await uploadImage(
-        cover.src,
-        'cover.jpg'
+          renderBlocks();
+        }
       );
-
-
-    return url;
-  }
-
-
-  if (cover.src) {
-    return cover.src;
-  }
-
-
-  return null;
+    });
 }
 
 
@@ -2863,45 +2137,32 @@ async function publishDraft() {
   const d =
     state.draft;
 
-
-  if (!d) {
-    return;
-  }
-
-
   const hasContent =
     Boolean(
       d.title.trim()
     ) ||
-    Boolean(
-      d.cover
-    ) ||
-    d.blocks.some(
-      b => {
+    Boolean(d.cover) ||
+    d.blocks.some(b => {
 
-        if (
-          b.type ===
-          'text'
-        ) {
-
-          return (
-            b.html
-              .replace(
-                /<[^>]+>/g,
-                ''
-              )
-              .trim()
-              .length > 0
-          );
-        }
-
+      if (
+        b.type === 'text'
+      ) {
 
         return (
-          b.type ===
-          'image'
+          b.html
+            .replace(
+              /<[^>]+>/g,
+              ''
+            )
+            .trim()
+            .length > 0
         );
       }
-    );
+
+      return (
+        b.type === 'image'
+      );
+    });
 
 
   if (!hasContent) {
@@ -2919,16 +2180,12 @@ async function publishDraft() {
       'editorHint'
     );
 
-
   const button =
     document.getElementById(
       'publishBtn'
     );
 
-
-  button.disabled =
-    true;
-
+  button.disabled = true;
 
   hint.textContent =
     d.id
@@ -2938,53 +2195,50 @@ async function publishDraft() {
 
   try {
 
-    // ---------------------------------------------
+    // =====================================================
     // Profile
-    // ---------------------------------------------
+    // =====================================================
 
     const profile =
-      await ensureProfile(
-        true
-      );
-
+      await ensureProfile(true);
 
     if (!profile) {
-
       throw new Error(
         'Необходимо указать ник'
       );
     }
 
 
-    // ---------------------------------------------
+    // =====================================================
     // Upload cover
-    // ---------------------------------------------
+    // =====================================================
+
+    let finalCover =
+      d.cover || null;
+
+    /*
+     * Если обложка ещё является data URL,
+     * загружаем её в Supabase Storage.
+     *
+     * Если это уже URL — оставляем как есть.
+     */
 
     if (
-      d.cover &&
-      typeof d.cover ===
-        'object' &&
-      d.cover._pendingFile
+      finalCover &&
+      finalCover.startsWith('data:')
     ) {
 
-      hint.textContent =
-        'Загружаем обложку…';
-
-
-      d.cover =
-        await prepareCover(
-          d.cover
+      finalCover =
+        await uploadImage(
+          finalCover,
+          'cover.jpg'
         );
     }
 
 
-    // ---------------------------------------------
-    // Upload pending article images
-    // ---------------------------------------------
-
-    let imageNumber =
-      0;
-
+    // =====================================================
+    // Upload article images
+    // =====================================================
 
     for (
       const block
@@ -2992,47 +2246,34 @@ async function publishDraft() {
     ) {
 
       if (
-        block.type ===
-        'image' &&
+        block.type === 'image' &&
         block._pendingFile
       ) {
-
-        imageNumber++;
-
-
-        hint.textContent =
-          `Загружаем изображение ${imageNumber}…`;
-
 
         const url =
           await uploadImage(
             block.src,
-            `image-${imageNumber}.jpg`
+            'image.jpg'
           );
 
-
-        block.src =
-          url;
-
+        block.src = url;
 
         delete block._pendingFile;
       }
     }
 
 
-    // ---------------------------------------------
+    // =====================================================
     // Excerpt
-    // ---------------------------------------------
+    // =====================================================
 
     const firstText =
       d.blocks.find(
         b =>
-          b.type ===
-          'text' &&
+          b.type === 'text' &&
           b.html &&
           b.html.trim()
       );
-
 
     const excerpt =
       firstText
@@ -3042,16 +2283,13 @@ async function publishDraft() {
               ''
             )
             .trim()
-            .slice(
-              0,
-              140
-            )
+            .slice(0, 140)
         : '';
 
 
-    // ---------------------------------------------
+    // =====================================================
     // Payload
-    // ---------------------------------------------
+    // =====================================================
 
     const payload = {
 
@@ -3061,20 +2299,23 @@ async function publishDraft() {
 
       excerpt,
 
-      // Обложка теперь отдельная.
-      // Она НЕ является частью blocks.
+      /*
+       * Обложка хранится отдельно.
+       */
       cover:
-        d.cover ||
-        null,
+        finalCover,
 
+      /*
+       * В blocks НИКОГДА не попадает cover.
+       */
       blocks:
         d.blocks
     };
 
 
-    // ---------------------------------------------
+    // =====================================================
     // CREATE
-    // ---------------------------------------------
+    // =====================================================
 
     if (!d.id) {
 
@@ -3087,30 +2328,28 @@ async function publishDraft() {
           }
         );
 
-
       showToast(
         'Опубликовано'
       );
-
 
       await openReader(
         result.article.id
       );
 
-
       return;
     }
 
 
-    // ---------------------------------------------
+    // =====================================================
     // UPDATE
-    // ---------------------------------------------
+    // =====================================================
 
     const result =
       await callTelegramApi(
         'update-article',
         {
           article: {
+
             id:
               d.id,
 
@@ -3119,40 +2358,28 @@ async function publishDraft() {
         }
       );
 
-
     showToast(
       'Изменения сохранены'
     );
-
 
     await openReader(
       result.article.id
     );
 
+  } catch (err) {
 
-  } catch (
-    err
-  ) {
-
-    console.error(
-      err
-    );
-
+    console.error(err);
 
     showToast(
       err.message ||
       'Ошибка публикации'
     );
 
-
-    hint.textContent =
-      '';
-
+    hint.textContent = '';
 
   } finally {
 
-    button.disabled =
-      false;
+    button.disabled = false;
   }
 }
 
@@ -3170,16 +2397,13 @@ function setBackButton(
     return;
   }
 
-
   if (
     !tg.BackButton ||
     typeof tg.BackButton.show !==
       'function'
   ) {
-
     return;
   }
-
 
   try {
 
@@ -3194,11 +2418,9 @@ function setBackButton(
       );
     }
 
-
     if (show) {
 
       tg.BackButton.show();
-
 
       if (
         typeof tg.BackButton.onClick ===
@@ -3221,9 +2443,7 @@ function setBackButton(
         null;
     }
 
-  } catch (
-    err
-  ) {
+  } catch (err) {
 
     console.warn(
       'BackButton:',
@@ -3242,7 +2462,6 @@ const homeLink =
     'homeLink'
   );
 
-
 if (homeLink) {
 
   homeLink.addEventListener(
@@ -3257,7 +2476,6 @@ const newArticleBtn =
     'newArticleBtn'
   );
 
-
 if (newArticleBtn) {
 
   newArticleBtn.addEventListener(
@@ -3271,7 +2489,6 @@ const profileBtn =
   document.getElementById(
     'profileBtn'
   );
-
 
 if (profileBtn) {
 
@@ -3296,7 +2513,6 @@ if (profileBtn) {
         ? tg.initDataUnsafe.start_param
         : null;
 
-
     if (startParam) {
 
       await openReader(
@@ -3308,16 +2524,12 @@ if (profileBtn) {
       await renderFeed();
     }
 
-
-  } catch (
-    err
-  ) {
+  } catch (err) {
 
     console.error(
       'Init:',
       err
     );
-
 
     showToast(
       'Ошибка запуска приложения'
