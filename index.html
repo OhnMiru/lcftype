@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Летопись</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+
+<div class="topbar chrome">
+  <h1 class="topbar-title" id="homeLink" style="cursor:pointer;">Летопись<span class="dot">.</span></h1>
+  <button class="btn btn-primary" id="newArticleBtn">+ Статья</button>
+</div>
+
+<div class="wrap" id="main">
+  <div class="loading">Загрузка…</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- Настройте эти два значения после создания проекта Supabase (см. README) -->
+<script>
+  window.SUPABASE_URL = 'https://YOUR-PROJECT.supabase.co';
+  window.SUPABASE_ANON_KEY = 'YOUR-ANON-KEY';
+</script>
+<script src="https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
