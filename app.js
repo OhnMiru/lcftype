@@ -1,32 +1,26 @@
-// =========================================================
-// ЛЕТОПИСЬ — Telegram Mini App
-// app.js
-// =========================================================
+/* =========================================================
+   ЛЕТОПИСЬ — app.js
+   =========================================================
+
+   ВАЖНО:
+   - Supabase client называется supabaseClient.
+   - Не объявляем переменную "supabase", потому что
+     UMD-библиотека Supabase уже создаёт window.supabase.
+   - Telegram ID берём только из Telegram.WebApp.initData.
+   - Запись статей / профилей / комментариев / реакций
+     выполняется через Edge Function telegram-api.
+   ========================================================= */
 
 
-// =========================================================
-// НАСТРОЙКИ
-// =========================================================
-
-const BOT_USERNAME = 'your_bot_username';
-const MINIAPP_SHORT_NAME = 'letopis';
-
-
-// =========================================================
-// SUPABASE / TELEGRAM
-// =========================================================
-
-const db =
-  window.supabase.createClient(
-    window.SUPABASE_URL,
-    window.SUPABASE_ANON_KEY
-  );
+/* =========================================================
+   1. TELEGRAM
+   ========================================================= */
 
 const tg =
-  window.Telegram
+  window.Telegram &&
+  window.Telegram.WebApp
     ? window.Telegram.WebApp
     : null;
-
 
 if (tg) {
   tg.ready();
@@ -34,895 +28,441 @@ if (tg) {
 }
 
 
-const tgUser =
-  tg &&
-  tg.initDataUnsafe &&
-  tg.initDataUnsafe.user
-    ? tg.initDataUnsafe.user
-    : null;
+/* =========================================================
+   2. SUPABASE
+   ========================================================= */
+
+const supabaseClient =
+  window.supabase.createClient(
+    window.SUPABASE_URL,
+    window.SUPABASE_ANON_KEY
+  );
 
 
-// =========================================================
-// СОСТОЯНИЕ
-// =========================================================
+/* =========================================================
+   3. EDGE FUNCTION
+   ========================================================= */
+
+const API_URL =
+  `${window.SUPABASE_URL}/functions/v1/telegram-api`;
+
+
+/* =========================================================
+   4. STATE
+   ========================================================= */
 
 const state = {
-
-  view: 'feed',
 
   articles: [],
 
   currentArticle: null,
 
-  currentId: null,
-
-  draft: null,
-
   profile: null,
 
-  selectedAuthors: new Set(),
+  comments: [],
 
-  search: '',
+  articleReactions: [],
 
-  sort: 'new',
+  commentReactions: [],
 
-  activeAuthorId: null,
+  search: "",
 
-  activeAuthorName: null
+  selectedAuthors: [],
+
+  sort: "new",
+
+  page: "home",
+
+  loading: false
 
 };
 
 
-// =========================================================
-// EDGE FUNCTION
-// =========================================================
+/* =========================================================
+   5. DOM
+   ========================================================= */
 
-const EDGE_FUNCTION_URL =
-  `${window.SUPABASE_URL}/functions/v1/telegram-api`;
+const main =
+  document.getElementById("main");
 
+const toast =
+  document.getElementById("toast");
 
-// =========================================================
-// TOAST
-// =========================================================
+const homeLink =
+  document.getElementById("homeLink");
 
-function showToast(message) {
+const newArticleBtn =
+  document.getElementById("newArticleBtn");
 
-  const toast =
-    document.getElementById('toast');
-
-  if (!toast) return;
-
-  toast.textContent = message;
-
-  toast.classList.add('show');
-
-  clearTimeout(
-    showToast._timer
-  );
-
-  showToast._timer =
-    setTimeout(() => {
-
-      toast.classList.remove('show');
-
-    }, 2200);
-}
+const profileBtn =
+  document.getElementById("profileBtn");
 
 
-// =========================================================
-// ESCAPE HTML
-// =========================================================
+/* =========================================================
+   6. HELPERS
+   ========================================================= */
 
 function escapeHtml(value) {
 
-  const div =
-    document.createElement('div');
-
-  div.textContent =
-    value == null
-      ? ''
-      : String(value);
-
-  return div.innerHTML;
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
 
-// =========================================================
-// SANITIZE HTML
-// =========================================================
+function escapeAttribute(value) {
 
-const ALLOWED_TAGS =
-  new Set([
-    'B',
-    'STRONG',
-    'I',
-    'EM',
-    'U',
-    'BR',
-    'SPAN',
-    'DIV'
-  ]);
+  return escapeHtml(value)
+    .replace(/`/g, "&#096;");
+}
 
 
-function sanitizeHtml(html) {
+function formatDate(value) {
 
-  const wrapper =
-    document.createElement('div');
-
-  wrapper.innerHTML =
-    html || '';
-
-  function clean(node) {
-
-    [
-      ...node.childNodes
-    ].forEach(child => {
-
-      if (child.nodeType === 1) {
-
-        if (
-          !ALLOWED_TAGS.has(
-            child.tagName
-          )
-        ) {
-
-          const parent =
-            child.parentNode;
-
-          while (
-            child.firstChild
-          ) {
-
-            parent.insertBefore(
-              child.firstChild,
-              child
-            );
-
-          }
-
-          parent.removeChild(
-            child
-          );
-
-          return;
-        }
-
-        [
-          ...child.attributes
-        ].forEach(attribute => {
-
-          child.removeAttribute(
-            attribute.name
-          );
-
-        });
-
-        clean(child);
-
-      } else if (
-        child.nodeType !== 3
-      ) {
-
-        child.parentNode.removeChild(
-          child
-        );
-
-      }
-
-    });
-
+  if (!value) {
+    return "";
   }
 
-  clean(wrapper);
+  const date =
+    new Date(value);
 
-  return wrapper.innerHTML;
-}
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
 
-
-// =========================================================
-// DATE
-// =========================================================
-
-function fmtDate(iso) {
-
-  if (!iso) return '';
-
-  return new Date(
-    iso
-  ).toLocaleDateString(
-    'ru-RU',
+  return date.toLocaleDateString(
+    "ru-RU",
     {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric'
+      day: "2-digit",
+      month: "long",
+      year: "numeric"
     }
   );
 }
 
 
-function fmtDateTime(iso) {
+function formatDateShort(value) {
 
-  if (!iso) return '';
+  if (!value) {
+    return "";
+  }
 
-  return new Date(
-    iso
-  ).toLocaleString(
-    'ru-RU',
+  const date =
+    new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  return date.toLocaleDateString(
+    "ru-RU",
     {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric"
     }
   );
-
 }
 
 
-// =========================================================
-// TELEGRAM BACK BUTTON
-// =========================================================
+function showToast(message) {
 
-function setBackButton(
-  show,
-  onClick
-) {
-
-  if (!tg || !tg.BackButton) {
+  if (!toast) {
     return;
   }
 
-  try {
+  toast.textContent =
+    message;
 
-    if (
-      setBackButton._last
-    ) {
+  toast.classList.add("show");
 
-      tg.BackButton.offClick(
-        setBackButton._last
+  clearTimeout(
+    showToast.timer
+  );
+
+  showToast.timer =
+    setTimeout(() => {
+
+      toast.classList.remove(
+        "show"
       );
 
-    }
-
-  } catch (error) {
-    console.warn(error);
-  }
-
-
-  if (show) {
-
-    setBackButton._last =
-      onClick;
-
-    tg.BackButton.onClick(
-      onClick
-    );
-
-    tg.BackButton.show();
-
-  } else {
-
-    setBackButton._last =
-      null;
-
-    tg.BackButton.hide();
-
-  }
-
+    }, 2500);
 }
 
 
-// =========================================================
-// ВЫЗОВ EDGE FUNCTION
-// =========================================================
-
-async function callApi(
-  action,
-  payload = {}
+function setLoading(
+  text = "Загрузка…"
 ) {
 
-  if (
-    !tg ||
-    !tg.initData
-  ) {
+  main.innerHTML = `
+    <div class="loading">
+      ${escapeHtml(text)}
+    </div>
+  `;
+}
 
-    throw new Error(
-      'Приложение должно быть открыто внутри Telegram'
+
+function getInitData() {
+
+  if (
+    tg &&
+    tg.initData
+  ) {
+    return tg.initData;
+  }
+
+  return "";
+}
+
+
+function getTelegramUser() {
+
+  if (
+    tg &&
+    tg.initDataUnsafe &&
+    tg.initDataUnsafe.user
+  ) {
+    return tg.initDataUnsafe.user;
+  }
+
+  return null;
+}
+
+
+function getTelegramId() {
+
+  const user =
+    getTelegramUser();
+
+  return user
+    ? Number(user.id)
+    : null;
+}
+
+
+function requireTelegram() {
+
+  const initData =
+    getInitData();
+
+  if (!initData) {
+
+    showToast(
+      "Откройте приложение через Telegram"
     );
+
+    return null;
+  }
+
+  return initData;
+}
+
+
+function getArticleUrl(articleId) {
+
+  return `${window.location.origin}${window.location.pathname}#article/${articleId}`;
+}
+
+
+function getInitials(name) {
+
+  const value =
+    String(name || "П")
+      .trim();
+
+  if (!value) {
+    return "П";
+  }
+
+  const parts =
+    value.split(/\s+/);
+
+  if (parts.length >= 2) {
+
+    return (
+      parts[0][0] +
+      parts[1][0]
+    ).toUpperCase();
 
   }
 
+  return value
+    .slice(0, 2)
+    .toUpperCase();
+}
+
+
+function debounce(
+  callback,
+  delay = 250
+) {
+
+  let timer;
+
+  return (...args) => {
+
+    clearTimeout(timer);
+
+    timer =
+      setTimeout(
+        () => callback(...args),
+        delay
+      );
+  };
+}
+
+
+/* =========================================================
+   7. EDGE FUNCTION REQUEST
+   ========================================================= */
+
+async function apiRequest(
+  action,
+  extra = {}
+) {
+
+  const initData =
+    requireTelegram();
+
+  if (!initData) {
+    throw new Error(
+      "Telegram initData отсутствует"
+    );
+  }
 
   const response =
     await fetch(
-      EDGE_FUNCTION_URL,
+      API_URL,
       {
-        method: 'POST',
+        method: "POST",
 
         headers: {
-          'Content-Type':
-            'application/json'
+          "Content-Type":
+            "application/json"
         },
 
-        body:
-          JSON.stringify({
-            action,
-            initData:
-              tg.initData,
-            ...payload
-          })
+        body: JSON.stringify({
+          action,
+          initData,
+          ...extra
+        })
       }
     );
 
-
-  let result;
+  let data;
 
   try {
 
-    result =
+    data =
       await response.json();
 
   } catch {
 
     throw new Error(
-      'Сервер вернул некорректный ответ'
+      "Сервер вернул некорректный ответ"
     );
-
   }
 
-
-  if (
-    !response.ok ||
-    result.error
-  ) {
+  if (!response.ok) {
 
     throw new Error(
-      result.error ||
-      'Ошибка сервера'
+      data?.error ||
+      "Ошибка сервера"
     );
-
   }
 
+  if (data?.error) {
 
-  return result;
-}
-
-
-// =========================================================
-// ПРОФИЛЬ
-// =========================================================
-
-async function loadMyProfile() {
-
-  try {
-
-    const result =
-      await callApi(
-        'get-profile'
-      );
-
-    state.profile =
-      result.profile || null;
-
-    return state.profile;
-
-  } catch (error) {
-
-    console.error(
-      'loadMyProfile:',
-      error
+    throw new Error(
+      data.error
     );
-
-    state.profile =
-      null;
-
-    return null;
   }
-
-}
-
-
-// =========================================================
-// СОХРАНЕНИЕ НИКА
-// =========================================================
-
-async function saveMyProfile(
-  username
-) {
-
-  const result =
-    await callApi(
-      'set-profile',
-      {
-        username
-      }
-    );
-
-  state.profile =
-    result.profile;
-
-  return state.profile;
-}
-
-
-// =========================================================
-// ПОЛУЧЕНИЕ СТАТЕЙ
-// =========================================================
-
-async function fetchFeed() {
-
-  const {
-    data,
-    error
-  } =
-    await db
-      .from('articles')
-      .select(
-        `
-        id,
-        title,
-        excerpt,
-        cover,
-        author_id,
-        author_name,
-        created_at,
-        updated_at
-        `
-      )
-      .order(
-        'created_at',
-        {
-          ascending: false
-        }
-      );
-
-
-  if (error) {
-
-    console.error(
-      'fetchFeed:',
-      error
-    );
-
-    throw error;
-  }
-
-
-  return data || [];
-}
-
-
-// =========================================================
-// ОДНА СТАТЬЯ
-// =========================================================
-
-async function fetchArticle(id) {
-
-  const {
-    data,
-    error
-  } =
-    await db
-      .from('articles')
-      .select('*')
-      .eq(
-        'id',
-        id
-      )
-      .single();
-
-
-  if (error) {
-
-    console.error(
-      'fetchArticle:',
-      error
-    );
-
-    return null;
-  }
-
 
   return data;
 }
 
 
-// =========================================================
-// СТАТЬИ АВТОРА
-// =========================================================
+/* =========================================================
+   8. LOAD ARTICLES
+   ========================================================= */
 
-async function fetchAuthorArticles(
-  authorId
-) {
+async function loadArticles() {
 
   const {
     data,
     error
   } =
-    await db
-      .from('articles')
-      .select(
-        `
-        id,
-        title,
-        excerpt,
-        cover,
-        author_id,
-        author_name,
-        created_at,
-        updated_at
-        `
-      )
-      .eq(
-        'author_id',
-        authorId
-      )
+    await supabaseClient
+      .from("articles")
+      .select("*")
       .order(
-        'created_at',
+        "created_at",
         {
           ascending: false
         }
       );
 
-
   if (error) {
-
-    console.error(
-      'fetchAuthorArticles:',
-      error
-    );
-
     throw error;
   }
 
-
-  return data || [];
+  state.articles =
+    data || [];
 }
 
 
-// =========================================================
-// КОММЕНТАРИИ
-// =========================================================
+/* =========================================================
+   9. LOAD PROFILE
+   ========================================================= */
 
-async function fetchComments(
-  articleId
-) {
+async function loadProfile() {
 
-  const {
-    data,
-    error
-  } =
-    await db
-      .from('article_comments')
-      .select(
-        `
-        id,
-        article_id,
-        author_id,
-        author_name,
-        content,
-        parent_id,
-        created_at,
-        updated_at
-        `
-      )
-      .eq(
-        'article_id',
-        articleId
-      )
-      .order(
-        'created_at',
-        {
-          ascending: true
-        }
+  try {
+
+    const data =
+      await apiRequest(
+        "get-profile"
       );
 
+    state.profile =
+      data.profile || null;
 
-  if (error) {
+  } catch (error) {
 
     console.error(
-      'fetchComments:',
+      "loadProfile:",
       error
     );
 
-    throw error;
+    state.profile = null;
   }
-
-
-  return data || [];
 }
 
 
-// =========================================================
-// РЕАКЦИИ СТАТЬИ
-// =========================================================
-
-async function fetchArticleReactions(
-  articleId
-) {
-
-  const {
-    data,
-    error
-  } =
-    await db
-      .from('article_reactions')
-      .select(
-        `
-        id,
-        article_id,
-        user_id,
-        reaction_type,
-        created_at
-        `
-      )
-      .eq(
-        'article_id',
-        articleId
-      );
-
-
-  if (error) {
-
-    console.error(
-      'fetchArticleReactions:',
-      error
-    );
-
-    throw error;
-  }
-
-
-  return data || [];
-}
-
-
-// =========================================================
-// РЕАКЦИИ КОММЕНТАРИЕВ
-// =========================================================
-
-async function fetchCommentReactions(
-  commentIds
-) {
-
-  if (!commentIds.length) {
-    return [];
-  }
-
-
-  const {
-    data,
-    error
-  } =
-    await db
-      .from('comment_reactions')
-      .select(
-        `
-        id,
-        comment_id,
-        user_id,
-        reaction_type,
-        created_at
-        `
-      )
-      .in(
-        'comment_id',
-        commentIds
-      );
-
-
-  if (error) {
-
-    console.error(
-      'fetchCommentReactions:',
-      error
-    );
-
-    throw error;
-  }
-
-
-  return data || [];
-}
-
-
-// =========================================================
-// МОИ СТАТЬИ
-// =========================================================
-
-async function fetchMyArticles() {
-
-  if (!tgUser) {
-    return [];
-  }
-
-
-  const {
-    data,
-    error
-  } =
-    await db
-      .from('articles')
-      .select('*')
-      .eq(
-        'author_id',
-        tgUser.id
-      )
-      .order(
-        'created_at',
-        {
-          ascending: false
-        }
-      );
-
-
-  if (error) {
-
-    console.error(
-      error
-    );
-
-    throw error;
-  }
-
-
-  return data || [];
-}
-
-
-// =========================================================
-// МОИ КОММЕНТАРИИ
-// =========================================================
-
-async function fetchMyComments() {
-
-  if (!tgUser) {
-    return [];
-  }
-
-
-  const {
-    data,
-    error
-  } =
-    await db
-      .from('article_comments')
-      .select(
-        `
-        id,
-        article_id,
-        author_id,
-        author_name,
-        content,
-        parent_id,
-        created_at
-        `
-      )
-      .eq(
-        'author_id',
-        tgUser.id
-      )
-      .order(
-        'created_at',
-        {
-          ascending: false
-        }
-      );
-
-
-  if (error) {
-
-    console.error(
-      error
-    );
-
-    throw error;
-  }
-
-
-  return data || [];
-}
-
-
-// =========================================================
-// ФИЛЬТРАЦИЯ
-// =========================================================
-
-function getFilteredArticles() {
-
-  let articles =
-    [...state.articles];
-
-
-  const search =
-    state.search
-      .trim()
-      .toLowerCase();
-
-
-  if (search) {
-
-    articles =
-      articles.filter(
-        article =>
-          String(
-            article.title || ''
-          )
-            .toLowerCase()
-            .includes(search)
-      );
-
-  }
-
-
-  if (
-    state.selectedAuthors.size
-  ) {
-
-    articles =
-      articles.filter(
-        article =>
-          state.selectedAuthors.has(
-            String(
-              article.author_id
-            )
-          )
-      );
-
-  }
-
-
-  articles.sort(
-    (a, b) => {
-
-      const da =
-        new Date(
-          a.created_at
-        ).getTime();
-
-      const db =
-        new Date(
-          b.created_at
-        ).getTime();
-
-      return state.sort === 'new'
-        ? db - da
-        : da - db;
-
-    }
-  );
-
-
-  return articles;
-}
-
-
-// =========================================================
-// УНИКАЛЬНЫЕ АВТОРЫ
-// =========================================================
+/* =========================================================
+   10. FILTERED ARTICLES
+   ========================================================= */
 
 function getAuthors() {
 
   const map =
     new Map();
 
-
   state.articles.forEach(
     article => {
 
-      if (
-        article.author_id == null
-      ) {
-        return;
-      }
-
-
       const id =
         String(
-          article.author_id
+          article.author_id ?? ""
         );
 
+      const name =
+        article.author_name ||
+        "Пользователь";
 
       if (!map.has(id)) {
 
@@ -930,9 +470,7 @@ function getAuthors() {
           id,
           {
             id,
-            name:
-              article.author_name ||
-              'Пользователь'
+            name
           }
         );
 
@@ -941,249 +479,526 @@ function getAuthors() {
     }
   );
 
-
-  return [
-    ...map.values()
-  ].sort(
+  return Array.from(
+    map.values()
+  ).sort(
     (a, b) =>
       a.name.localeCompare(
         b.name,
-        'ru'
+        "ru"
       )
   );
 }
 
 
-// =========================================================
-// КОНТРОЛЫ ЛЕНТЫ
-// =========================================================
+function getFilteredArticles() {
 
-function renderFeedControls() {
+  let result =
+    [...state.articles];
+
+  const search =
+    state.search
+      .trim()
+      .toLocaleLowerCase("ru");
+
+  if (search) {
+
+    result =
+      result.filter(
+        article => {
+
+          const title =
+            String(
+              article.title || ""
+            ).toLocaleLowerCase(
+              "ru"
+            );
+
+          const excerpt =
+            String(
+              article.excerpt || ""
+            ).toLocaleLowerCase(
+              "ru"
+            );
+
+          const author =
+            String(
+              article.author_name || ""
+            ).toLocaleLowerCase(
+              "ru"
+            );
+
+          return (
+            title.includes(search) ||
+            excerpt.includes(search) ||
+            author.includes(search)
+          );
+        }
+      );
+  }
+
+
+  if (
+    state.selectedAuthors.length
+  ) {
+
+    result =
+      result.filter(
+        article =>
+          state.selectedAuthors
+            .includes(
+              String(
+                article.author_id ?? ""
+              )
+            )
+      );
+  }
+
+
+  result.sort(
+    (a, b) => {
+
+      const first =
+        new Date(
+          a.created_at
+        ).getTime();
+
+      const second =
+        new Date(
+          b.created_at
+        ).getTime();
+
+      return state.sort === "new"
+        ? second - first
+        : first - second;
+    }
+  );
+
+  return result;
+}
+
+
+/* =========================================================
+   11. HOME
+   ========================================================= */
+
+function renderHome() {
+
+  state.page =
+    "home";
+
+  state.currentArticle =
+    null;
 
   const authors =
     getAuthors();
 
+  const articles =
+    getFilteredArticles();
 
-  return `
-    <div class="feed-controls chrome">
+  main.innerHTML = `
 
-      <div class="search-wrap">
-        <input
-          type="search"
-          id="articleSearch"
-          class="search-input"
-          placeholder="Поиск по названию"
-          value="${escapeHtml(state.search)}"
-          autocomplete="off"
-        >
-      </div>
+    <section class="home-page">
 
-      <div class="filter-wrap">
-        <button
-          type="button"
-          class="filter-button"
-          id="authorFilterBtn"
-        >
-          Автор
-          <span class="filter-count" id="filterCount"></span>
-        </button>
+      <div class="home-controls">
 
-        <div
-          class="author-filter-menu"
-          id="authorFilterMenu"
-          hidden
-        >
-          <div class="filter-menu-title">
-            Авторы
-          </div>
+        <div class="search-wrap">
 
-          <div class="author-filter-list">
+          <span class="search-icon">
+            ⌕
+          </span>
 
-            ${
-              authors.length
-                ? authors.map(
-                    author => `
-                      <label class="author-filter-item">
+          <input
+            id="articleSearch"
+            class="search-input"
+            type="search"
+            placeholder="Поиск по названию..."
+            value="${escapeAttribute(
+              state.search
+            )}"
+            autocomplete="off"
+          >
 
-                        <input
-                          type="checkbox"
-                          class="author-filter-checkbox"
-                          value="${escapeHtml(author.id)}"
-                          ${
-                            state.selectedAuthors.has(
-                              author.id
-                            )
-                              ? 'checked'
-                              : ''
-                          }
-                        >
-
-                        <span>
-                          ${escapeHtml(author.name)}
-                        </span>
-
-                      </label>
-                    `
-                  ).join('')
-                : `
-                  <div class="filter-empty">
-                    Авторов пока нет
-                  </div>
-                `
-            }
-
-          </div>
-
-          ${
-            authors.length
-              ? `
-                <button
-                  type="button"
-                  class="filter-reset"
-                  id="clearAuthorFilter"
-                >
-                  Сбросить фильтр
-                </button>
-              `
-              : ''
-          }
+          <button
+            id="clearSearch"
+            class="search-clear"
+            type="button"
+            aria-label="Очистить поиск"
+            ${state.search ? "" : "hidden"}
+          >
+            ×
+          </button>
 
         </div>
+
+
+        <div class="filters-row">
+
+          <div class="author-filter">
+
+            <button
+              class="filter-button"
+              id="authorFilterBtn"
+              type="button"
+            >
+              <span>Автор</span>
+              <span class="filter-arrow">
+                ▾
+              </span>
+            </button>
+
+            <div
+              class="filter-dropdown"
+              id="authorDropdown"
+              hidden
+            >
+
+              <div class="filter-dropdown-title">
+                Авторы
+              </div>
+
+              ${
+                authors.length
+                  ? authors.map(
+                      author => {
+
+                        const checked =
+                          state.selectedAuthors
+                            .includes(
+                              author.id
+                            );
+
+                        return `
+                          <label
+                            class="author-option"
+                          >
+
+                            <input
+                              type="checkbox"
+                              class="author-checkbox"
+                              value="${escapeAttribute(
+                                author.id
+                              )}"
+                              ${
+                                checked
+                                  ? "checked"
+                                  : ""
+                              }
+                            >
+
+                            <span class="author-checkmark"></span>
+
+                            <span>
+                              ${escapeHtml(
+                                author.name
+                              )}
+                            </span>
+
+                          </label>
+                        `;
+                      }
+                    ).join("")
+                  : `
+                    <div class="filter-empty">
+                      Авторов пока нет
+                    </div>
+                  `
+              }
+
+              <button
+                id="clearAuthors"
+                class="filter-clear"
+                type="button"
+              >
+                Сбросить
+              </button>
+
+            </div>
+
+          </div>
+
+
+          <div class="sort-wrap">
+
+            <select
+              id="articleSort"
+              class="sort-select"
+            >
+              <option
+                value="new"
+                ${
+                  state.sort === "new"
+                    ? "selected"
+                    : ""
+                }
+              >
+                Новые
+              </option>
+
+              <option
+                value="old"
+                ${
+                  state.sort === "old"
+                    ? "selected"
+                    : ""
+                }
+              >
+                Старые
+              </option>
+            </select>
+
+          </div>
+
+        </div>
+
       </div>
 
-      <div class="sort-wrap">
 
-        <select
-          id="articleSort"
-          class="sort-select"
+      ${
+        articles.length
+          ? `
+            <div
+              class="articles-grid"
+              id="articlesGrid"
+            >
+              ${articles
+                .map(
+                  renderArticleCard
+                )
+                .join("")}
+            </div>
+          `
+          : `
+            <div class="empty-state">
+
+              <div class="empty-state-title">
+                Статей не найдено
+              </div>
+
+              <div class="empty-state-text">
+                Попробуйте изменить запрос
+                или параметры фильтра.
+              </div>
+
+            </div>
+          `
+      }
+
+    </section>
+  `;
+
+
+  bindHomeControls();
+
+  bindArticleCards();
+}
+
+
+function renderArticleCard(
+  article
+) {
+
+  const cover =
+    article.cover
+      ? `
+        <img
+          class="article-card-cover"
+          src="${escapeAttribute(
+            article.cover
+          )}"
+          alt=""
         >
-          <option
-            value="new"
-            ${
-              state.sort === 'new'
-                ? 'selected'
-                : ''
-            }
-          >
-            Новые → старые
-          </option>
+      `
+      : `
+        <div
+          class="article-card-cover article-card-cover-empty"
+        >
+          Летопись
+        </div>
+      `;
 
-          <option
-            value="old"
-            ${
-              state.sort === 'old'
-                ? 'selected'
-                : ''
-            }
-          >
-            Старые → новые
-          </option>
-        </select>
+  return `
+
+    <article
+      class="article-card"
+      data-article-id="${escapeAttribute(
+        article.id
+      )}"
+    >
+
+      ${cover}
+
+      <div class="article-card-body">
+
+        <div class="article-card-date">
+          ${escapeHtml(
+            formatDateShort(
+              article.created_at
+            )
+          )}
+        </div>
+
+        <h2 class="article-card-title">
+          ${escapeHtml(
+            article.title ||
+            "Без названия"
+          )}
+        </h2>
+
+        ${
+          article.excerpt
+            ? `
+              <p class="article-card-excerpt">
+                ${escapeHtml(
+                  article.excerpt
+                )}
+              </p>
+            `
+            : ""
+        }
+
+        <button
+          class="article-author-link"
+          data-author-id="${escapeAttribute(
+            article.author_id
+          )}"
+          type="button"
+        >
+          ${escapeHtml(
+            article.author_name ||
+            "Пользователь"
+          )}
+        </button>
 
       </div>
 
-    </div>
+    </article>
   `;
 }
 
 
-// =========================================================
-// ПОДКЛЮЧЕНИЕ КОНТРОЛОВ
-// =========================================================
+/* =========================================================
+   12. HOME CONTROLS
+   ========================================================= */
 
-function bindFeedControls() {
+function bindHomeControls() {
 
-  const search =
+  const searchInput =
     document.getElementById(
-      'articleSearch'
+      "articleSearch"
     );
 
-  if (search) {
-
-    search.addEventListener(
-      'input',
-      event => {
-
-        state.search =
-          event.target.value;
-
-        renderFeedResults();
-
-      }
-    );
-
-  }
-
-
-  const sort =
+  const clearSearch =
     document.getElementById(
-      'articleSort'
+      "clearSearch"
     );
-
-  if (sort) {
-
-    sort.addEventListener(
-      'change',
-      event => {
-
-        state.sort =
-          event.target.value;
-
-        renderFeedResults();
-
-      }
-    );
-
-  }
-
 
   const filterButton =
     document.getElementById(
-      'authorFilterBtn'
+      "authorFilterBtn"
     );
 
-  const filterMenu =
+  const dropdown =
     document.getElementById(
-      'authorFilterMenu'
+      "authorDropdown"
     );
+
+  const sortSelect =
+    document.getElementById(
+      "articleSort"
+    );
+
+  const clearAuthors =
+    document.getElementById(
+      "clearAuthors"
+    );
+
+
+  if (searchInput) {
+
+    searchInput.addEventListener(
+      "input",
+      debounce(
+        event => {
+
+          state.search =
+            event.target.value;
+
+          if (clearSearch) {
+
+            clearSearch.hidden =
+              !state.search;
+          }
+
+          renderHome();
+
+          const input =
+            document.getElementById(
+              "articleSearch"
+            );
+
+          if (input) {
+
+            input.focus();
+
+            try {
+
+              input.setSelectionRange(
+                input.value.length,
+                input.value.length
+              );
+
+            } catch {}
+
+          }
+
+        },
+        120
+      )
+    );
+
+  }
+
+
+  if (clearSearch) {
+
+    clearSearch.addEventListener(
+      "click",
+      event => {
+
+        event.preventDefault();
+
+        state.search = "";
+
+        renderHome();
+
+        const input =
+          document.getElementById(
+            "articleSearch"
+          );
+
+        if (input) {
+          input.focus();
+        }
+      }
+    );
+
+  }
 
 
   if (
     filterButton &&
-    filterMenu
+    dropdown
   ) {
 
     filterButton.addEventListener(
-      'click',
+      "click",
       event => {
 
         event.stopPropagation();
 
-        filterMenu.hidden =
-          !filterMenu.hidden;
-
-      }
-    );
-
-
-    filterMenu.addEventListener(
-      'click',
-      event => {
-        event.stopPropagation();
-      }
-    );
-
-
-    document.addEventListener(
-      'click',
-      () => {
-
-        filterMenu.hidden =
-          true;
-
-      },
-      {
-        once: false
+        dropdown.hidden =
+          !dropdown.hidden;
       }
     );
 
@@ -1192,42 +1007,26 @@ function bindFeedControls() {
 
   document
     .querySelectorAll(
-      '.author-filter-checkbox'
+      ".author-checkbox"
     )
     .forEach(
       checkbox => {
 
         checkbox.addEventListener(
-          'change',
-          event => {
+          "change",
+          () => {
 
-            const id =
-              String(
-                event.target.value
+            state.selectedAuthors =
+              Array.from(
+                document.querySelectorAll(
+                  ".author-checkbox:checked"
+                )
+              ).map(
+                item =>
+                  item.value
               );
 
-
-            if (
-              event.target.checked
-            ) {
-
-              state.selectedAuthors.add(
-                id
-              );
-
-            } else {
-
-              state.selectedAuthors.delete(
-                id
-              );
-
-            }
-
-
-            updateFilterCount();
-
-            renderFeedResults();
-
+            renderHome();
           }
         );
 
@@ -1235,196 +1034,123 @@ function bindFeedControls() {
     );
 
 
-  const clear =
-    document.getElementById(
-      'clearAuthorFilter'
-    );
+  if (clearAuthors) {
 
-
-  if (clear) {
-
-    clear.addEventListener(
-      'click',
+    clearAuthors.addEventListener(
+      "click",
       () => {
 
-        state.selectedAuthors.clear();
+        state.selectedAuthors =
+          [];
 
-        document
-          .querySelectorAll(
-            '.author-filter-checkbox'
-          )
-          .forEach(
-            checkbox => {
-              checkbox.checked =
-                false;
-            }
-          );
-
-        updateFilterCount();
-
-        renderFeedResults();
-
+        renderHome();
       }
     );
 
   }
 
 
-  updateFilterCount();
+  if (sortSelect) {
 
-}
+    sortSelect.addEventListener(
+      "change",
+      event => {
 
+        state.sort =
+          event.target.value === "old"
+            ? "old"
+            : "new";
 
-// =========================================================
-// СЧЁТЧИК ФИЛЬТРА
-// =========================================================
-
-function updateFilterCount() {
-
-  const count =
-    document.getElementById(
-      'filterCount'
+        renderHome();
+      }
     );
 
-  if (!count) return;
-
-
-  count.textContent =
-    state.selectedAuthors.size
-      ? `(${state.selectedAuthors.size})`
-      : '';
-
-}
-
-
-// =========================================================
-// РЕЗУЛЬТАТЫ ЛЕНТЫ
-// =========================================================
-
-function renderFeedResults() {
-
-  const host =
-    document.getElementById(
-      'feedResults'
-    );
-
-  if (!host) return;
-
-
-  const articles =
-    getFilteredArticles();
-
-
-  if (!articles.length) {
-
-    host.innerHTML = `
-      <div class="empty-state">
-        <h2>Ничего не найдено</h2>
-        <p>
-          Попробуйте изменить поиск
-          или фильтр автора.
-        </p>
-      </div>
-    `;
-
-    return;
   }
 
 
-  host.innerHTML =
-    articles.map(
-      article => `
-
-        <div
-          class="feed-item"
-          data-id="${escapeHtml(article.id)}"
-        >
-
-          ${
-            article.cover
-              ? `
-                <img
-                  class="thumb"
-                  src="${escapeHtml(article.cover)}"
-                  alt=""
-                  loading="lazy"
-                >
-              `
-              : ''
-          }
-
-          <div class="feed-content">
-
-            <div class="feed-meta">
-              ${fmtDate(article.created_at)}
-            </div>
-
-            <h3>
-              ${escapeHtml(
-                article.title ||
-                'Без названия'
-              )}
-            </h3>
-
-            ${
-              article.excerpt
-                ? `
-                  <p>
-                    ${escapeHtml(
-                      article.excerpt
-                    )}
-                  </p>
-                `
-                : ''
-            }
-
-            ${
-              article.author_name
-                ? `
-                  <div
-                    class="feed-author"
-                    data-author-id="${escapeHtml(
-                      String(article.author_id || '')
-                    )}"
-                  >
-                    ${escapeHtml(
-                      article.author_name
-                    )}
-                  </div>
-                `
-                : ''
-            }
-
-          </div>
-
-        </div>
-      `
-    ).join('');
+  document.addEventListener(
+    "click",
+    closeAuthorDropdown,
+    {
+      once: true
+    }
+  );
+}
 
 
-  host
+function closeAuthorDropdown() {
+
+  const dropdown =
+    document.getElementById(
+      "authorDropdown"
+    );
+
+  const button =
+    document.getElementById(
+      "authorFilterBtn"
+    );
+
+  if (
+    dropdown &&
+    button &&
+    !dropdown.hidden
+  ) {
+
+    document.addEventListener(
+      "click",
+      event => {
+
+        if (
+          !dropdown.contains(
+            event.target
+          ) &&
+          !button.contains(
+            event.target
+          )
+        ) {
+
+          dropdown.hidden =
+            true;
+        }
+
+      },
+      {
+        once: true
+      }
+    );
+  }
+}
+
+
+/* =========================================================
+   13. ARTICLE CARDS
+   ========================================================= */
+
+function bindArticleCards() {
+
+  document
     .querySelectorAll(
-      '.feed-item'
+      ".article-card"
     )
     .forEach(
-      item => {
+      card => {
 
-        item.addEventListener(
-          'click',
+        card.addEventListener(
+          "click",
           event => {
 
             if (
               event.target.closest(
-                '.feed-author'
+                ".article-author-link"
               )
             ) {
               return;
             }
 
-            openReader(
-              item.dataset.id
-            );
+            const id =
+              card.dataset.articleId;
 
+            openArticle(id);
           }
         );
 
@@ -1432,735 +1158,706 @@ function renderFeedResults() {
     );
 
 
-  host
+  document
     .querySelectorAll(
-      '.feed-author'
+      ".article-author-link"
     )
     .forEach(
-      author => {
+      button => {
 
-        author.addEventListener(
-          'click',
+        button.addEventListener(
+          "click",
           event => {
 
             event.stopPropagation();
 
-            openAuthorProfile(
-              author.dataset.authorId,
-              author.textContent.trim()
-            );
+            const authorId =
+              button.dataset.authorId;
 
+            openAuthor(
+              authorId
+            );
           }
         );
 
       }
     );
-
 }
 
 
-// =========================================================
-// ЛЕНТА
-// =========================================================
+/* =========================================================
+   14. OPEN ARTICLE
+   ========================================================= */
 
-async function renderFeed() {
+async function openArticle(
+  articleId
+) {
 
-  state.view =
-    'feed';
-
-  state.currentArticle =
-    null;
-
-  state.currentId =
-    null;
-
-  state.activeAuthorId =
-    null;
-
-  state.activeAuthorName =
-    null;
-
-
-  setBackButton(
-    false
-  );
-
-
-  const main =
-    document.getElementById(
-      'main'
+  const article =
+    state.articles.find(
+      item =>
+        String(item.id) ===
+        String(articleId)
     );
 
+  if (!article) {
 
-  main.innerHTML =
-    '<div class="loading">Загрузка статей…</div>';
+    showToast(
+      "Статья не найдена"
+    );
 
+    return;
+  }
+
+  state.page =
+    "article";
+
+  state.currentArticle =
+    article;
+
+  history.replaceState(
+    null,
+    "",
+    `#article/${article.id}`
+  );
+
+  setLoading(
+    "Загрузка статьи…"
+  );
 
   try {
 
-    state.articles =
-      await fetchFeed();
-
-
-    main.innerHTML = `
-
-      ${renderFeedControls()}
-
-      <div id="feedResults"></div>
-
-    `;
-
-
-    bindFeedControls();
-
-    renderFeedResults();
-
+    await loadArticleMeta(
+      article.id
+    );
 
   } catch (error) {
 
     console.error(error);
 
-    main.innerHTML = `
-      <div class="empty-state">
-        <h2>Не удалось загрузить статьи</h2>
-        <p>
-          ${escapeHtml(
-            error.message ||
-            'Попробуйте ещё раз.'
-          )}
-        </p>
-      </div>
-    `;
-
+    state.comments = [];
+    state.articleReactions = [];
+    state.commentReactions = [];
   }
 
+  renderArticle(
+    article
+  );
 }
 
 
-// =========================================================
-// SHARE URL
-// =========================================================
-
-function getArticleShareUrl(
+async function loadArticleMeta(
   articleId
 ) {
 
-  return (
-    `https://t.me/` +
-    `${BOT_USERNAME}/` +
-    `${MINIAPP_SHORT_NAME}` +
-    `?startapp=` +
-    encodeURIComponent(
-      articleId
-    )
-  );
+  const [
+    commentsResult,
+    articleReactionsResult,
+    commentReactionsResult
+  ] =
+    await Promise.all([
 
+      supabaseClient
+        .from("article_comments")
+        .select("*")
+        .eq(
+          "article_id",
+          articleId
+        )
+        .order(
+          "created_at",
+          {
+            ascending: true
+          }
+        ),
+
+      supabaseClient
+        .from("article_reactions")
+        .select("*")
+        .eq(
+          "article_id",
+          articleId
+        ),
+
+      Promise.resolve({
+        data: [],
+        error: null
+      })
+    ]);
+
+
+  if (
+    commentsResult.error
+  ) {
+    throw commentsResult.error;
+  }
+
+  if (
+    articleReactionsResult.error
+  ) {
+    throw articleReactionsResult.error;
+  }
+
+
+  state.comments =
+    commentsResult.data || [];
+
+  state.articleReactions =
+    articleReactionsResult.data || [];
+
+
+  if (
+    state.comments.length
+  ) {
+
+    const ids =
+      state.comments.map(
+        comment =>
+          comment.id
+      );
+
+    const {
+      data,
+      error
+    } =
+      await supabaseClient
+        .from("comment_reactions")
+        .select("*")
+        .in(
+          "comment_id",
+          ids
+        );
+
+    if (error) {
+      throw error;
+    }
+
+    state.commentReactions =
+      data || [];
+
+  } else {
+
+    state.commentReactions =
+      [];
+  }
 }
 
 
-// =========================================================
-// COPY LINK
-// =========================================================
+/* =========================================================
+   15. RENDER ARTICLE
+   ========================================================= */
 
-async function copyArticleLink(
+function renderArticle(
   article
 ) {
 
-  const url =
-    getArticleShareUrl(
-      article.id
+  const blocks =
+    Array.isArray(
+      article.blocks
+    )
+      ? article.blocks
+      : [];
+
+  const cover =
+    article.cover
+      ? `
+        <img
+          class="article-cover"
+          src="${escapeAttribute(
+            article.cover
+          )}"
+          alt=""
+        >
+      `
+      : "";
+
+
+  const reactions =
+    getReactionCounts(
+      state.articleReactions
+    );
+
+  const myReaction =
+    getMyReaction(
+      state.articleReactions
     );
 
 
-  try {
+  main.innerHTML = `
 
-    await navigator.clipboard.writeText(
-      url
-    );
+    <article
+      class="article-page"
+    >
 
-    showToast(
-      'Ссылка скопирована'
-    );
-
-    return;
-
-  } catch (error) {
-
-    console.warn(
-      'Clipboard API failed:',
-      error
-    );
-
-  }
+      <button
+        class="back-button"
+        id="backHomeBtn"
+        type="button"
+      >
+        ← Все статьи
+      </button>
 
 
-  const textarea =
-    document.createElement(
-      'textarea'
-    );
-
-  textarea.value =
-    url;
-
-  textarea.style.position =
-    'fixed';
-
-  textarea.style.opacity =
-    '0';
-
-  document.body.appendChild(
-    textarea
-  );
-
-  textarea.select();
+      ${cover}
 
 
-  try {
+      <header class="article-header">
 
-    document.execCommand(
-      'copy'
-    );
+        <div class="article-date">
+          ${escapeHtml(
+            formatDate(
+              article.created_at
+            )
+          )}
+        </div>
 
-    showToast(
-      'Ссылка скопирована'
-    );
+        <h1 class="article-title">
+          ${escapeHtml(
+            article.title ||
+            "Без названия"
+          )}
+        </h1>
 
-  } catch {
+        ${
+          article.excerpt
+            ? `
+              <p class="article-excerpt">
+                ${escapeHtml(
+                  article.excerpt
+                )}
+              </p>
+            `
+            : ""
+        }
 
-    showToast(
-      'Не удалось скопировать ссылку'
-    );
 
-  }
+        <button
+          class="article-author-button"
+          id="articleAuthorBtn"
+          type="button"
+          data-author-id="${escapeAttribute(
+            article.author_id
+          )}"
+        >
+
+          <span class="author-avatar">
+            ${escapeHtml(
+              getInitials(
+                article.author_name
+              )
+            )}
+          </span>
+
+          <span>
+            ${escapeHtml(
+              article.author_name ||
+              "Пользователь"
+            )}
+          </span>
+
+        </button>
+
+      </header>
 
 
-  textarea.remove();
+      <div class="article-content">
 
+        ${
+          blocks.length
+            ? blocks
+                .map(
+                  renderBlock
+                )
+                .join("")
+            : `
+              <p class="article-empty">
+                Содержание статьи отсутствует.
+              </p>
+            `
+        }
+
+      </div>
+
+
+      <div class="article-footer-actions">
+
+        <button
+          class="share-button"
+          id="shareArticleBtn"
+          type="button"
+        >
+          Поделиться
+        </button>
+
+      </div>
+
+
+      <section class="article-reactions">
+
+        <div class="reaction-title">
+          Реакции
+        </div>
+
+        <div class="reaction-buttons">
+
+          ${renderReactionButton(
+            "like",
+            "👍",
+            reactions.like,
+            myReaction
+          )}
+
+          ${renderReactionButton(
+            "love",
+            "❤️",
+            reactions.love,
+            myReaction
+          )}
+
+          ${renderReactionButton(
+            "laugh",
+            "😂",
+            reactions.laugh,
+            myReaction
+          )}
+
+          ${renderReactionButton(
+            "wow",
+            "😮",
+            reactions.wow,
+            myReaction
+          )}
+
+          ${renderReactionButton(
+            "sad",
+            "😢",
+            reactions.sad,
+            myReaction
+          )}
+
+        </div>
+
+      </section>
+
+
+      ${renderCommentsSection()}
+
+    </article>
+  `;
+
+
+  bindArticlePage();
 }
 
 
-// =========================================================
-// РЕНДЕР БЛОКОВ СТАТЬИ
-// =========================================================
-
-function renderArticleBlocks(
-  blocks
+function renderBlock(
+  block
 ) {
 
   if (
-    !Array.isArray(blocks)
+    !block ||
+    typeof block !== "object"
+  ) {
+    return "";
+  }
+
+  const type =
+    block.type ||
+    "text";
+
+  const content =
+    block.content ??
+    block.text ??
+    "";
+
+
+  if (
+    type === "image" ||
+    type === "img"
   ) {
 
-    return '';
+    const src =
+      block.src ||
+      block.url ||
+      block.content;
 
+    if (!src) {
+      return "";
+    }
+
+    return `
+      <figure class="article-block-image">
+
+        <img
+          src="${escapeAttribute(
+            src
+          )}"
+          alt="${escapeAttribute(
+            block.alt || ""
+          )}"
+        >
+
+        ${
+          block.caption
+            ? `
+              <figcaption>
+                ${escapeHtml(
+                  block.caption
+                )}
+              </figcaption>
+            `
+            : ""
+        }
+
+      </figure>
+    `;
   }
 
 
-  return blocks
-    .map(
-      block => {
+  if (
+    type === "quote"
+  ) {
 
-        if (
-          block.type === 'text'
-        ) {
-
-          const html =
-            sanitizeHtml(
-              block.html || ''
-            );
-
-          return html.trim()
-            ? `<p>${html}</p>`
-            : '';
-
-        }
+    return `
+      <blockquote
+        class="article-block-quote"
+      >
+        ${escapeHtml(
+          content
+        )}
+      </blockquote>
+    `;
+  }
 
 
-        if (
-          block.type === 'image'
-        ) {
+  if (
+    type === "heading" ||
+    type === "h2"
+  ) {
 
-          return `
-            <figure>
-
-              <img
-                src="${escapeHtml(
-                  block.src || ''
-                )}"
-                alt=""
-                loading="lazy"
-              >
-
-              ${
-                block.caption
-                  ? `
-                    <figcaption>
-                      ${escapeHtml(
-                        block.caption
-                      )}
-                    </figcaption>
-                  `
-                  : ''
-              }
-
-            </figure>
-          `;
-
-        }
+    return `
+      <h2 class="article-block-heading">
+        ${escapeHtml(
+          content
+        )}
+      </h2>
+    `;
+  }
 
 
-        return '';
+  if (
+    type === "h3"
+  ) {
 
-      }
-    )
-    .join('');
+    return `
+      <h3 class="article-block-heading">
+        ${escapeHtml(
+          content
+        )}
+      </h3>
+    `;
+  }
 
+
+  if (
+    type === "divider" ||
+    type === "separator"
+  ) {
+
+    return `
+      <hr class="article-block-divider">
+    `;
+  }
+
+
+  if (
+    type === "list"
+  ) {
+
+    const items =
+      Array.isArray(
+        block.items
+      )
+        ? block.items
+        : String(content)
+            .split("\n");
+
+    return `
+      <ul class="article-block-list">
+
+        ${items
+          .map(
+            item => `
+              <li>
+                ${escapeHtml(
+                  item
+                )}
+              </li>
+            `
+          )
+          .join("")}
+
+      </ul>
+    `;
+  }
+
+
+  return `
+    <p class="article-block-text">
+      ${escapeHtml(
+        content
+      ).replace(
+        /\n/g,
+        "<br>"
+      )}
+    </p>
+  `;
 }
 
 
-// =========================================================
-// РЕАКЦИИ — ГРУППИРОВКА
-// =========================================================
+/* =========================================================
+   16. REACTIONS
+   ========================================================= */
 
-function groupReactions(
+function getReactionCounts(
   reactions
 ) {
 
   const result = {
-
     like: 0,
     love: 0,
     laugh: 0,
     wow: 0,
     sad: 0
-
   };
-
 
   reactions.forEach(
     reaction => {
 
       if (
-        result[
+        Object.prototype.hasOwnProperty.call(
+          result,
           reaction.reaction_type
-        ] !== undefined
+        )
       ) {
 
         result[
           reaction.reaction_type
         ]++;
-
       }
 
     }
   );
-
 
   return result;
 }
 
 
-// =========================================================
-// ТЕКУЩАЯ РЕАКЦИЯ ПОЛЬЗОВАТЕЛЯ
-// =========================================================
-
 function getMyReaction(
   reactions
 ) {
 
-  if (!tgUser) {
+  const userId =
+    getTelegramId();
+
+  if (!userId) {
     return null;
   }
 
-
-  const found =
+  const reaction =
     reactions.find(
-      reaction =>
+      item =>
         Number(
-          reaction.user_id
+          item.user_id
         ) ===
-        Number(
-          tgUser.id
-        )
+        Number(userId)
     );
 
-
-  return found
-    ? found.reaction_type
+  return reaction
+    ? reaction.reaction_type
     : null;
 }
 
 
-// =========================================================
-// БЛОК РЕАКЦИЙ СТАТЬИ
-// =========================================================
-
-function renderArticleReactions(
-  reactions
+function renderReactionButton(
+  type,
+  emoji,
+  count,
+  selected
 ) {
-
-  const counts =
-    groupReactions(
-      reactions
-    );
-
-
-  const mine =
-    getMyReaction(
-      reactions
-    );
-
-
-  const buttons = [
-
-    ['like', '👍'],
-    ['love', '❤️'],
-    ['laugh', '😂'],
-    ['wow', '😮'],
-    ['sad', '😢']
-
-  ];
-
 
   return `
-
-    <div class="article-reactions">
-
-      ${
-        buttons.map(
-          ([type, emoji]) => `
-
-            <button
-              type="button"
-              class="reaction-btn ${
-                mine === type
-                  ? 'active'
-                  : ''
-              }"
-              data-reaction="${type}"
-            >
-
-              <span>
-                ${emoji}
-              </span>
-
-              <b>
-                ${counts[type] || 0}
-              </b>
-
-            </button>
-
-          `
-        ).join('')
-      }
-
-    </div>
-
-  `;
-
-}
-
-
-// =========================================================
-// УСТАНОВКА РЕАКЦИИ НА СТАТЬЮ
-// =========================================================
-
-async function setArticleReaction(
-  articleId,
-  reactionType
-) {
-
-  await callApi(
-    'set-article-reaction',
-    {
-      articleId,
-      reactionType
-    }
-  );
-
-}
-
-
-// =========================================================
-// КОММЕНТАРИЙ: ДЕРЕВО
-// =========================================================
-
-function buildCommentTree(
-  comments
-) {
-
-  const map =
-    new Map();
-
-
-  comments.forEach(
-    comment => {
-
-      map.set(
-        comment.id,
-        {
-          ...comment,
-          children: []
-        }
-      );
-
-    }
-  );
-
-
-  const roots = [];
-
-
-  comments.forEach(
-    comment => {
-
-      const current =
-        map.get(
-          comment.id
-        );
-
-
-      if (
-        comment.parent_id &&
-        map.has(
-          comment.parent_id
-        )
-      ) {
-
-        map
-          .get(
-            comment.parent_id
-          )
-          .children
-          .push(
-            current
-          );
-
-      } else {
-
-        roots.push(
-          current
-        );
-
-      }
-
-    }
-  );
-
-
-  return roots;
-}
-
-
-// =========================================================
-// РЕНДЕР ОДНОГО КОММЕНТАРИЯ
-// =========================================================
-
-function renderComment(
-  comment,
-  reactionMap,
-  depth = 0
-) {
-
-  const reactions =
-    reactionMap[
-      comment.id
-    ] || [];
-
-
-  const counts =
-    groupReactions(
-      reactions
-    );
-
-
-  const mine =
-    getMyReaction(
-      reactions
-    );
-
-
-  const isMine =
-    tgUser &&
-    Number(
-      comment.author_id
-    ) ===
-    Number(
-      tgUser.id
-    );
-
-
-  return `
-
-    <div
-      class="comment"
-      data-comment-id="${escapeHtml(comment.id)}"
-      style="--comment-depth:${Math.min(depth, 4)}"
+    <button
+      class="reaction-button ${
+        selected === type
+          ? "active"
+          : ""
+      }"
+      data-reaction-type="${type}"
+      type="button"
     >
 
-      <div class="comment-head">
+      <span>
+        ${emoji}
+      </span>
 
-        <button
-          type="button"
-          class="comment-author"
-          data-author-id="${escapeHtml(
-            String(comment.author_id)
-          )}"
-        >
-          ${escapeHtml(
-            comment.author_name ||
-            'Пользователь'
-          )}
-        </button>
+      <span class="reaction-count">
+        ${count || ""}
+      </span>
 
-        <span class="comment-date">
-          ${fmtDateTime(
-            comment.created_at
-          )}
-        </span>
-
-      </div>
-
-
-      <div class="comment-content">
-        ${escapeHtml(
-          comment.content
-        )}
-      </div>
-
-
-      <div class="comment-actions">
-
-        <button
-          type="button"
-          class="comment-reply-btn"
-          data-comment-id="${escapeHtml(comment.id)}"
-        >
-          Ответить
-        </button>
-
-
-        ${
-          isMine
-            ? `
-              <button
-                type="button"
-                class="comment-delete-btn"
-                data-comment-id="${escapeHtml(comment.id)}"
-              >
-                Удалить
-              </button>
-            `
-            : ''
-        }
-
-
-        <div class="comment-reactions">
-
-          <button
-            type="button"
-            class="comment-reaction-btn ${
-              mine === 'like'
-                ? 'active'
-                : ''
-            }"
-            data-comment-id="${escapeHtml(comment.id)}"
-            data-reaction="like"
-          >
-            👍 ${counts.like || 0}
-          </button>
-
-          <button
-            type="button"
-            class="comment-reaction-btn ${
-              mine === 'love'
-                ? 'active'
-                : ''
-            }"
-            data-comment-id="${escapeHtml(comment.id)}"
-            data-reaction="love"
-          >
-            ❤️ ${counts.love || 0}
-          </button>
-
-        </div>
-
-      </div>
-
-
-      ${
-        comment.children &&
-        comment.children.length
-          ? `
-            <div class="comment-children">
-
-              ${
-                comment.children
-                  .map(
-                    child =>
-                      renderComment(
-                        child,
-                        reactionMap,
-                        depth + 1
-                      )
-                  )
-                  .join('')
-              }
-
-            </div>
-          `
-          : ''
-      }
-
-    </div>
-
+    </button>
   `;
-
 }
 
 
-// =========================================================
-// БЛОК КОММЕНТАРИЕВ
-// =========================================================
-
-function renderCommentsSection(
-  comments,
-  commentReactions
+async function toggleArticleReaction(
+  type
 ) {
 
-  const tree =
-    buildCommentTree(
-      comments
+  try {
+
+    await apiRequest(
+      "toggle-article-reaction",
+      {
+        articleId:
+          state.currentArticle.id,
+
+        reactionType:
+          type
+      }
     );
 
+    await loadArticleMeta(
+      state.currentArticle.id
+    );
 
-  const reactionMap = {};
+    renderArticle(
+      state.currentArticle
+    );
+
+  } catch (error) {
+
+    console.error(error);
+
+    showToast(
+      error.message ||
+      "Не удалось поставить реакцию"
+    );
+  }
+}
 
 
-  commentReactions.forEach(
-    reaction => {
+/* =========================================================
+   17. COMMENTS
+   ========================================================= */
 
-      if (
-        !reactionMap[
-          reaction.comment_id
-        ]
-      ) {
+function renderCommentsSection() {
 
-        reactionMap[
-          reaction.comment_id
-        ] = [];
-
-      }
-
-
-      reactionMap[
-        reaction.comment_id
-      ].push(
-        reaction
-      );
-
-    }
-  );
+  const roots =
+    state.comments.filter(
+      comment =>
+        !comment.parent_id
+    );
 
 
   return `
@@ -2170,15 +1867,20 @@ function renderCommentsSection(
       id="commentsSection"
     >
 
-      <h2>
-        Комментарии
-        <span>
-          ${comments.length}
+      <div class="comments-heading">
+
+        <h2>
+          Комментарии
+        </h2>
+
+        <span class="comments-count">
+          ${state.comments.length}
         </span>
-      </h2>
+
+      </div>
 
 
-      <div
+      <form
         class="comment-form"
         id="commentForm"
       >
@@ -2188,47 +1890,42 @@ function renderCommentsSection(
           class="comment-input"
           rows="3"
           maxlength="2000"
-          placeholder="Напишите комментарий…"
+          placeholder="Напишите комментарий..."
         ></textarea>
-
 
         <div class="comment-form-bottom">
 
-          <span
-            class="reply-indicator"
-            id="replyIndicator"
-            hidden
-          ></span>
+          <span class="comment-author-hint">
+            ${
+              state.profile?.username
+                ? `Вы: ${escapeHtml(
+                    state.profile.username
+                  )}`
+                : "Ваш профиль"
+            }
+          </span>
 
           <button
-            type="button"
-            class="btn btn-primary"
-            id="sendCommentBtn"
+            class="comment-submit"
+            type="submit"
           >
-            Комментировать
+            Отправить
           </button>
 
         </div>
 
-      </div>
+      </form>
 
 
-      <div
-        id="commentsList"
-        class="comments-list"
-      >
+      <div class="comments-list">
 
         ${
-          tree.length
-            ? tree
+          roots.length
+            ? roots
                 .map(
-                  comment =>
-                    renderComment(
-                      comment,
-                      reactionMap
-                    )
+                  renderComment
                 )
-                .join('')
+                .join("")
             : `
               <div class="comments-empty">
                 Пока нет комментариев.
@@ -2240,2807 +1937,1737 @@ function renderCommentsSection(
       </div>
 
     </section>
-
   `;
-
 }
 
 
-// =========================================================
-// ДОБАВЛЕНИЕ КОММЕНТАРИЯ
-// =========================================================
-
-async function addComment(
-  articleId,
-  content,
-  parentId = null
+function renderComment(
+  comment
 ) {
 
-  return await callApi(
-    'add-comment',
-    {
-      articleId,
-      content,
-      parentId
-    }
-  );
-
-}
-
-
-// =========================================================
-// УДАЛЕНИЕ КОММЕНТАРИЯ
-// =========================================================
-
-async function deleteComment(
-  commentId
-) {
-
-  return await callApi(
-    'delete-comment',
-    {
-      commentId
-    }
-  );
-
-}
-
-
-// =========================================================
-// РЕАКЦИЯ КОММЕНТАРИЯ
-// =========================================================
-
-async function setCommentReaction(
-  commentId,
-  reactionType
-) {
-
-  return await callApi(
-    'set-comment-reaction',
-    {
-      commentId,
-      reactionType
-    }
-  );
-
-}
-
-
-// =========================================================
-// ПРОФИЛЬ АВТОРА
-// =========================================================
-
-async function openAuthorProfile(
-  authorId,
-  authorName
-) {
-
-  state.view =
-    'author';
-
-  state.activeAuthorId =
-    authorId;
-
-  state.activeAuthorName =
-    authorName;
-
-
-  setBackButton(
-    true,
-    renderFeed
-  );
-
-
-  const main =
-    document.getElementById(
-      'main'
+  const replies =
+    state.comments.filter(
+      item =>
+        String(
+          item.parent_id
+        ) ===
+        String(comment.id)
     );
 
 
-  main.innerHTML =
-    '<div class="loading">Загрузка статей автора…</div>';
+  const reactionCounts =
+    getReactionCounts(
+      state.commentReactions
+        .filter(
+          item =>
+            String(
+              item.comment_id
+            ) ===
+            String(comment.id)
+        )
+    );
 
 
-  try {
+  const myReaction =
+    getMyReaction(
+      state.commentReactions
+        .filter(
+          item =>
+            String(
+              item.comment_id
+            ) ===
+            String(comment.id)
+        )
+    );
 
-    const articles =
-      await fetchAuthorArticles(
-        authorId
-      );
 
+  return `
 
-    main.innerHTML = `
+    <div
+      class="comment-thread"
+      data-comment-id="${escapeAttribute(
+        comment.id
+      )}"
+    >
 
-      <div class="author-page">
+      <div class="comment">
 
-        <div class="author-page-head">
+        <div class="comment-avatar">
+          ${escapeHtml(
+            getInitials(
+              comment.author_name
+            )
+          )}
+        </div>
 
-          <button
-            type="button"
-            class="author-back-btn"
-            id="authorBackBtn"
-          >
-            ← Назад
-          </button>
+        <div class="comment-main">
 
-          <div>
+          <div class="comment-top">
 
-            <div class="author-page-label">
-              Автор
-            </div>
-
-            <h1>
+            <button
+              class="comment-author"
+              type="button"
+              data-author-id="${escapeAttribute(
+                comment.author_id
+              )}"
+            >
               ${escapeHtml(
-                authorName ||
-                'Пользователь'
+                comment.author_name ||
+                "Пользователь"
               )}
-            </h1>
+            </button>
 
-            <div class="author-page-count">
-              Статей: ${articles.length}
+            <span class="comment-date">
+              ${escapeHtml(
+                formatDateShort(
+                  comment.created_at
+                )
+              )}
+            </span>
+
+          </div>
+
+          <div class="comment-text">
+            ${escapeHtml(
+              comment.content
+            ).replace(
+              /\n/g,
+              "<br>"
+            )}
+          </div>
+
+
+          <div class="comment-actions">
+
+            <button
+              class="comment-action reply-comment-btn"
+              type="button"
+              data-comment-id="${escapeAttribute(
+                comment.id
+              )}"
+            >
+              Ответить
+            </button>
+
+
+            <div class="comment-reactions">
+
+              ${renderCommentReaction(
+                comment.id,
+                "like",
+                "👍",
+                reactionCounts.like,
+                myReaction
+              )}
+
+              ${renderCommentReaction(
+                comment.id,
+                "love",
+                "❤️",
+                reactionCounts.love,
+                myReaction
+              )}
+
             </div>
+
+          </div>
+
+
+          <div
+            class="reply-form-wrap"
+            id="reply-form-${escapeAttribute(
+              comment.id
+            )}"
+            hidden
+          >
+
+            <form
+              class="reply-form"
+              data-parent-id="${escapeAttribute(
+                comment.id
+              )}"
+            >
+
+              <textarea
+                class="comment-input reply-input"
+                rows="2"
+                maxlength="2000"
+                placeholder="Ваш ответ..."
+              ></textarea>
+
+              <div class="reply-form-actions">
+
+                <button
+                  class="comment-cancel"
+                  type="button"
+                >
+                  Отмена
+                </button>
+
+                <button
+                  class="comment-submit"
+                  type="submit"
+                >
+                  Ответить
+                </button>
+
+              </div>
+
+            </form>
 
           </div>
 
         </div>
 
+      </div>
 
-        <div
-          class="author-articles"
-          id="authorArticles"
-        >
 
-          ${
-            articles.length
-              ? articles.map(
-                  article => `
+      ${
+        replies.length
+          ? `
+            <div class="comment-replies">
+              ${replies
+                .map(
+                  renderCommentReply
+                )
+                .join("")}
+            </div>
+          `
+          : ""
+      }
 
-                    <div
-                      class="feed-item"
-                      data-id="${escapeHtml(article.id)}"
-                    >
+    </div>
+  `;
+}
 
-                      ${
-                        article.cover
-                          ? `
-                            <img
-                              class="thumb"
-                              src="${escapeHtml(
-                                article.cover
-                              )}"
-                              alt=""
-                              loading="lazy"
-                            >
-                          `
-                          : ''
-                      }
 
-                      <div class="feed-content">
+function renderCommentReply(
+  comment
+) {
 
-                        <div class="feed-meta">
-                          ${fmtDate(
-                            article.created_at
-                          )}
-                        </div>
+  const reactions =
+    state.commentReactions
+      .filter(
+        item =>
+          String(
+            item.comment_id
+          ) ===
+          String(comment.id)
+      );
 
-                        <h3>
-                          ${escapeHtml(
-                            article.title ||
-                            'Без названия'
-                          )}
-                        </h3>
+  const counts =
+    getReactionCounts(
+      reactions
+    );
 
-                        ${
-                          article.excerpt
-                            ? `
-                              <p>
-                                ${escapeHtml(
-                                  article.excerpt
-                                )}
-                              </p>
-                            `
-                            : ''
-                        }
+  const myReaction =
+    getMyReaction(
+      reactions
+    );
 
-                      </div>
 
-                    </div>
+  return `
 
-                  `
-                ).join('')
-              : `
-                <div class="empty-state">
-                  <h2>
-                    Пока нет статей
-                  </h2>
-                </div>
-              `
-          }
+    <div
+      class="comment reply-comment"
+      data-comment-id="${escapeAttribute(
+        comment.id
+      )}"
+    >
+
+      <div class="comment-avatar">
+        ${escapeHtml(
+          getInitials(
+            comment.author_name
+          )
+        )}
+      </div>
+
+      <div class="comment-main">
+
+        <div class="comment-top">
+
+          <button
+            class="comment-author"
+            type="button"
+            data-author-id="${escapeAttribute(
+              comment.author_id
+            )}"
+          >
+            ${escapeHtml(
+              comment.author_name ||
+              "Пользователь"
+            )}
+          </button>
+
+          <span class="comment-date">
+            ${escapeHtml(
+              formatDateShort(
+                comment.created_at
+              )
+            )}
+          </span>
+
+        </div>
+
+        <div class="comment-text">
+          ${escapeHtml(
+            comment.content
+          ).replace(
+            /\n/g,
+            "<br>"
+          )}
+        </div>
+
+
+        <div class="comment-actions">
+
+          <div class="comment-reactions">
+
+            ${renderCommentReaction(
+              comment.id,
+              "like",
+              "👍",
+              counts.like,
+              myReaction
+            )}
+
+            ${renderCommentReaction(
+              comment.id,
+              "love",
+              "❤️",
+              counts.love,
+              myReaction
+            )}
+
+          </div>
 
         </div>
 
       </div>
 
-    `;
+    </div>
+  `;
+}
 
 
-    document
-      .getElementById(
-        'authorBackBtn'
-      )
-      .addEventListener(
-        'click',
-        renderFeed
-      );
+function renderCommentReaction(
+  commentId,
+  type,
+  emoji,
+  count,
+  selected
+) {
+
+  return `
+    <button
+      class="comment-reaction-button ${
+        selected === type
+          ? "active"
+          : ""
+      }"
+      type="button"
+      data-comment-id="${escapeAttribute(
+        commentId
+      )}"
+      data-reaction-type="${type}"
+    >
+      ${emoji}
+      ${
+        count
+          ? `<span>${count}</span>`
+          : ""
+      }
+    </button>
+  `;
+}
 
 
-    main
-      .querySelectorAll(
-        '.feed-item'
-      )
-      .forEach(
-        item => {
+function bindComments() {
 
-          item.addEventListener(
-            'click',
-            () =>
-              openReader(
-                item.dataset.id
-              )
+  const form =
+    document.getElementById(
+      "commentForm"
+    );
+
+  if (form) {
+
+    form.addEventListener(
+      "submit",
+      async event => {
+
+        event.preventDefault();
+
+        const input =
+          document.getElementById(
+            "commentInput"
           );
 
-        }
-      );
+        const content =
+          input?.value.trim();
 
+        if (!content) {
+
+          showToast(
+            "Введите комментарий"
+          );
+
+          return;
+        }
+
+        await createComment(
+          content,
+          null
+        );
+      }
+    );
+  }
+
+
+  document
+    .querySelectorAll(
+      ".reply-comment-btn"
+    )
+    .forEach(
+      button => {
+
+        button.addEventListener(
+          "click",
+          () => {
+
+            const id =
+              button.dataset.commentId;
+
+            const formWrap =
+              document.getElementById(
+                `reply-form-${id}`
+              );
+
+            if (formWrap) {
+
+              formWrap.hidden =
+                !formWrap.hidden;
+            }
+          }
+        );
+      }
+    );
+
+
+  document
+    .querySelectorAll(
+      ".reply-form"
+    )
+    .forEach(
+      replyForm => {
+
+        replyForm.addEventListener(
+          "submit",
+          async event => {
+
+            event.preventDefault();
+
+            const parentId =
+              replyForm.dataset.parentId;
+
+            const textarea =
+              replyForm.querySelector(
+                "textarea"
+              );
+
+            const content =
+              textarea?.value.trim();
+
+            if (!content) {
+
+              showToast(
+                "Введите ответ"
+              );
+
+              return;
+            }
+
+            await createComment(
+              content,
+              parentId
+            );
+          }
+        );
+
+        const cancel =
+          replyForm.querySelector(
+            ".comment-cancel"
+          );
+
+        if (cancel) {
+
+          cancel.addEventListener(
+            "click",
+            () => {
+
+              const wrap =
+                replyForm.closest(
+                  ".reply-form-wrap"
+                );
+
+              if (wrap) {
+                wrap.hidden = true;
+              }
+
+              replyForm.reset();
+            }
+          );
+        }
+
+      }
+    );
+
+
+  document
+    .querySelectorAll(
+      ".comment-reaction-button"
+    )
+    .forEach(
+      button => {
+
+        button.addEventListener(
+          "click",
+          async () => {
+
+            await toggleCommentReaction(
+              button.dataset.commentId,
+              button.dataset.reactionType
+            );
+          }
+        );
+      }
+    );
+
+
+  document
+    .querySelectorAll(
+      ".comment-author"
+    )
+    .forEach(
+      button => {
+
+        button.addEventListener(
+          "click",
+          () => {
+
+            openAuthor(
+              button.dataset.authorId
+            );
+          }
+        );
+      }
+    );
+}
+
+
+async function createComment(
+  content,
+  parentId
+) {
+
+  try {
+
+    await apiRequest(
+      "create-comment",
+      {
+        articleId:
+          state.currentArticle.id,
+
+        parentId:
+          parentId || null,
+
+        content
+      }
+    );
+
+    await loadArticleMeta(
+      state.currentArticle.id
+    );
+
+    renderArticle(
+      state.currentArticle
+    );
+
+    showToast(
+      parentId
+        ? "Ответ добавлен"
+        : "Комментарий добавлен"
+    );
 
   } catch (error) {
 
     console.error(error);
 
-    main.innerHTML = `
-      <div class="empty-state">
-        <h2>Не удалось загрузить статьи</h2>
-        <p>
-          ${escapeHtml(
-            error.message
-          )}
-        </p>
-      </div>
-    `;
-
+    showToast(
+      error.message ||
+      "Не удалось добавить комментарий"
+    );
   }
-
 }
 
 
-// =========================================================
-// ЧТЕНИЕ СТАТЬИ
-// =========================================================
-
-async function openReader(
-  id
+async function toggleCommentReaction(
+  commentId,
+  type
 ) {
-
-  state.view =
-    'reader';
-
-  state.currentId =
-    id;
-
-
-  setBackButton(
-    true,
-    renderFeed
-  );
-
-
-  const main =
-    document.getElementById(
-      'main'
-    );
-
-
-  main.innerHTML =
-    '<div class="loading">Открываем статью…</div>';
-
 
   try {
 
-    const article =
-      await fetchArticle(
-        id
-      );
-
-
-    if (!article) {
-
-      main.innerHTML = `
-        <div class="empty-state">
-          <h2>Статья не найдена</h2>
-          <p>
-            Возможно, её удалили.
-          </p>
-        </div>
-      `;
-
-      return;
-    }
-
-
-    state.currentArticle =
-      article;
-
-
-    const [
-      articleReactions,
-      comments
-    ] =
-      await Promise.all([
-        fetchArticleReactions(
-          article.id
-        ),
-        fetchComments(
-          article.id
-        )
-      ]);
-
-
-    const commentIds =
-      comments.map(
-        comment => comment.id
-      );
-
-
-    const commentReactions =
-      await fetchCommentReactions(
-        commentIds
-      );
-
-
-    const bodyHtml =
-      renderArticleBlocks(
-        article.blocks
-      );
-
-
-    const shareUrl =
-      getArticleShareUrl(
-        article.id
-      );
-
-
-    const isOwner =
-      tgUser &&
-      Number(
-        article.author_id
-      ) ===
-      Number(
-        tgUser.id
-      );
-
-
-    main.innerHTML = `
-
-      <div class="reader">
-
-        <div class="reader-meta">
-
-          <span>
-            ${fmtDate(
-              article.created_at
-            )}
-          </span>
-
-
-          ${
-            isOwner
-              ? `
-                <button
-                  class="btn btn-danger"
-                  id="deleteBtn"
-                  type="button"
-                >
-                  Удалить
-                </button>
-              `
-              : ''
-          }
-
-        </div>
-
-
-        <h1>
-          ${escapeHtml(
-            article.title ||
-            'Без названия'
-          )}
-        </h1>
-
-
-        ${
-          article.author_name
-            ? `
-              <button
-                type="button"
-                class="reader-author"
-                id="readerAuthorBtn"
-              >
-                ${escapeHtml(
-                  article.author_name
-                )}
-              </button>
-            `
-            : ''
-        }
-
-
-        <div class="reader-body">
-          ${
-            bodyHtml ||
-            `
-              <p class="empty-text">
-                Статья пока пуста.
-              </p>
-            `
-          }
-        </div>
-
-
-        <div class="article-actions chrome">
-
-          ${renderArticleReactions(
-            articleReactions
-          )}
-
-
-          <button
-            type="button"
-            class="btn btn-primary share-btn"
-            id="shareBtn"
-          >
-            Поделиться
-          </button>
-
-        </div>
-
-
-        <div
-          id="commentsHost"
-        >
-          ${renderCommentsSection(
-            comments,
-            commentReactions
-          )}
-        </div>
-
-      </div>
-
-    `;
-
-
-    // -----------------------------------------------------
-    // Автор
-    // -----------------------------------------------------
-
-    const authorBtn =
-      document.getElementById(
-        'readerAuthorBtn'
-      );
-
-
-    if (authorBtn) {
-
-      authorBtn.addEventListener(
-        'click',
-        () => {
-
-          openAuthorProfile(
-            article.author_id,
-            article.author_name
-          );
-
-        }
-      );
-
-    }
-
-
-    // -----------------------------------------------------
-    // Поделиться
-    // -----------------------------------------------------
-
-    const shareBtn =
-      document.getElementById(
-        'shareBtn'
-      );
-
-
-    if (shareBtn) {
-
-      shareBtn.addEventListener(
-        'click',
-        () =>
-          copyArticleLink(
-            article
-          )
-      );
-
-    }
-
-
-    // -----------------------------------------------------
-    // Реакции статьи
-    // -----------------------------------------------------
-
-    document
-      .querySelectorAll(
-        '.reaction-btn'
-      )
-      .forEach(
-        button => {
-
-          button.addEventListener(
-            'click',
-            async () => {
-
-              try {
-
-                await setArticleReaction(
-                  article.id,
-                  button.dataset.reaction
-                );
-
-
-                await refreshReader(
-                  article.id
-                );
-
-
-              } catch (error) {
-
-                console.error(
-                  error
-                );
-
-                showToast(
-                  error.message ||
-                  'Не удалось поставить реакцию'
-                );
-
-              }
-
-            }
-          );
-
-        }
-      );
-
-
-    // -----------------------------------------------------
-    // Комментарий
-    // -----------------------------------------------------
-
-    let replyTo =
-      null;
-
-
-    const commentInput =
-      document.getElementById(
-        'commentInput'
-      );
-
-
-    const replyIndicator =
-      document.getElementById(
-        'replyIndicator'
-      );
-
-
-    function clearReply() {
-
-      replyTo =
-        null;
-
-      if (replyIndicator) {
-
-        replyIndicator.hidden =
-          true;
-
-        replyIndicator.textContent =
-          '';
-
+    await apiRequest(
+      "toggle-comment-reaction",
+      {
+        commentId,
+        reactionType:
+          type
       }
-
-    }
-
-
-    document
-      .querySelectorAll(
-        '.comment-reply-btn'
-      )
-      .forEach(
-        button => {
-
-          button.addEventListener(
-            'click',
-            () => {
-
-              replyTo =
-                button.dataset.commentId;
-
-
-              const comment =
-                comments.find(
-                  item =>
-                    item.id ===
-                    replyTo
-                );
-
-
-              if (
-                replyIndicator
-              ) {
-
-                replyIndicator.hidden =
-                  false;
-
-                replyIndicator.innerHTML = `
-                  Ответ пользователю
-                  <b>
-                    ${escapeHtml(
-                      comment
-                        ? comment.author_name
-                        : 'Пользователю'
-                    )}
-                  </b>
-
-                  <button
-                    type="button"
-                    id="cancelReplyBtn"
-                  >
-                    ×
-                  </button>
-                `;
-
-
-                const cancel =
-                  document.getElementById(
-                    'cancelReplyBtn'
-                  );
-
-
-                if (cancel) {
-
-                  cancel.addEventListener(
-                    'click',
-                    clearReply
-                  );
-
-                }
-
-              }
-
-
-              commentInput.focus();
-
-            }
-          );
-
-        }
-      );
-
-
-    const sendCommentBtn =
-      document.getElementById(
-        'sendCommentBtn'
-      );
-
-
-    if (sendCommentBtn) {
-
-      sendCommentBtn.addEventListener(
-        'click',
-        async () => {
-
-          const content =
-            commentInput.value.trim();
-
-
-          if (!content) {
-
-            showToast(
-              'Напишите комментарий'
-            );
-
-            return;
-
-          }
-
-
-          sendCommentBtn.disabled =
-            true;
-
-
-          try {
-
-            await addComment(
-              article.id,
-              content,
-              replyTo
-            );
-
-
-            commentInput.value =
-              '';
-
-            clearReply();
-
-            showToast(
-              'Комментарий добавлен'
-            );
-
-
-            await refreshReader(
-              article.id
-            );
-
-
-          } catch (error) {
-
-            console.error(
-              error
-            );
-
-            showToast(
-              error.message ||
-              'Не удалось добавить комментарий'
-            );
-
-          } finally {
-
-            sendCommentBtn.disabled =
-              false;
-
-          }
-
-        }
-      );
-
-    }
-
-
-    // -----------------------------------------------------
-    // Удаление комментариев
-    // -----------------------------------------------------
-
-    document
-      .querySelectorAll(
-        '.comment-delete-btn'
-      )
-      .forEach(
-        button => {
-
-          button.addEventListener(
-            'click',
-            async () => {
-
-              if (
-                !confirm(
-                  'Удалить комментарий?'
-                )
-              ) {
-                return;
-              }
-
-
-              try {
-
-                await deleteComment(
-                  button.dataset.commentId
-                );
-
-
-                showToast(
-                  'Комментарий удалён'
-                );
-
-
-                await refreshReader(
-                  article.id
-                );
-
-
-              } catch (error) {
-
-                console.error(
-                  error
-                );
-
-                showToast(
-                  error.message ||
-                  'Не удалось удалить комментарий'
-                );
-
-              }
-
-            }
-          );
-
-        }
-      );
-
-
-    // -----------------------------------------------------
-    // Реакции комментариев
-    // -----------------------------------------------------
-
-    document
-      .querySelectorAll(
-        '.comment-reaction-btn'
-      )
-      .forEach(
-        button => {
-
-          button.addEventListener(
-            'click',
-            async () => {
-
-              try {
-
-                await setCommentReaction(
-                  button.dataset.commentId,
-                  button.dataset.reaction
-                );
-
-
-                await refreshReader(
-                  article.id
-                );
-
-
-              } catch (error) {
-
-                console.error(
-                  error
-                );
-
-                showToast(
-                  error.message ||
-                  'Не удалось поставить реакцию'
-                );
-
-              }
-
-            }
-          );
-
-        }
-      );
-
-
-    // -----------------------------------------------------
-    // Удаление статьи
-    // -----------------------------------------------------
-
-    const deleteBtn =
-      document.getElementById(
-        'deleteBtn'
-      );
-
-
-    if (deleteBtn) {
-
-      deleteBtn.addEventListener(
-        'click',
-        async () => {
-
-          if (
-            !confirm(
-              'Удалить статью безвозвратно?'
-            )
-          ) {
-
-            return;
-
-          }
-
-
-          try {
-
-            await callApi(
-              'delete-article',
-              {
-                articleId:
-                  article.id
-              }
-            );
-
-
-            showToast(
-              'Статья удалена'
-            );
-
-
-            await renderFeed();
-
-
-          } catch (error) {
-
-            console.error(
-              error
-            );
-
-            showToast(
-              error.message ||
-              'Не удалось удалить статью'
-            );
-
-          }
-
-        }
-      );
-
-    }
-
+    );
+
+    await loadArticleMeta(
+      state.currentArticle.id
+    );
+
+    renderArticle(
+      state.currentArticle
+    );
 
   } catch (error) {
 
-    console.error(
-      'openReader:',
-      error
+    console.error(error);
+
+    showToast(
+      error.message ||
+      "Не удалось поставить реакцию"
     );
-
-
-    main.innerHTML = `
-      <div class="empty-state">
-        <h2>
-          Не удалось открыть статью
-        </h2>
-
-        <p>
-          ${escapeHtml(
-            error.message ||
-            'Попробуйте ещё раз.'
-          )}
-        </p>
-      </div>
-    `;
-
   }
-
 }
 
 
-// =========================================================
-// ПЕРЕЗАГРУЗКА СТАТЬИ
-// =========================================================
+/* =========================================================
+   18. ARTICLE PAGE EVENTS
+   ========================================================= */
 
-async function refreshReader(
-  id
-) {
+function bindArticlePage() {
 
-  if (
-    state.view !== 'reader'
-  ) {
-
-    return;
-
-  }
-
-
-  await openReader(
-    id
-  );
-
-}
-
-
-// =========================================================
-// НОВЫЙ ЧЕРНОВИК
-// =========================================================
-
-function newDraft() {
-
-  return {
-
-    title: '',
-
-    blocks: [
-      {
-        type: 'text',
-        html: ''
-      }
-    ]
-
-  };
-
-}
-
-
-// =========================================================
-// КОМПРЕССИЯ ИЗОБРАЖЕНИЯ
-// =========================================================
-
-function compressImageFile(
-  file,
-  maxW = 1200,
-  quality = 0.82
-) {
-
-  return new Promise(
-    (resolve, reject) => {
-
-      const reader =
-        new FileReader();
-
-
-      reader.onload =
-        event => {
-
-          const img =
-            new Image();
-
-
-          img.onload =
-            () => {
-
-              let width =
-                img.width;
-
-              let height =
-                img.height;
-
-
-              if (
-                width > maxW
-              ) {
-
-                height =
-                  Math.round(
-                    height *
-                    (maxW / width)
-                  );
-
-                width =
-                  maxW;
-
-              }
-
-
-              const canvas =
-                document.createElement(
-                  'canvas'
-                );
-
-
-              canvas.width =
-                width;
-
-              canvas.height =
-                height;
-
-
-              const context =
-                canvas.getContext(
-                  '2d'
-                );
-
-
-              context.drawImage(
-                img,
-                0,
-                0,
-                width,
-                height
-              );
-
-
-              resolve(
-                canvas.toDataURL(
-                  'image/jpeg',
-                  quality
-                )
-              );
-
-            };
-
-
-          img.onerror =
-            reject;
-
-
-          img.src =
-            event.target.result;
-
-        };
-
-
-      reader.onerror =
-        reject;
-
-
-      reader.readAsDataURL(
-        file
-      );
-
-    }
-  );
-
-}
-
-
-// =========================================================
-// ЗАГРУЗКА ИЗОБРАЖЕНИЯ
-// =========================================================
-
-async function uploadImage(
-  dataUrl,
-  filename
-) {
-
-  const response =
-    await fetch(
-      dataUrl
-    );
-
-
-  const blob =
-    await response.blob();
-
-
-  const safeName =
-    String(
-      filename || 'image.jpg'
-    )
-      .replace(
-        /[^a-zA-Z0-9._-]/g,
-        '_'
-      );
-
-
-  const path =
-    `${Date.now()}-` +
-    `${Math.random()
-      .toString(36)
-      .slice(2, 10)}-` +
-    safeName;
-
-
-  const {
-    error
-  } =
-    await db
-      .storage
-      .from('images')
-      .upload(
-        path,
-        blob,
-        {
-          contentType:
-            blob.type ||
-            'image/jpeg',
-          upsert: false
-        }
-      );
-
-
-  if (error) {
-    throw error;
-  }
-
-
-  const {
-    data
-  } =
-    db
-      .storage
-      .from('images')
-      .getPublicUrl(
-        path
-      );
-
-
-  return data.publicUrl;
-
-}
-
-
-// =========================================================
-// РЕДАКТОР
-// =========================================================
-
-let activeBlockEl =
-  null;
-
-
-function openEditor() {
-
-  state.view =
-    'editor';
-
-  state.draft =
-    newDraft();
-
-
-  setBackButton(
-    true,
-    () => {
-
-      if (
-        confirm(
-          'Отменить редактирование? Черновик будет потерян.'
-        )
-      ) {
-
-        renderFeed();
-
-      }
-
-    }
-  );
-
-
-  renderEditor();
-
-}
-
-
-// =========================================================
-// RENDER EDITOR
-// =========================================================
-
-function renderEditor() {
-
-  const main =
+  const back =
     document.getElementById(
-      'main'
+      "backHomeBtn"
+    );
+
+  if (back) {
+
+    back.addEventListener(
+      "click",
+      () => {
+
+        history.replaceState(
+          null,
+          "",
+          window.location.pathname
+        );
+
+        renderHome();
+      }
+    );
+  }
+
+
+  const share =
+    document.getElementById(
+      "shareArticleBtn"
+    );
+
+  if (share) {
+
+    share.addEventListener(
+      "click",
+      copyArticleLink
+    );
+  }
+
+
+  const authorButton =
+    document.getElementById(
+      "articleAuthorBtn"
+    );
+
+  if (authorButton) {
+
+    authorButton.addEventListener(
+      "click",
+      () => {
+
+        openAuthor(
+          authorButton.dataset.authorId
+        );
+      }
+    );
+  }
+
+
+  document
+    .querySelectorAll(
+      ".reaction-button"
+    )
+    .forEach(
+      button => {
+
+        button.addEventListener(
+          "click",
+          async () => {
+
+            await toggleArticleReaction(
+              button.dataset.reactionType
+            );
+          }
+        );
+      }
     );
 
 
-  const draft =
-    state.draft;
+  bindComments();
+}
+
+
+async function copyArticleLink() {
+
+  const article =
+    state.currentArticle;
+
+  if (!article) {
+    return;
+  }
+
+  const url =
+    getArticleUrl(
+      article.id
+    );
+
+  try {
+
+    await navigator.clipboard.writeText(
+      url
+    );
+
+    showToast(
+      "Ссылка скопирована"
+    );
+
+  } catch {
+
+    const textarea =
+      document.createElement(
+        "textarea"
+      );
+
+    textarea.value =
+      url;
+
+    textarea.style.position =
+      "fixed";
+
+    textarea.style.opacity =
+      "0";
+
+    document.body.appendChild(
+      textarea
+    );
+
+    textarea.select();
+
+    try {
+      document.execCommand(
+        "copy"
+      );
+
+      showToast(
+        "Ссылка скопирована"
+      );
+
+    } catch {
+
+      showToast(
+        url
+      );
+    }
+
+    textarea.remove();
+  }
+}
+
+
+/* =========================================================
+   19. AUTHOR PAGE
+   ========================================================= */
+
+function openAuthor(
+  authorId
+) {
+
+  const articles =
+    state.articles.filter(
+      article =>
+        String(
+          article.author_id
+        ) ===
+        String(authorId)
+    );
+
+  const authorName =
+    articles[0]?.author_name ||
+    "Пользователь";
+
+
+  state.page =
+    "author";
+
+  main.innerHTML = `
+
+    <section class="author-page">
+
+      <button
+        class="back-button"
+        id="backFromAuthorBtn"
+        type="button"
+      >
+        ← Все статьи
+      </button>
+
+
+      <div class="author-profile-card">
+
+        <div class="author-avatar large">
+          ${escapeHtml(
+            getInitials(
+              authorName
+            )
+          )}
+        </div>
+
+        <div>
+
+          <h1 class="author-page-title">
+            ${escapeHtml(
+              authorName
+            )}
+          </h1>
+
+          <div class="author-page-count">
+            Статей: ${articles.length}
+          </div>
+
+        </div>
+
+      </div>
+
+
+      <div class="author-articles">
+
+        ${
+          articles.length
+            ? articles
+                .sort(
+                  (a, b) =>
+                    new Date(
+                      b.created_at
+                    ) -
+                    new Date(
+                      a.created_at
+                    )
+                )
+                .map(
+                  renderArticleCard
+                )
+                .join("")
+            : `
+              <div class="empty-state">
+                Статей пока нет.
+              </div>
+            `
+        }
+
+      </div>
+
+    </section>
+  `;
+
+
+  const back =
+    document.getElementById(
+      "backFromAuthorBtn"
+    );
+
+  if (back) {
+
+    back.addEventListener(
+      "click",
+      renderHome
+    );
+  }
+
+
+  bindArticleCards();
+}
+
+
+/* =========================================================
+   20. PROFILE PAGE
+   ========================================================= */
+
+async function renderProfilePage() {
+
+  state.page =
+    "profile";
+
+  setLoading(
+    "Загрузка профиля…"
+  );
+
+  await loadProfile();
+
+  const userId =
+    getTelegramId();
+
+  const myArticles =
+    state.articles.filter(
+      article =>
+        Number(
+          article.author_id
+        ) ===
+        Number(userId)
+    );
+
+
+  let myComments = [];
+
+  if (userId) {
+
+    const {
+      data,
+      error
+    } =
+      await supabaseClient
+        .from("article_comments")
+        .select("*")
+        .eq(
+          "author_id",
+          userId
+        )
+        .order(
+          "created_at",
+          {
+            ascending: false
+          }
+        );
+
+    if (!error) {
+      myComments =
+        data || [];
+    }
+  }
+
+
+  const username =
+    state.profile?.username ||
+    "Пользователь";
 
 
   main.innerHTML = `
 
-    <div class="editor">
+    <section class="profile-page">
 
-      <input
-        class="editor-title-input"
-        id="titleInput"
-        placeholder="Заголовок статьи"
-        value="${escapeHtml(
-          draft.title
-        )}"
-      >
+      <div class="profile-head">
 
+        <div class="profile-avatar">
+          ${escapeHtml(
+            getInitials(
+              username
+            )
+          )}
+        </div>
 
-      <div
-        class="toolbar chrome"
-        id="toolbar"
-      >
+        <div>
 
-        <button
-          type="button"
-          data-cmd="bold"
-        >
-          B
-        </button>
+          <h1 class="profile-title">
+            Профиль
+          </h1>
 
-        <button
-          type="button"
-          data-cmd="italic"
-        >
-          I
-        </button>
+          <div class="profile-name">
+            ${escapeHtml(
+              username
+            )}
+          </div>
 
-        <button
-          type="button"
-          data-cmd="underline"
-        >
-          U
-        </button>
+        </div>
 
       </div>
 
 
-      <div id="blocksHost"></div>
+      <section class="profile-settings-card">
 
+        <h2>
+          Мой ник
+        </h2>
 
-      <div class="add-row">
-
-        <button
-          type="button"
-          class="add-btn"
-          id="addTextBtn"
+        <form
+          id="profileForm"
+          class="profile-form"
         >
-          ＋ Текст
-        </button>
 
-        <button
-          type="button"
-          class="add-btn"
-          id="addImageBtn"
-        >
-          ＋ Картинка
-        </button>
+          <input
+            id="profileUsername"
+            class="profile-input"
+            type="text"
+            maxlength="30"
+            minlength="2"
+            value="${escapeAttribute(
+              username === "Пользователь"
+                ? ""
+                : username
+            )}"
+            placeholder="Введите ник"
+          >
 
-      </div>
+          <button
+            class="profile-save"
+            type="submit"
+          >
+            Сохранить
+          </button>
 
+        </form>
 
-      <button
-        type="button"
-        class="btn btn-primary"
-        id="publishBtn"
-        style="width:100%;padding:14px;"
-      >
-        Опубликовать
-      </button>
-
-
-      <input
-        type="file"
-        accept="image/*"
-        id="fileInput"
-        style="display:none"
-      >
+      </section>
 
 
-      <div
-        class="hint chrome"
-        id="editorHint"
-      ></div>
+      <section class="profile-stats">
 
-    </div>
+        <div class="profile-stat">
 
+          <strong>
+            ${myArticles.length}
+          </strong>
+
+          <span>
+            Статей
+          </span>
+
+        </div>
+
+
+        <div class="profile-stat">
+
+          <strong>
+            ${myComments.length}
+          </strong>
+
+          <span>
+            Комментариев
+          </span>
+
+        </div>
+
+      </section>
+
+
+      <section class="profile-section">
+
+        <h2>
+          Мои статьи
+        </h2>
+
+        ${
+          myArticles.length
+            ? `
+              <div class="profile-articles">
+                ${myArticles
+                  .sort(
+                    (a, b) =>
+                      new Date(
+                        b.created_at
+                      ) -
+                      new Date(
+                        a.created_at
+                      )
+                  )
+                  .map(
+                    renderArticleCard
+                  )
+                  .join("")}
+              </div>
+            `
+            : `
+              <div class="profile-empty">
+                Вы ещё не опубликовали
+                ни одной статьи.
+              </div>
+            `
+        }
+
+      </section>
+
+
+      <section class="profile-section">
+
+        <h2>
+          Мои комментарии
+        </h2>
+
+        ${
+          myComments.length
+            ? `
+              <div class="my-comments-list">
+                ${myComments
+                  .map(
+                    renderMyComment
+                  )
+                  .join("")}
+              </div>
+            `
+            : `
+              <div class="profile-empty">
+                Вы ещё не оставляли
+                комментариев.
+              </div>
+            `
+        }
+
+      </section>
+
+    </section>
   `;
 
 
-  document
-    .getElementById(
-      'titleInput'
-    )
-    .addEventListener(
-      'input',
-      event => {
+  bindProfilePage();
+}
 
-        draft.title =
-          event.target.value;
 
-      }
+function renderMyComment(
+  comment
+) {
+
+  const article =
+    state.articles.find(
+      item =>
+        String(item.id) ===
+        String(comment.article_id)
     );
 
 
-  document
-    .getElementById(
-      'toolbar'
-    )
-    .querySelectorAll(
-      'button'
-    )
-    .forEach(
-      button => {
+  return `
 
-        button.addEventListener(
-          'mousedown',
-          event => {
+    <button
+      class="my-comment-item"
+      type="button"
+      data-article-id="${escapeAttribute(
+        comment.article_id
+      )}"
+    >
 
-            event.preventDefault();
-
-
-            if (
-              !activeBlockEl
-            ) {
-
-              return;
-
-            }
-
-
-            document.execCommand(
-              button.dataset.cmd,
-              false,
-              null
-            );
-
-
-            activeBlockEl.dispatchEvent(
-              new Event(
-                'input',
-                {
-                  bubbles: true
-                }
-              )
-            );
-
-          }
-        );
-
-      }
-    );
-
-
-  document
-    .getElementById(
-      'addTextBtn'
-    )
-    .addEventListener(
-      'click',
-      () => {
-
-        draft.blocks.push(
-          {
-            type: 'text',
-            html: ''
-          }
-        );
-
-
-        renderBlocks();
-
-      }
-    );
-
-
-  document
-    .getElementById(
-      'addImageBtn'
-    )
-    .addEventListener(
-      'click',
-      () => {
-
-        document
-          .getElementById(
-            'fileInput'
+      <div class="my-comment-date">
+        ${escapeHtml(
+          formatDateShort(
+            comment.created_at
           )
-          .click();
+        )}
+      </div>
 
-      }
+      <div class="my-comment-article">
+        ${
+          article
+            ? escapeHtml(
+                article.title
+              )
+            : "Статья"
+        }
+      </div>
+
+      <div class="my-comment-text">
+        ${escapeHtml(
+          comment.content
+        )}
+      </div>
+
+    </button>
+  `;
+}
+
+
+function bindProfilePage() {
+
+  const form =
+    document.getElementById(
+      "profileForm"
     );
 
+  if (form) {
 
-  document
-    .getElementById(
-      'fileInput'
-    )
-    .addEventListener(
-      'change',
+    form.addEventListener(
+      "submit",
       async event => {
 
-        const file =
-          event.target.files[0];
+        event.preventDefault();
 
+        const input =
+          document.getElementById(
+            "profileUsername"
+          );
 
-        if (!file) {
+        const username =
+          input?.value.trim();
+
+        if (!username) {
+
+          showToast(
+            "Введите ник"
+          );
+
           return;
         }
 
-
-        const hint =
-          document.getElementById(
-            'editorHint'
-          );
-
-
-        hint.textContent =
-          'Обрабатываем изображение…';
-
-
         try {
 
-          const dataUrl =
-            await compressImageFile(
-              file
+          const data =
+            await apiRequest(
+              "set-profile",
+              {
+                username
+              }
             );
 
+          state.profile =
+            data.profile;
 
-          draft.blocks.push(
-            {
-              type: 'image',
-              src: dataUrl,
-              caption: '',
-              _pendingFile: true
-            }
+          state.articles =
+            state.articles.map(
+              article => {
+
+                if (
+                  Number(
+                    article.author_id
+                  ) ===
+                  Number(
+                    getTelegramId()
+                  )
+                ) {
+
+                  return {
+                    ...article,
+                    author_name:
+                      state.profile.username
+                  };
+                }
+
+                return article;
+              }
+            );
+
+          showToast(
+            "Профиль сохранён"
           );
 
-
-          renderBlocks();
-
+          renderProfilePage();
 
         } catch (error) {
 
-          console.error(
-            error
-          );
+          console.error(error);
 
           showToast(
-            'Не удалось обработать изображение'
+            error.message ||
+            "Не удалось сохранить профиль"
           );
-
         }
 
+      }
+    );
+  }
 
-        hint.textContent =
-          '';
 
-        event.target.value =
-          '';
+  document
+    .querySelectorAll(
+      ".profile-articles .article-card"
+    )
+    .forEach(
+      card => {
+
+        card.addEventListener(
+          "click",
+          () => {
+
+            openArticle(
+              card.dataset.articleId
+            );
+          }
+        );
 
       }
     );
 
 
   document
-    .getElementById(
-      'publishBtn'
+    .querySelectorAll(
+      ".my-comment-item"
     )
-    .addEventListener(
-      'click',
-      publishDraft
+    .forEach(
+      item => {
+
+        item.addEventListener(
+          "click",
+          () => {
+
+            openArticle(
+              item.dataset.articleId
+            );
+          }
+        );
+      }
     );
-
-
-  renderBlocks();
-
 }
 
 
-// =========================================================
-// РЕНДЕР БЛОКОВ РЕДАКТОРА
-// =========================================================
+/* =========================================================
+   21. NEW ARTICLE
+   ========================================================= */
 
-function renderBlocks() {
+function renderNewArticlePage() {
 
-  const host =
+  state.page =
+    "new-article";
+
+
+  main.innerHTML = `
+
+    <section class="editor-page">
+
+      <button
+        class="back-button"
+        id="backFromEditorBtn"
+        type="button"
+      >
+        ← Назад
+      </button>
+
+
+      <h1 class="editor-title">
+        Новая статья
+      </h1>
+
+
+      <form
+        id="articleForm"
+        class="article-form"
+      >
+
+        <label class="form-label">
+
+          <span>
+            Название
+          </span>
+
+          <input
+            id="articleTitle"
+            class="form-input"
+            type="text"
+            maxlength="200"
+            required
+            placeholder="Название статьи"
+          >
+
+        </label>
+
+
+        <label class="form-label">
+
+          <span>
+            Краткое описание
+          </span>
+
+          <textarea
+            id="articleExcerpt"
+            class="form-input"
+            rows="4"
+            maxlength="500"
+            placeholder="Краткое описание"
+          ></textarea>
+
+        </label>
+
+
+        <label class="form-label">
+
+          <span>
+            Обложка
+          </span>
+
+          <input
+            id="articleCover"
+            class="form-input"
+            type="url"
+            placeholder="https://..."
+          >
+
+        </label>
+
+
+        <label class="form-label">
+
+          <span>
+            Текст статьи
+          </span>
+
+          <textarea
+            id="articleContent"
+            class="form-input article-editor-textarea"
+            rows="16"
+            placeholder="Текст статьи..."
+            required
+          ></textarea>
+
+        </label>
+
+
+        <div class="editor-actions">
+
+          <button
+            class="profile-save"
+            type="submit"
+          >
+            Опубликовать
+          </button>
+
+        </div>
+
+      </form>
+
+    </section>
+  `;
+
+
+  const back =
     document.getElementById(
-      'blocksHost'
+      "backFromEditorBtn"
     );
 
+  if (back) {
 
-  if (!host) {
-    return;
+    back.addEventListener(
+      "click",
+      renderHome
+    );
   }
 
 
-  const draft =
-    state.draft;
-
-
-  host.innerHTML =
-    draft.blocks
-      .map(
-        (block, index) => {
-
-          if (
-            block.type === 'text'
-          ) {
-
-            return `
-
-              <div
-                class="block"
-                data-i="${index}"
-              >
-
-                <button
-                  type="button"
-                  class="block-remove"
-                  data-act="del"
-                  data-i="${index}"
-                >
-                  ✕
-                </button>
-
-
-                <div
-                  class="block-text"
-                  contenteditable="true"
-                  data-i="${index}"
-                  data-placeholder="Текст абзаца…"
-                >
-                  ${sanitizeHtml(
-                    block.html || ''
-                  )}
-                </div>
-
-              </div>
-
-            `;
-
-          }
-
-
-          if (
-            block.type === 'image'
-          ) {
-
-            return `
-
-              <div
-                class="block block-image-wrap"
-                data-i="${index}"
-              >
-
-                <button
-                  type="button"
-                  class="block-remove"
-                  data-act="del"
-                  data-i="${index}"
-                >
-                  ✕
-                </button>
-
-
-                <img
-                  src="${escapeHtml(
-                    block.src || ''
-                  )}"
-                  alt=""
-                >
-
-
-                <input
-                  class="block-caption"
-                  data-i="${index}"
-                  placeholder="Подпись (необязательно)"
-                  value="${escapeHtml(
-                    block.caption || ''
-                  )}"
-                >
-
-              </div>
-
-            `;
-
-          }
-
-
-          return '';
-
-        }
-      )
-      .join('');
-
-
-  host
-    .querySelectorAll(
-      '.block-text'
-    )
-    .forEach(
-      element => {
-
-        element.addEventListener(
-          'focus',
-          () => {
-
-            activeBlockEl =
-              element;
-
-          }
-        );
-
-
-        element.addEventListener(
-          'input',
-          event => {
-
-            const index =
-              Number(
-                event.target.dataset.i
-              );
-
-
-            draft.blocks[
-              index
-            ].html =
-              sanitizeHtml(
-                event.target.innerHTML
-              );
-
-          }
-        );
-
-      }
+  const form =
+    document.getElementById(
+      "articleForm"
     );
 
+  if (form) {
 
-  host
-    .querySelectorAll(
-      '.block-caption'
-    )
-    .forEach(
-      element => {
-
-        element.addEventListener(
-          'input',
-          event => {
-
-            const index =
-              Number(
-                event.target.dataset.i
-              );
-
-
-            draft.blocks[
-              index
-            ].caption =
-              event.target.value;
-
-          }
-        );
-
-      }
+    form.addEventListener(
+      "submit",
+      createArticleFromForm
     );
-
-
-  host
-    .querySelectorAll(
-      '[data-act="del"]'
-    )
-    .forEach(
-      button => {
-
-        button.addEventListener(
-          'click',
-          () => {
-
-            const index =
-              Number(
-                button.dataset.i
-              );
-
-
-            draft.blocks.splice(
-              index,
-              1
-            );
-
-
-            renderBlocks();
-
-          }
-        );
-
-      }
-    );
-
+  }
 }
 
 
-// =========================================================
-// ПУБЛИКАЦИЯ
-// =========================================================
+async function createArticleFromForm(
+  event
+) {
 
-async function publishDraft() {
+  event.preventDefault();
 
-  const draft =
-    state.draft;
+  const title =
+    document
+      .getElementById(
+        "articleTitle"
+      )
+      .value
+      .trim();
+
+  const excerpt =
+    document
+      .getElementById(
+        "articleExcerpt"
+      )
+      .value
+      .trim();
+
+  const cover =
+    document
+      .getElementById(
+        "articleCover"
+      )
+      .value
+      .trim();
+
+  const content =
+    document
+      .getElementById(
+        "articleContent"
+      )
+      .value
+      .trim();
 
 
-  const hasContent =
-    draft.title.trim() ||
-    draft.blocks.some(
-      block => {
-
-        if (
-          block.type === 'text'
-        ) {
-
-          return (
-            block.html
-              .replace(
-                /<[^>]+>/g,
-                ''
-              )
-              .trim()
-          );
-
-        }
-
-
-        return (
-          block.type === 'image'
-        );
-
-      }
-    );
-
-
-  if (!hasContent) {
+  if (!title) {
 
     showToast(
-      'Добавьте заголовок или содержимое'
+      "Введите название статьи"
     );
 
     return;
-
   }
 
 
-  const hint =
-    document.getElementById(
-      'editorHint'
+  if (!content) {
+
+    showToast(
+      "Введите текст статьи"
     );
 
-
-  const publishBtn =
-    document.getElementById(
-      'publishBtn'
-    );
-
-
-  publishBtn.disabled =
-    true;
-
-
-  hint.textContent =
-    'Публикуем…';
+    return;
+  }
 
 
   try {
 
-    // -----------------------------------------------------
-    // Загружаем изображения
-    // -----------------------------------------------------
-
-    for (
-      const block
-      of draft.blocks
-    ) {
-
-      if (
-        block.type === 'image' &&
-        block._pendingFile
-      ) {
-
-        const url =
-          await uploadImage(
-            block.src,
-            'image.jpg'
-          );
-
-
-        block.src =
-          url;
-
-
-        delete block._pendingFile;
-
-      }
-
-    }
-
-
-    // -----------------------------------------------------
-    // Excerpt
-    // -----------------------------------------------------
-
-    const firstText =
-      draft.blocks.find(
-        block =>
-          block.type === 'text' &&
-          block.html.trim()
-      );
-
-
-    const excerpt =
-      firstText
-        ? firstText.html
-            .replace(
-              /<[^>]+>/g,
-              ''
-            )
-            .trim()
-            .slice(
-              0,
-              500
-            )
-        : '';
-
-
-    const firstImage =
-      draft.blocks.find(
-        block =>
-          block.type === 'image'
-      );
-
-
-    // -----------------------------------------------------
-    // Сохраняем через Edge Function
-    // -----------------------------------------------------
-
     const result =
-      await callApi(
-        'create-article',
+      await apiRequest(
+        "create-article",
         {
           article: {
 
-            title:
-              draft.title
-                .trim() ||
-              'Без названия',
+            title,
 
             excerpt,
 
             cover:
-              firstImage
-                ? firstImage.src
-                : null,
+              cover ||
+              null,
 
-            blocks:
-              draft.blocks
-
+            blocks: [
+              {
+                type: "text",
+                content
+              }
+            ]
           }
         }
       );
 
 
+    if (result.article) {
+
+      state.articles.unshift(
+        result.article
+      );
+    }
+
+
     showToast(
-      'Статья опубликована'
+      "Статья опубликована"
     );
 
 
     if (
-      result.article &&
-      result.article.id
+      result.article
     ) {
 
-      await openReader(
+      openArticle(
         result.article.id
       );
 
     } else {
 
-      await renderFeed();
-
+      renderHome();
     }
 
-
   } catch (error) {
 
-    console.error(
-      'publishDraft:',
-      error
-    );
-
-
-    hint.textContent =
-      '';
-
+    console.error(error);
 
     showToast(
-      'Ошибка публикации: ' +
-      (
-        error.message ||
-        'неизвестная ошибка'
-      )
+      error.message ||
+      "Не удалось создать статью"
     );
-
-
-  } finally {
-
-    publishBtn.disabled =
-      false;
-
   }
-
 }
 
 
-// =========================================================
-// ПРОФИЛЬ — СТАТИСТИКА
-// =========================================================
-
-async function getProfileStats() {
-
-  if (!tgUser) {
-
-    return {
-
-      articles: 0,
-      comments: 0
-
-    };
-
-  }
-
-
-  const [
-    articlesResult,
-    commentsResult
-  ] =
-    await Promise.all([
-
-      db
-        .from('articles')
-        .select(
-          'id',
-          {
-            count: 'exact',
-            head: true
-          }
-        )
-        .eq(
-          'author_id',
-          tgUser.id
-        ),
-
-      db
-        .from('article_comments')
-        .select(
-          'id',
-          {
-            count: 'exact',
-            head: true
-          }
-        )
-        .eq(
-          'author_id',
-          tgUser.id
-        )
-
-    ]);
-
-
-  if (
-    articlesResult.error
-  ) {
-
-    throw articlesResult.error;
-
-  }
-
-
-  if (
-    commentsResult.error
-  ) {
-
-    throw commentsResult.error;
-
-  }
-
-
-  return {
-
-    articles:
-      articlesResult.count || 0,
-
-    comments:
-      commentsResult.count || 0
-
-  };
-
-}
-
-
-// =========================================================
-// ПРОФИЛЬ
-// =========================================================
-
-async function openProfile() {
-
-  state.view =
-    'profile';
-
-
-  setBackButton(
-    true,
-    renderFeed
-  );
-
-
-  const main =
-    document.getElementById(
-      'main'
-    );
-
-
-  main.innerHTML =
-    '<div class="loading">Загружаем профиль…</div>';
-
-
-  try {
-
-    const [
-      profile,
-      stats
-    ] =
-      await Promise.all([
-        loadMyProfile(),
-        getProfileStats()
-      ]);
-
-
-    const displayName =
-      profile &&
-      profile.username
-        ? profile.username
-        : 'Пользователь';
-
-
-    main.innerHTML = `
-
-      <div class="profile-page">
-
-        <div class="profile-card chrome">
-
-          <div class="profile-avatar">
-            ${escapeHtml(
-              displayName
-                .charAt(0)
-                .toUpperCase()
-            )}
-          </div>
-
-
-          <div class="profile-name">
-            ${escapeHtml(
-              displayName
-            )}
-          </div>
-
-
-          <div class="profile-telegram">
-            Telegram ID:
-            ${tgUser
-              ? escapeHtml(
-                  String(
-                    tgUser.id
-                  )
-                )
-              : '—'}
-          </div>
-
-
-          <div class="profile-edit">
-
-            <input
-              type="text"
-              id="profileNameInput"
-              class="profile-name-input"
-              maxlength="30"
-              value="${escapeHtml(
-                profile
-                  ? profile.username
-                  : ''
-              )}"
-              placeholder="Ваш ник"
-            >
-
-
-            <button
-              type="button"
-              class="btn btn-primary"
-              id="saveProfileBtn"
-            >
-              Сохранить ник
-            </button>
-
-          </div>
-
-        </div>
-
-
-        <div class="profile-stats chrome">
-
-          <div class="stat-item">
-
-            <strong>
-              ${stats.articles}
-            </strong>
-
-            <span>
-              Статьи
-            </span>
-
-          </div>
-
-
-          <div class="stat-item">
-
-            <strong>
-              ${stats.comments}
-            </strong>
-
-            <span>
-              Комментарии
-            </span>
-
-          </div>
-
-        </div>
-
-
-        <div class="profile-menu">
-
-          <button
-            type="button"
-            class="profile-menu-item"
-            id="myArticlesBtn"
-          >
-            <span>
-              Мои статьи
-            </span>
-
-            <span>
-              →
-            </span>
-          </button>
-
-
-          <button
-            type="button"
-            class="profile-menu-item"
-            id="myCommentsBtn"
-          >
-            <span>
-              Мои комментарии
-            </span>
-
-            <span>
-              →
-            </span>
-          </button>
-
-        </div>
-
-      </div>
-
-    `;
-
-
-    // -----------------------------------------------------
-    // Сохранить ник
-    // -----------------------------------------------------
-
-    document
-      .getElementById(
-        'saveProfileBtn'
-      )
-      .addEventListener(
-        'click',
-        async () => {
-
-          const input =
-            document.getElementById(
-              'profileNameInput'
-            );
-
-
-          const username =
-            input.value.trim();
-
-
-          if (
-            username.length < 2
-          ) {
-
-            showToast(
-              'Ник должен содержать минимум 2 символа'
-            );
-
-            return;
-
-          }
-
-
-          try {
-
-            await saveMyProfile(
-              username
-            );
-
-
-            showToast(
-              'Ник сохранён'
-            );
-
-
-            await openProfile();
-
-
-          } catch (error) {
-
-            console.error(
-              error
-            );
-
-            showToast(
-              error.message ||
-              'Не удалось сохранить ник'
-            );
-
-          }
-
-        }
-      );
-
-
-    // -----------------------------------------------------
-    // Мои статьи
-    // -----------------------------------------------------
-
-    document
-      .getElementById(
-        'myArticlesBtn'
-      )
-      .addEventListener(
-        'click',
-        openMyArticles
-      );
-
-
-    // -----------------------------------------------------
-    // Мои комментарии
-    // -----------------------------------------------------
-
-    document
-      .getElementById(
-        'myCommentsBtn'
-      )
-      .addEventListener(
-        'click',
-        openMyComments
-      );
-
-
-  } catch (error) {
-
-    console.error(
-      error
-    );
-
-
-    main.innerHTML = `
-      <div class="empty-state">
-        <h2>
-          Не удалось загрузить профиль
-        </h2>
-
-        <p>
-          ${escapeHtml(
-            error.message
-          )}
-        </p>
-      </div>
-    `;
-
-  }
-
-}
-
-
-// =========================================================
-// МОИ СТАТЬИ
-// =========================================================
-
-async function openMyArticles() {
-
-  state.view =
-    'my-articles';
-
-
-  setBackButton(
-    true,
-    openProfile
-  );
-
-
-  const main =
-    document.getElementById(
-      'main'
-    );
-
-
-  main.innerHTML =
-    '<div class="loading">Загружаем ваши статьи…</div>';
-
-
-  try {
-
-    const articles =
-      await fetchMyArticles();
-
-
-    main.innerHTML = `
-
-      <div class="profile-subpage">
-
-        <div class="subpage-head">
-
-          <button
-            type="button"
-            id="profileBackBtn"
-          >
-            ← Профиль
-          </button>
-
-          <h1>
-            Мои статьи
-          </h1>
-
-        </div>
-
-
-        <div class="my-articles-list">
-
-          ${
-            articles.length
-              ? articles.map(
-                  article => `
-
-                    <div
-                      class="feed-item"
-                      data-id="${escapeHtml(
-                        article.id
-                      )}"
-                    >
-
-                      ${
-                        article.cover
-                          ? `
-                            <img
-                              class="thumb"
-                              src="${escapeHtml(
-                                article.cover
-                              )}"
-                              alt=""
-                            >
-                          `
-                          : ''
-                      }
-
-                      <div class="feed-content">
-
-                        <div class="feed-meta">
-                          ${fmtDate(
-                            article.created_at
-                          )}
-                        </div>
-
-                        <h3>
-                          ${escapeHtml(
-                            article.title ||
-                            'Без названия'
-                          )}
-                        </h3>
-
-                        ${
-                          article.excerpt
-                            ? `
-                              <p>
-                                ${escapeHtml(
-                                  article.excerpt
-                                )}
-                              </p>
-                            `
-                            : ''
-                        }
-
-                      </div>
-
-                    </div>
-
-                  `
-                ).join('')
-              : `
-                <div class="empty-state">
-                  <h2>
-                    Вы ещё ничего не опубликовали
-                  </h2>
-                </div>
-              `
-          }
-
-        </div>
-
-      </div>
-
-    `;
-
-
-    document
-      .getElementById(
-        'profileBackBtn'
-      )
-      .addEventListener(
-        'click',
-        openProfile
-      );
-
-
-    main
-      .querySelectorAll(
-        '.feed-item'
-      )
-      .forEach(
-        item => {
-
-          item.addEventListener(
-            'click',
-            () =>
-              openReader(
-                item.dataset.id
-              )
-          );
-
-        }
-      );
-
-
-  } catch (error) {
-
-    console.error(
-      error
-    );
-
-
-    main.innerHTML = `
-      <div class="empty-state">
-        <h2>
-          Не удалось загрузить статьи
-        </h2>
-
-        <p>
-          ${escapeHtml(
-            error.message
-          )}
-        </p>
-      </div>
-    `;
-
-  }
-
-}
-
-
-// =========================================================
-// МОИ КОММЕНТАРИИ
-// =========================================================
-
-async function openMyComments() {
-
-  state.view =
-    'my-comments';
-
-
-  setBackButton(
-    true,
-    openProfile
-  );
-
-
-  const main =
-    document.getElementById(
-      'main'
-    );
-
-
-  main.innerHTML =
-    '<div class="loading">Загружаем комментарии…</div>';
-
-
-  try {
-
-    const comments =
-      await fetchMyComments();
-
-
-    main.innerHTML = `
-
-      <div class="profile-subpage">
-
-        <div class="subpage-head">
-
-          <button
-            type="button"
-            id="profileBackBtn"
-          >
-            ← Профиль
-          </button>
-
-          <h1>
-            Мои комментарии
-          </h1>
-
-        </div>
-
-
-        <div class="my-comments-list">
-
-          ${
-            comments.length
-              ? comments.map(
-                  comment => `
-
-                    <div
-                      class="my-comment-item"
-                      data-article-id="${escapeHtml(
-                        comment.article_id
-                      )}"
-                    >
-
-                      <div class="my-comment-date">
-                        ${fmtDateTime(
-                          comment.created_at
-                        )}
-                      </div>
-
-                      <div class="my-comment-text">
-                        ${escapeHtml(
-                          comment.content
-                        )}
-                      </div>
-
-                      <div class="my-comment-open">
-                        Открыть статью →
-                      </div>
-
-                    </div>
-
-                  `
-                ).join('')
-              : `
-                <div class="empty-state">
-                  <h2>
-                    Вы ещё не оставляли комментариев
-                  </h2>
-                </div>
-              `
-          }
-
-        </div>
-
-      </div>
-
-    `;
-
-
-    document
-      .getElementById(
-        'profileBackBtn'
-      )
-      .addEventListener(
-        'click',
-        openProfile
-      );
-
-
-    main
-      .querySelectorAll(
-        '.my-comment-item'
-      )
-      .forEach(
-        item => {
-
-          item.addEventListener(
-            'click',
-            () =>
-              openReader(
-                item.dataset.articleId
-              )
-          );
-
-        }
-      );
-
-
-  } catch (error) {
-
-    console.error(
-      error
-    );
-
-
-    main.innerHTML = `
-      <div class="empty-state">
-        <h2>
-          Не удалось загрузить комментарии
-        </h2>
-
-        <p>
-          ${escapeHtml(
-            error.message
-          )}
-        </p>
-      </div>
-    `;
-
-  }
-
-}
-
-
-// =========================================================
-// НАВИГАЦИЯ
-// =========================================================
-
-const homeLink =
-  document.getElementById(
-    'homeLink'
-  );
-
+/* =========================================================
+   22. NAVIGATION
+   ========================================================= */
 
 if (homeLink) {
 
   homeLink.addEventListener(
-    'click',
-    renderFeed
-  );
+    "click",
+    () => {
 
+      history.replaceState(
+        null,
+        "",
+        window.location.pathname
+      );
+
+      renderHome();
+    }
+  );
 }
-
-
-const newArticleBtn =
-  document.getElementById(
-    'newArticleBtn'
-  );
 
 
 if (newArticleBtn) {
 
   newArticleBtn.addEventListener(
-    'click',
-    openEditor
-  );
+    "click",
+    async () => {
 
+      if (!getInitData()) {
+
+        showToast(
+          "Откройте приложение через Telegram"
+        );
+
+        return;
+      }
+
+      await loadProfile();
+
+      if (!state.profile) {
+
+        showToast(
+          "Сначала создайте профиль"
+        );
+
+        await renderProfilePage();
+
+        return;
+      }
+
+      renderNewArticlePage();
+    }
+  );
 }
-
-
-const profileBtn =
-  document.getElementById(
-    'profileBtn'
-  );
 
 
 if (profileBtn) {
 
   profileBtn.addEventListener(
-    'click',
-    openProfile
+    "click",
+    renderProfilePage
   );
-
 }
 
 
-// =========================================================
-// INIT
-// =========================================================
+/* =========================================================
+   23. HASH ROUTING
+   ========================================================= */
 
-(async function init() {
+function handleHash() {
+
+  const hash =
+    window.location.hash || "";
+
+  if (
+    hash.startsWith(
+      "#article/"
+    )
+  ) {
+
+    const id =
+      hash.replace(
+        "#article/",
+        ""
+      );
+
+    if (id) {
+      openArticle(id);
+      return;
+    }
+  }
+
+  renderHome();
+}
+
+
+window.addEventListener(
+  "hashchange",
+  handleHash
+);
+
+
+/* =========================================================
+   24. INITIALIZATION
+   ========================================================= */
+
+async function init() {
 
   try {
 
-    await loadMyProfile();
+    setLoading(
+      "Загрузка…"
+    );
+
+    await loadArticles();
+
+    await loadProfile();
+
+    handleHash();
 
   } catch (error) {
 
-    console.warn(
-      'Profile init error:',
+    console.error(
+      "Initialization error:",
       error
     );
 
+    main.innerHTML = `
+
+      <div class="error-state">
+
+        <h2>
+          Не удалось загрузить приложение
+        </h2>
+
+        <p>
+          ${escapeHtml(
+            error.message ||
+            "Неизвестная ошибка"
+          )}
+        </p>
+
+        <button
+          class="profile-save"
+          id="retryBtn"
+          type="button"
+        >
+          Повторить
+        </button>
+
+      </div>
+    `;
+
+
+    const retry =
+      document.getElementById(
+        "retryBtn"
+      );
+
+    if (retry) {
+
+      retry.addEventListener(
+        "click",
+        init
+      );
+    }
   }
+}
 
 
-  const startParam =
-    tg &&
-    tg.initDataUnsafe
-      ? tg.initDataUnsafe.start_param
-      : null;
-
-
-  if (startParam) {
-
-    await openReader(
-      startParam
-    );
-
-  } else {
-
-    await renderFeed();
-
-  }
-
-})();
+init();
