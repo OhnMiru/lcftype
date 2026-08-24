@@ -1,370 +1,148 @@
 // =========================================================
 // Летопись — Telegram Mini App
+// Поиск по названию + мультифильтр по авторам
 // =========================================================
 
 const BOT_USERNAME = 'lcftype_bot';
 const MINIAPP_SHORT_NAME = 'lcftype';
 
-
-// =========================================================
-// Supabase
-// =========================================================
-
-const db =
-  window.supabase.createClient(
-    window.SUPABASE_URL,
-    window.SUPABASE_ANON_KEY
-  );
-
-
-// =========================================================
-// Telegram
-// =========================================================
-
-const tg =
-  window.Telegram
-    ? window.Telegram.WebApp
-    : null;
-
-if (tg) {
-  tg.ready();
-  tg.expand();
-}
-
-const tgUser =
-  tg &&
-  tg.initDataUnsafe &&
-  tg.initDataUnsafe.user
-    ? tg.initDataUnsafe.user
-    : null;
-
-
-// =========================================================
-// State
-// =========================================================
+const db = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+const tg = window.Telegram ? window.Telegram.WebApp : null;
+if (tg) { tg.ready(); tg.expand(); }
+const tgUser = tg?.initDataUnsafe?.user || null;
 
 const state = {
   view: 'feed',
-
   articles: [],
-
   draft: null,
-
   currentId: null,
-
   profile: null,
-
-  searchQuery: '',
-
-  selectedAuthors: new Set(),
-
-  filterOpen: false
+  search: '',
+  authorFilter: new Set(),
+  pendingImageInsertIndex: null
 };
 
 let activeBlockEl = null;
 
-let filterCloseHandler = null;
-
-
-// =========================================================
-// Toast
-// =========================================================
-
-function showToast(msg) {
-
-  const t =
-    document.getElementById('toast');
-
-  if (!t) {
+function showToast(msg){
+  const t=document.getElementById('toast');
+  if(!t){
     console.log(msg);
     return;
   }
-
-  t.textContent = msg;
-
+  t.textContent=msg;
   t.classList.add('show');
-
-  setTimeout(() => {
-    t.classList.remove('show');
-  }, 2500);
+  clearTimeout(showToast._timer);
+  showToast._timer=setTimeout(()=>t.classList.remove('show'),2500);
 }
 
-
-// =========================================================
-// Date
-// =========================================================
-
-function fmtDate(iso) {
-
-  if (!iso) {
-    return '';
-  }
-
-  return new Date(iso).toLocaleDateString(
-    'ru-RU',
-    {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric'
-    }
-  );
+function fmtDate(iso){
+  return iso
+    ? new Date(iso).toLocaleDateString('ru-RU',{
+        day:'numeric',
+        month:'long',
+        year:'numeric'
+      })
+    : '';
 }
 
-
-// =========================================================
-// Escape HTML
-// =========================================================
-
-function escapeHtml(s) {
-
-  const d =
-    document.createElement('div');
-
-  d.textContent =
-    s || '';
-
+function escapeHtml(s){
+  const d=document.createElement('div');
+  d.textContent=s??'';
   return d.innerHTML;
 }
 
+const ALLOWED_TAGS = new Set([
+  'B','STRONG','I','EM','U','BR','SPAN','DIV'
+]);
 
-// =========================================================
-// Sanitize HTML
-// =========================================================
+function sanitizeHtml(html){
+  const doc=document.createElement('div');
+  doc.innerHTML=html||'';
 
-const ALLOWED_TAGS =
-  new Set([
-    'B',
-    'STRONG',
-    'I',
-    'EM',
-    'U',
-    'BR',
-    'SPAN',
-    'DIV'
-  ]);
-
-
-function sanitizeHtml(html) {
-
-  const doc =
-    document.createElement('div');
-
-  doc.innerHTML =
-    html || '';
-
-  (function clean(node) {
-
-    [
-      ...node.childNodes
-    ].forEach(child => {
-
-      if (child.nodeType === 1) {
-
-        if (
-          !ALLOWED_TAGS.has(
-            child.tagName
-          )
-        ) {
-
-          const parent =
-            child.parentNode;
-
-          while (
-            child.firstChild
-          ) {
-
-            parent.insertBefore(
-              child.firstChild,
-              child
-            );
-          }
-
-          parent.removeChild(
-            child
-          );
-
+  (function clean(node){
+    [...node.childNodes].forEach(child=>{
+      if(child.nodeType===1){
+        if(!ALLOWED_TAGS.has(child.tagName)){
+          const p=child.parentNode;
+          while(child.firstChild)p.insertBefore(child.firstChild,child);
+          p.removeChild(child);
           return;
         }
 
-        [
-          ...child.attributes
-        ].forEach(attr => {
-          child.removeAttribute(
-            attr.name
-          );
-        });
-
+        [...child.attributes].forEach(a=>child.removeAttribute(a.name));
         clean(child);
-
-      } else if (
-        child.nodeType !== 3
-      ) {
-
-        child.parentNode.removeChild(
-          child
-        );
+      } else if(child.nodeType!==3){
+        child.parentNode.removeChild(child);
       }
     });
-
   })(doc);
 
   return doc.innerHTML;
 }
 
-
-// =========================================================
-// Edge Function
-// =========================================================
-
-async function callTelegramApi(
-  action,
-  extra = {}
-) {
-
-  if (
-    !tg ||
-    !tg.initData
-  ) {
-
-    throw new Error(
-      'Откройте приложение внутри Telegram'
-    );
+async function callTelegramApi(action, extra={}){
+  if(!tg?.initData){
+    throw new Error('Откройте приложение внутри Telegram');
   }
 
-  const {
-    data,
-    error
-  } =
-    await db.functions.invoke(
-      'telegram-api',
-      {
-        body: {
-          action,
-          initData:
-            tg.initData,
-          ...extra
-        }
+  const {data,error}=await db.functions.invoke(
+    'telegram-api',
+    {
+      body:{
+        action,
+        initData:tg.initData,
+        ...extra
       }
-    );
+    }
+  );
 
-  if (error) {
-
-    console.error(
-      'telegram-api:',
-      error
-    );
-
-    throw new Error(
-      error.message ||
-      'Ошибка Edge Function'
-    );
+  if(error){
+    throw new Error(error.message||'Ошибка Edge Function');
   }
 
-  if (
-    data &&
-    data.error
-  ) {
-
-    throw new Error(
-      data.error
-    );
+  if(data?.error){
+    throw new Error(data.error);
   }
 
   return data;
 }
 
-
-// =========================================================
-// Profile
-// =========================================================
-
-async function getProfile() {
-
-  const result =
-    await callTelegramApi(
-      'get-profile'
-    );
-
-  state.profile =
-    result.profile ||
-    null;
-
+async function getProfile(){
+  const r=await callTelegramApi('get-profile');
+  state.profile=r.profile||null;
   return state.profile;
 }
 
-
-async function saveProfile(
-  username
-) {
-
-  const result =
-    await callTelegramApi(
-      'set-profile',
-      {
-        username
-      }
-    );
-
-  state.profile =
-    result.profile;
-
-  return state.profile;
-}
-
-
-async function ensureProfile(
-  askIfMissing = true
-) {
-
-  const existing =
-    await getProfile();
-
-  if (existing) {
-    return existing;
-  }
-
-  if (!askIfMissing) {
-    return null;
-  }
-
-  return openUsernameDialog(
-    null
+async function saveProfile(username){
+  const r=await callTelegramApi(
+    'set-profile',
+    {username}
   );
+
+  state.profile=r.profile;
+  return state.profile;
 }
 
+async function ensureProfile(ask=true){
+  const p=await getProfile();
+  if(p)return p;
+  return ask?openUsernameDialog(null):null;
+}
 
-// =========================================================
-// Диалог ника
-// =========================================================
+function openUsernameDialog(currentUsername){
+  return new Promise(resolve=>{
+    const overlay=document.createElement('div');
+    overlay.className='profile-overlay';
 
-function openUsernameDialog(
-  currentUsername
-) {
-
-  return new Promise(resolve => {
-
-    const overlay =
-      document.createElement('div');
-
-    overlay.className =
-      'profile-overlay';
-
-    overlay.innerHTML = `
-
+    overlay.innerHTML=`
       <div class="profile-dialog">
-
         <div class="profile-dialog-title">
-          ${
-            currentUsername
-              ? 'Изменить ник'
-              : 'Создать профиль'
-          }
+          ${currentUsername?'Изменить ник':'Создать профиль'}
         </div>
 
         <div class="profile-dialog-text">
-          Придумайте имя автора.
-          Его будут видеть рядом
-          с вашими статьями.
+          Придумайте имя автора. Его будут видеть рядом с вашими статьями.
         </div>
 
         <input
@@ -372,1425 +150,475 @@ function openUsernameDialog(
           id="profileUsernameInput"
           maxlength="30"
           placeholder="Например: Анна"
-          value="${escapeHtml(
-            currentUsername || ''
-          )}"
+          value="${escapeHtml(currentUsername||'')}"
         >
 
         <div class="profile-hint">
-          Можно использовать русские
-          и латинские буквы, цифры,
-          пробел и _
+          Можно использовать русские и латинские буквы, цифры, пробел и _
         </div>
 
         <div class="profile-dialog-actions">
-
-          <button
-            class="btn btn-secondary"
-            id="profileCancelBtn"
-          >
+          <button class="btn btn-secondary" id="profileCancelBtn">
             Отмена
           </button>
 
-          <button
-            class="btn btn-primary"
-            id="profileSaveBtn"
-          >
+          <button class="btn btn-primary" id="profileSaveBtn">
             Сохранить
           </button>
-
         </div>
-
       </div>
     `;
 
-    document.body.appendChild(
-      overlay
-    );
+    document.body.appendChild(overlay);
 
-    const input =
-      overlay.querySelector(
-        '#profileUsernameInput'
-      );
+    const input=overlay.querySelector('#profileUsernameInput');
+    const save=overlay.querySelector('#profileSaveBtn');
+    const cancel=overlay.querySelector('#profileCancelBtn');
 
-    const saveBtn =
-      overlay.querySelector(
-        '#profileSaveBtn'
-      );
-
-    const cancelBtn =
-      overlay.querySelector(
-        '#profileCancelBtn'
-      );
-
-    setTimeout(() => {
-
+    setTimeout(()=>{
       input.focus();
       input.select();
+    },50);
 
-    }, 50);
+    cancel.onclick=()=>{
+      overlay.remove();
+      resolve(null);
+    };
 
-    cancelBtn.addEventListener(
-      'click',
-      () => {
+    save.onclick=async()=>{
+      const username=input.value.trim().replace(/\s+/g,' ');
 
+      if(username.length<2){
+        return showToast('Минимум 2 символа');
+      }
+
+      if(username.length>30){
+        return showToast('Максимум 30 символов');
+      }
+
+      save.disabled=true;
+      save.textContent='Сохраняем…';
+
+      try{
+        const p=await saveProfile(username);
         overlay.remove();
-
-        resolve(null);
+        showToast('Ник сохранён');
+        resolve(p);
+      }catch(e){
+        showToast(e.message||'Не удалось сохранить ник');
+        save.disabled=false;
+        save.textContent='Сохранить';
       }
-    );
+    };
 
-    saveBtn.addEventListener(
-      'click',
-      async () => {
-
-        const username =
-          input.value
-            .trim()
-            .replace(
-              /\s+/g,
-              ' '
-            );
-
-        if (
-          username.length < 2
-        ) {
-
-          showToast(
-            'Минимум 2 символа'
-          );
-
-          return;
-        }
-
-        if (
-          username.length > 30
-        ) {
-
-          showToast(
-            'Максимум 30 символов'
-          );
-
-          return;
-        }
-
-        saveBtn.disabled =
-          true;
-
-        saveBtn.textContent =
-          'Сохраняем…';
-
-        try {
-
-          const profile =
-            await saveProfile(
-              username
-            );
-
-          overlay.remove();
-
-          showToast(
-            'Ник сохранён'
-          );
-
-          resolve(profile);
-
-        } catch (err) {
-
-          console.error(err);
-
-          showToast(
-            err.message ||
-            'Не удалось сохранить ник'
-          );
-
-          saveBtn.disabled =
-            false;
-
-          saveBtn.textContent =
-            'Сохранить';
-        }
-      }
-    );
-
-    input.addEventListener(
-      'keydown',
-      e => {
-
-        if (
-          e.key === 'Enter'
-        ) {
-
-          saveBtn.click();
-        }
-
-        if (
-          e.key === 'Escape'
-        ) {
-
-          cancelBtn.click();
-        }
-      }
-    );
+    input.onkeydown=e=>{
+      if(e.key==='Enter')save.click();
+      if(e.key==='Escape')cancel.click();
+    };
   });
 }
 
+async function fetchFeed(){
+  const {data,error}=await db
+    .from('articles')
+    .select(
+      'id,title,excerpt,cover,created_at,author_id,author_name'
+    )
+    .order('created_at',{ascending:false});
 
-// =========================================================
-// Profile screen
-// =========================================================
-
-async function openProfile() {
-
-  state.view =
-    'profile';
-
-  state.currentId =
-    null;
-
-  setBackButton(
-    true,
-    renderFeed
-  );
-
-  const main =
-    document.getElementById(
-      'main'
-    );
-
-  main.innerHTML =
-    '<div class="loading">Загрузка профиля…</div>';
-
-  try {
-
-    const profile =
-      await ensureProfile(
-        false
-      );
-
-    if (!profile) {
-
-      main.innerHTML = `
-
-        <div class="profile-page">
-
-          <div class="profile-card chrome">
-
-            <div class="profile-avatar">
-              ?
-            </div>
-
-            <h2>
-              Профиль
-            </h2>
-
-            <p>
-              У вас пока нет ника
-            </p>
-
-            <button
-              class="btn btn-primary"
-              id="createProfileBtn"
-            >
-              Придумать ник
-            </button>
-
-          </div>
-
-        </div>
-      `;
-
-      document
-        .getElementById(
-          'createProfileBtn'
-        )
-        .addEventListener(
-          'click',
-          async () => {
-
-            const created =
-              await ensureProfile(
-                true
-              );
-
-            if (created) {
-              openProfile();
-            }
-          }
-        );
-
-      return;
-    }
-
-    const firstChar =
-      profile.username
-        .trim()
-        .charAt(0)
-        .toUpperCase();
-
-    main.innerHTML = `
-
-      <div class="profile-page">
-
-        <div class="profile-card chrome">
-
-          <div class="profile-avatar">
-            ${escapeHtml(
-              firstChar || '?'
-            )}
-          </div>
-
-          <div class="profile-label">
-            Ваш ник
-          </div>
-
-          <div class="profile-username">
-            ${escapeHtml(
-              profile.username
-            )}
-          </div>
-
-          <button
-            class="btn btn-primary profile-edit-btn"
-            id="changeUsernameBtn"
-          >
-            Изменить ник
-          </button>
-
-          <div class="profile-description">
-            Этот ник отображается
-            рядом с вашими статьями.
-          </div>
-
-        </div>
-
-      </div>
-    `;
-
-    document
-      .getElementById(
-        'changeUsernameBtn'
-      )
-      .addEventListener(
-        'click',
-        async () => {
-
-          const changed =
-            await openUsernameDialog(
-              profile.username
-            );
-
-          if (changed) {
-            openProfile();
-          }
-        }
-      );
-
-  } catch (err) {
-
-    console.error(err);
-
-    main.innerHTML = `
-
-      <div class="empty-state">
-
-        <h2>
-          Не удалось открыть профиль
-        </h2>
-
-        <p>
-          ${escapeHtml(
-            err.message || ''
-          )}
-        </p>
-
-      </div>
-    `;
-  }
-}
-
-
-// =========================================================
-// Feed
-// =========================================================
-
-async function fetchFeed() {
-
-  const {
-    data,
-    error
-  } =
-    await db
-      .from('articles')
-      .select(
-        'id,title,excerpt,cover,created_at,author_id,author_name'
-      )
-      .order(
-        'created_at',
-        {
-          ascending: false
-        }
-      );
-
-  if (error) {
-
+  if(error){
     console.error(error);
-
     return [];
   }
 
-  return data || [];
+  return data||[];
 }
 
+async function fetchArticle(id){
+  const {data,error}=await db
+    .from('articles')
+    .select('*')
+    .eq('id',id)
+    .single();
 
-async function fetchArticle(
-  id
-) {
-
-  const {
-    data,
-    error
-  } =
-    await db
-      .from('articles')
-      .select('*')
-      .eq('id', id)
-      .single();
-
-  if (error) {
-
+  if(error){
     console.error(error);
-
     return null;
   }
 
   return data;
 }
 
-
-// =========================================================
-// Search + filter
-// =========================================================
-
-function normalizeSearchText(
-  value
-) {
-
-  return String(
-    value || ''
-  )
-    .toLocaleLowerCase(
-      'ru-RU'
-    )
-    .trim();
+function isArticleOwner(a){
+  return !!(
+    tgUser &&
+    a?.author_id &&
+    Number(a.author_id)===Number(tgUser.id)
+  );
 }
 
+function getAuthors(){
+  const map=new Map();
 
-function getAuthorList() {
+  state.articles.forEach(a=>{
+    const name=(a.author_name||'').trim();
 
-  const map =
-    new Map();
-
-  state.articles.forEach(
-    article => {
-
-      const name =
-        String(
-          article.author_name ||
-          ''
-        ).trim();
-
-      if (!name) {
-        return;
-      }
-
-      const key =
-        normalizeSearchText(
-          name
-        );
-
-      if (!map.has(key)) {
-
-        map.set(
-          key,
-          name
-        );
-      }
+    if(name){
+      map.set(name,name);
     }
-  );
-
-  return Array.from(
-    map.values()
-  ).sort(
-    (a, b) =>
-      a.localeCompare(
-        b,
-        'ru',
-        {
-          sensitivity:
-            'base'
-        }
-      )
-  );
-}
-
-
-function getFilteredArticles() {
-
-  const query =
-    normalizeSearchText(
-      state.searchQuery
-    );
-
-  return state.articles.filter(
-    article => {
-
-      const title =
-        normalizeSearchText(
-          article.title
-        );
-
-      const matchesSearch =
-        !query ||
-        title.includes(
-          query
-        );
-
-      if (!matchesSearch) {
-        return false;
-      }
-
-      if (
-        !state.selectedAuthors.size
-      ) {
-        return true;
-      }
-
-      const author =
-        normalizeSearchText(
-          article.author_name
-        );
-
-      return state.selectedAuthors.has(
-        author
-      );
-    }
-  );
-}
-
-
-function clearFilterCloseHandler() {
-
-  if (
-    filterCloseHandler
-  ) {
-
-    document.removeEventListener(
-      'click',
-      filterCloseHandler
-    );
-
-    filterCloseHandler =
-      null;
-  }
-}
-
-
-function closeAuthorFilter() {
-
-  state.filterOpen =
-    false;
-
-  clearFilterCloseHandler();
-
-  const popup =
-    document.getElementById(
-      'authorFilterPopup'
-    );
-
-  if (popup) {
-    popup.remove();
-  }
-}
-
-
-function openAuthorFilter() {
-
-  if (
-    state.filterOpen
-  ) {
-
-    closeAuthorFilter();
-
-    return;
-  }
-
-  const authors =
-    getAuthorList();
-
-  if (!authors.length) {
-
-    showToast(
-      'Пока нет авторов со статьями'
-    );
-
-    return;
-  }
-
-  state.filterOpen =
-    true;
-
-  const popup =
-    document.createElement('div');
-
-  popup.id =
-    'authorFilterPopup';
-
-  popup.className =
-    'author-filter-popup';
-
-  popup.innerHTML = `
-
-    <div class="author-filter-header">
-
-      <div>
-        <div class="author-filter-title">
-          Фильтр по автору
-        </div>
-
-        <div class="author-filter-subtitle">
-          Можно выбрать одного или нескольких
-        </div>
-      </div>
-
-      <button
-        class="author-filter-close"
-        type="button"
-        aria-label="Закрыть"
-      >
-        ×
-      </button>
-
-    </div>
-
-    <div class="author-filter-list">
-
-      ${
-        authors.map(
-          author => {
-
-            const key =
-              normalizeSearchText(
-                author
-              );
-
-            const checked =
-              state.selectedAuthors.has(
-                key
-              );
-
-            return `
-
-              <label
-                class="author-filter-option"
-              >
-
-                <input
-                  type="checkbox"
-                  data-author="${escapeHtml(
-                    key
-                  )}"
-                  ${
-                    checked
-                      ? 'checked'
-                      : ''
-                  }
-                >
-
-                <span
-                  class="author-filter-check"
-                ></span>
-
-                <span
-                  class="author-filter-name"
-                >
-                  ${escapeHtml(
-                    author
-                  )}
-                </span>
-
-              </label>
-
-            `;
-          }
-        ).join('')
-      }
-
-    </div>
-
-    <div class="author-filter-footer">
-
-      <button
-        class="author-filter-reset"
-        type="button"
-      >
-        Сбросить
-      </button>
-
-      <button
-        class="author-filter-done"
-        type="button"
-      >
-        Готово
-      </button>
-
-    </div>
-  `;
-
-  const searchBar =
-    document.querySelector(
-      '.feed-tools'
-    );
-
-  if (!searchBar) {
-    state.filterOpen =
-      false;
-
-    return;
-  }
-
-  searchBar.appendChild(
-    popup
-  );
-
-  popup
-    .querySelector(
-      '.author-filter-close'
-    )
-    .addEventListener(
-      'click',
-      e => {
-
-        e.stopPropagation();
-
-        closeAuthorFilter();
-      }
-    );
-
-  popup
-    .querySelectorAll(
-      'input[type="checkbox"]'
-    )
-    .forEach(input => {
-
-      input.addEventListener(
-        'change',
-        () => {
-
-          const author =
-            input.dataset.author;
-
-          if (
-            input.checked
-          ) {
-
-            state.selectedAuthors.add(
-              author
-            );
-
-          } else {
-
-            state.selectedAuthors.delete(
-              author
-            );
-          }
-
-          updateFilterButton();
-
-          renderFeedResults();
-        }
-      );
-    });
-
-  popup
-    .querySelector(
-      '.author-filter-reset'
-    )
-    .addEventListener(
-      'click',
-      () => {
-
-        state.selectedAuthors.clear();
-
-        updateFilterButton();
-
-        renderFeedResults();
-
-        popup
-          .querySelectorAll(
-            'input[type="checkbox"]'
-          )
-          .forEach(
-            input => {
-              input.checked =
-                false;
-            }
-          );
-      }
-    );
-
-  popup
-    .querySelector(
-      '.author-filter-done'
-    )
-    .addEventListener(
-      'click',
-      () => {
-
-        closeAuthorFilter();
-
-        renderFeedResults();
-      }
-    );
-
-  requestAnimationFrame(
-    () => {
-
-      filterCloseHandler =
-        e => {
-
-          if (
-            !popup.contains(
-              e.target
-            ) &&
-            !e.target.closest(
-              '#authorFilterBtn'
-            )
-          ) {
-
-            closeAuthorFilter();
-          }
-        };
-
-      document.addEventListener(
-        'click',
-        filterCloseHandler
-      );
-    }
-  );
-}
-
-
-function updateFilterButton() {
-
-  const button =
-    document.getElementById(
-      'authorFilterBtn'
-    );
-
-  if (!button) {
-    return;
-  }
-
-  const count =
-    state.selectedAuthors.size;
-
-  button.classList.toggle(
-    'active',
-    count > 0
-  );
-
-  button.innerHTML = `
-
-    <span class="tool-icon">
-      ☷
-    </span>
-
-    <span class="tool-label">
-      Фильтр
-    </span>
-
-    ${
-      count
-        ? `
-          <span class="filter-count">
-            ${count}
-          </span>
-        `
-        : ''
-    }
-
-  `;
-}
-
-
-function renderFeedTools() {
-
-  const existing =
-    document.querySelector(
-      '.feed-tools'
-    );
-
-  if (existing) {
-    return;
-  }
-
-  const main =
-    document.getElementById(
-      'main'
-    );
-
-  const tools =
-    document.createElement('div');
-
-  tools.className =
-    'feed-tools chrome';
-
-  tools.innerHTML = `
-
-    <div class="feed-search">
-
-      <span class="search-icon">
-        ⌕
-      </span>
-
-      <input
-        id="articleSearchInput"
-        type="search"
-        autocomplete="off"
-        placeholder="Поиск по названию"
-        value="${escapeHtml(
-          state.searchQuery
-        )}"
-      >
-
-      <button
-        class="search-clear"
-        id="articleSearchClear"
-        type="button"
-        aria-label="Очистить поиск"
-      >
-        ×
-      </button>
-
-    </div>
-
-    <button
-      class="feed-filter-btn"
-      id="authorFilterBtn"
-      type="button"
-    >
-
-      <span class="tool-icon">
-        ☷
-      </span>
-
-      <span class="tool-label">
-        Фильтр
-      </span>
-
-    </button>
-
-  `;
-
-  main.insertBefore(
-    tools,
-    main.firstChild
-  );
-
-  const searchInput =
-    document.getElementById(
-      'articleSearchInput'
-    );
-
-  const clearButton =
-    document.getElementById(
-      'articleSearchClear'
-    );
-
-  const filterButton =
-    document.getElementById(
-      'authorFilterBtn'
-    );
-
-  searchInput.addEventListener(
-    'input',
-    e => {
-
-      state.searchQuery =
-        e.target.value;
-
-      updateSearchClear();
-
-      renderFeedResults();
-    }
-  );
-
-  clearButton.addEventListener(
-    'click',
-    () => {
-
-      state.searchQuery =
-        '';
-
-      searchInput.value =
-        '';
-
-      updateSearchClear();
-
-      searchInput.focus();
-
-      renderFeedResults();
-    }
-  );
-
-  filterButton.addEventListener(
-    'click',
-    e => {
-
-      e.stopPropagation();
-
-      openAuthorFilter();
-    }
-  );
-
-  updateSearchClear();
-
-  updateFilterButton();
-}
-
-
-function updateSearchClear() {
-
-  const button =
-    document.getElementById(
-      'articleSearchClear'
-    );
-
-  if (!button) {
-    return;
-  }
-
-  button.classList.toggle(
-    'visible',
-    Boolean(
-      state.searchQuery
+  });
+
+  return [...map.values()].sort(
+    (a,b)=>a.localeCompare(
+      b,
+      'ru',
+      {sensitivity:'base'}
     )
   );
 }
 
+function filteredArticles(){
+  const q=state.search
+    .trim()
+    .toLocaleLowerCase('ru-RU');
 
-function renderFeedResults() {
+  return state.articles.filter(a=>{
+    const title=(a.title||'')
+      .toLocaleLowerCase('ru-RU');
 
-  const list =
-    document.getElementById(
-      'feedResults'
-    );
+    const author=(a.author_name||'').trim();
 
-  if (!list) {
-    return;
-  }
+    const searchOk=!q||title.includes(q);
 
-  const articles =
-    getFilteredArticles();
+    const authorOk=
+      !state.authorFilter.size ||
+      state.authorFilter.has(author);
 
-  if (!articles.length) {
-
-    list.innerHTML = `
-
-      <div class="empty-state feed-empty">
-
-        <h2>
-          Ничего не найдено
-        </h2>
-
-        <p>
-          Попробуйте изменить запрос
-          или убрать фильтр автора.
-        </p>
-
-      </div>
-    `;
-
-    return;
-  }
-
-  list.innerHTML =
-    articles
-      .map(
-        article => `
-
-          <div
-            class="feed-item"
-            data-id="${escapeHtml(
-              article.id
-            )}"
-          >
-
-            ${
-              article.cover
-                ? `
-                  <img
-                    class="thumb"
-                    src="${escapeHtml(
-                      article.cover
-                    )}"
-                    alt=""
-                  >
-                `
-                : ''
-            }
-
-            <div class="feed-meta">
-
-              ${fmtDate(
-                article.created_at
-              )}
-
-              ${
-                article.author_name
-                  ? `
-                    ·
-                    ${escapeHtml(
-                      article.author_name
-                    )}
-                  `
-                  : ''
-              }
-
-            </div>
-
-            <h3>
-              ${escapeHtml(
-                article.title ||
-                'Без названия'
-              )}
-            </h3>
-
-            <p>
-              ${escapeHtml(
-                article.excerpt ||
-                ''
-              )}
-            </p>
-
-          </div>
-
-        `
-      )
-      .join('');
-
-  list
-    .querySelectorAll(
-      '.feed-item'
-    )
-    .forEach(el => {
-
-      el.addEventListener(
-        'click',
-        () => {
-
-          openReader(
-            el.dataset.id
-          );
-        }
-      );
-    });
+    return searchOk&&authorOk;
+  });
 }
 
+function renderFeedTools(){
+  const authors=getAuthors();
+  const selectedCount=state.authorFilter.size;
 
-// =========================================================
-// Feed screen
-// =========================================================
-
-async function renderFeed() {
-
-  closeAuthorFilter();
-
-  state.view =
-    'feed';
-
-  state.currentId =
-    null;
-
-  setBackButton(false);
-
-  const main =
-    document.getElementById(
-      'main'
-    );
-
-  main.innerHTML =
-    '<div class="loading">Загрузка статей…</div>';
-
-  state.articles =
-    await fetchFeed();
-
-  main.innerHTML = `
-
+  return `
     <div class="feed-tools chrome">
 
-      <div class="feed-search">
-
-        <span class="search-icon">
-          ⌕
-        </span>
+      <div class="feed-search-wrap">
+        <span class="feed-search-icon">⌕</span>
 
         <input
-          id="articleSearchInput"
+          id="articleSearch"
+          class="feed-search"
           type="search"
           autocomplete="off"
           placeholder="Поиск по названию"
-          value="${escapeHtml(
-            state.searchQuery
-          )}"
+          value="${escapeHtml(state.search)}"
         >
 
         <button
-          class="search-clear"
-          id="articleSearchClear"
+          id="clearSearchBtn"
+          class="feed-search-clear"
           type="button"
-          aria-label="Очистить поиск"
+          aria-label="Очистить"
+          ${state.search?'':'hidden'}
         >
           ×
         </button>
-
       </div>
 
       <button
-        class="feed-filter-btn"
         id="authorFilterBtn"
+        class="author-filter-btn ${selectedCount?'has-selection':''}"
         type="button"
       >
-
-        <span class="tool-icon">
-          ☷
-        </span>
-
-        <span class="tool-label">
-          Фильтр
-        </span>
-
+        <span>☷</span>
+        <span>Фильтр</span>
+        ${selectedCount?`<b>${selectedCount}</b>`:''}
       </button>
 
+      <div
+        id="authorFilterPanel"
+        class="author-filter-panel"
+        hidden
+      >
+        <div class="author-filter-head">
+          <strong>Фильтр по автору</strong>
+          <button id="closeAuthorFilter" type="button">
+            ×
+          </button>
+        </div>
+
+        <div class="author-filter-list">
+          ${authors.map(name=>`
+            <label class="author-option">
+              <input
+                type="checkbox"
+                value="${escapeHtml(name)}"
+                ${state.authorFilter.has(name)?'checked':''}
+              >
+              <span>${escapeHtml(name)}</span>
+            </label>
+          `).join('')}
+        </div>
+
+        ${
+          state.authorFilter.size
+            ? '<button id="resetAuthorFilter" class="author-filter-reset" type="button">Сбросить фильтр</button>'
+            : ''
+        }
+      </div>
+
     </div>
-
-    <div id="feedResults"></div>
-
   `;
-
-  const searchInput =
-    document.getElementById(
-      'articleSearchInput'
-    );
-
-  const clearButton =
-    document.getElementById(
-      'articleSearchClear'
-    );
-
-  const filterButton =
-    document.getElementById(
-      'authorFilterBtn'
-    );
-
-  searchInput.addEventListener(
-    'input',
-    e => {
-
-      state.searchQuery =
-        e.target.value;
-
-      updateSearchClear();
-
-      renderFeedResults();
-    }
-  );
-
-  clearButton.addEventListener(
-    'click',
-    () => {
-
-      state.searchQuery =
-        '';
-
-      searchInput.value =
-        '';
-
-      updateSearchClear();
-
-      searchInput.focus();
-
-      renderFeedResults();
-    }
-  );
-
-  filterButton.addEventListener(
-    'click',
-    e => {
-
-      e.stopPropagation();
-
-      openAuthorFilter();
-    }
-  );
-
-  updateSearchClear();
-
-  updateFilterButton();
-
-  renderFeedResults();
 }
 
+function bindFeedTools(){
+  const search=document.getElementById('articleSearch');
+  const clear=document.getElementById('clearSearchBtn');
+  const filter=document.getElementById('authorFilterBtn');
+  const panel=document.getElementById('authorFilterPanel');
 
-// =========================================================
-// Reader
-// =========================================================
+  search?.addEventListener('input',e=>{
+    state.search=e.target.value;
+    renderFeedListOnly();
+  });
 
-async function openReader(
-  id
-) {
+  clear?.addEventListener('click',()=>{
+    state.search='';
+    search.value='';
+    clear.hidden=true;
+    renderFeedListOnly();
+    search.focus();
+  });
 
-  state.view =
-    'reader';
+  filter?.addEventListener('click',()=>{
+    panel.hidden=!panel.hidden;
+  });
 
-  state.currentId =
-    id;
-
-  setBackButton(
-    true,
-    renderFeed
-  );
-
-  const main =
-    document.getElementById(
-      'main'
+  document
+    .getElementById('closeAuthorFilter')
+    ?.addEventListener(
+      'click',
+      ()=>panel.hidden=true
     );
 
-  main.innerHTML =
-    '<div class="loading">Открываем статью…</div>';
+  panel
+    ?.querySelectorAll('input[type=checkbox]')
+    .forEach(cb=>cb.addEventListener('change',()=>{
+      if(cb.checked){
+        state.authorFilter.add(cb.value);
+      }else{
+        state.authorFilter.delete(cb.value);
+      }
 
-  const article =
-    await fetchArticle(id);
+      renderFeed();
+    }));
 
-  if (!article) {
+  document
+    .getElementById('resetAuthorFilter')
+    ?.addEventListener('click',()=>{
+      state.authorFilter.clear();
+      renderFeed();
+    });
+}
 
-    main.innerHTML = `
+function renderFeedListOnly(){
+  const list=document.getElementById('feedList');
 
-      <div class="empty-state">
+  if(!list)return;
 
-        <h2>
-          Статья не найдена
-        </h2>
+  const rows=filteredArticles();
 
+  list.innerHTML=rows.length
+    ? rows.map(a=>`
+        <div
+          class="feed-item"
+          data-id="${escapeHtml(a.id)}"
+        >
+          ${
+            a.cover
+              ? `<img class="thumb" src="${escapeHtml(a.cover)}" alt="">`
+              : ''
+          }
+
+          <div class="feed-meta">
+            ${fmtDate(a.created_at)}
+            ${
+              a.author_name
+                ? ` · ${escapeHtml(a.author_name)}`
+                : ''
+            }
+          </div>
+
+          <h3>
+            ${escapeHtml(a.title||'Без названия')}
+          </h3>
+
+          <p>
+            ${escapeHtml(a.excerpt||'')}
+          </p>
+        </div>
+      `).join('')
+    : `
+      <div class="empty-state feed-empty">
+        <h2>Ничего не найдено</h2>
         <p>
-          Возможно, её удалили.
+          ${
+            state.authorFilter.size
+              ? 'Попробуйте выбрать других авторов.'
+              : 'Попробуйте изменить запрос поиска.'
+          }
         </p>
-
       </div>
     `;
 
+  list
+    .querySelectorAll('.feed-item')
+    .forEach(el=>{
+      el.addEventListener(
+        'click',
+        ()=>openReader(el.dataset.id)
+      );
+    });
+
+  const clear=document.getElementById('clearSearchBtn');
+
+  if(clear){
+    clear.hidden=!state.search;
+  }
+
+  const filter=document.getElementById('authorFilterBtn');
+
+  if(filter){
+    filter.classList.toggle(
+      'has-selection',
+      !!state.authorFilter.size
+    );
+
+    const b=filter.querySelector('b');
+
+    if(state.authorFilter.size&&!b){
+      filter.insertAdjacentHTML(
+        'beforeend',
+        `<b>${state.authorFilter.size}</b>`
+      );
+    }else if(!state.authorFilter.size&&b){
+      b.remove();
+    }else if(b){
+      b.textContent=state.authorFilter.size;
+    }
+  }
+}
+
+async function renderFeed(){
+  state.view='feed';
+  state.currentId=null;
+
+  setBackButton(false);
+
+  const main=document.getElementById('main');
+
+  main.innerHTML=
+    '<div class="loading">Загрузка статей…</div>';
+
+  state.articles=await fetchFeed();
+
+  main.innerHTML=`
+    ${renderFeedTools()}
+    <div id="feedList"></div>
+  `;
+
+  bindFeedTools();
+  renderFeedListOnly();
+
+  if(!state.articles.length){
+    document.getElementById('feedList').innerHTML=`
+      <div class="empty-state">
+        <h2>Здесь пока пусто</h2>
+        <p>
+          Нажмите «+ Статья», чтобы опубликовать первую запись.
+        </p>
+      </div>
+    `;
+  }
+}
+
+async function openReader(id){
+  state.view='reader';
+  state.currentId=id;
+
+  setBackButton(true,renderFeed);
+
+  const main=document.getElementById('main');
+
+  main.innerHTML=
+    '<div class="loading">Открываем статью…</div>';
+
+  const article=await fetchArticle(id);
+
+  if(!article){
+    main.innerHTML=`
+      <div class="empty-state">
+        <h2>Статья не найдена</h2>
+        <p>Возможно, её удалили.</p>
+      </div>
+    `;
     return;
   }
 
-  const bodyHtml =
-    (
-      article.blocks ||
-      []
-    )
-      .map(block => {
+  const bodyHtml=(article.blocks||[])
+    .map(b=>{
+      if(b.type==='text'){
+        return b.html?.trim()
+          ? `<p>${sanitizeHtml(b.html)}</p>`
+          : '';
+      }
 
-        if (
-          block.type === 'text'
-        ) {
+      if(b.type==='image'){
+        return `
+          <figure>
+            <img
+              src="${escapeHtml(b.src||'')}"
+              alt=""
+            >
+            ${
+              b.caption
+                ? `<figcaption>${escapeHtml(b.caption)}</figcaption>`
+                : ''
+            }
+          </figure>
+        `;
+      }
 
-          return (
-            block.html &&
-            block.html.trim()
-          )
-            ? `
-              <p>
-                ${sanitizeHtml(
-                  block.html
-                )}
-              </p>
-            `
-            : '';
-        }
+      return '';
+    })
+    .join('');
 
-        if (
-          block.type === 'image'
-        ) {
-
-          return `
-            <figure>
-
-              <img
-                src="${escapeHtml(
-                  block.src ||
-                  ''
-                )}"
-                alt=""
-              >
-
-              ${
-                block.caption
-                  ? `
-                    <figcaption>
-                      ${escapeHtml(
-                        block.caption
-                      )}
-                    </figcaption>
-                  `
-                  : ''
-              }
-
-            </figure>
-          `;
-        }
-
-        return '';
-      })
-      .join('');
-
-  const shareUrl =
+  const shareUrl=
     `https://t.me/${BOT_USERNAME}/${MINIAPP_SHORT_NAME}?startapp=${article.id}`;
 
-  const owner =
-    isArticleOwner(
-      article
-    );
+  const owner=isArticleOwner(article);
 
-  main.innerHTML = `
-
+  main.innerHTML=`
     <div class="reader">
 
       <div class="reader-meta reader-meta-row">
 
         <span>
-
-          ${fmtDate(
-            article.created_at
-          )}
-
+          ${fmtDate(article.created_at)}
           ${
             article.author_name
-              ? `
-                ·
-                ${escapeHtml(
-                  article.author_name
-                )}
-              `
+              ? ` · ${escapeHtml(article.author_name)}`
               : ''
           }
-
         </span>
 
         ${
           owner
             ? `
               <div class="article-owner-actions">
-
                 <button
                   class="btn btn-secondary"
                   id="editBtn"
@@ -1804,7 +632,6 @@ async function openReader(
                 >
                   Удалить
                 </button>
-
               </div>
             `
             : ''
@@ -1813,27 +640,17 @@ async function openReader(
       </div>
 
       <h1>
-        ${escapeHtml(
-          article.title ||
-          'Без названия'
-        )}
+        ${escapeHtml(article.title||'Без названия')}
       </h1>
 
       <div class="reader-body">
-
         ${
           bodyHtml ||
-          `
-            <p class="reader-empty">
-              Статья пока пуста.
-            </p>
-          `
+          '<p class="reader-empty">Статья пока пуста.</p>'
         }
-
       </div>
 
       <div class="share-box chrome">
-
         <div class="share-box-label">
           Поделиться
         </div>
@@ -1842,238 +659,133 @@ async function openReader(
           class="btn btn-primary"
           id="shareBtn"
         >
-          Отправить ссылку в чат
+          Копировать ссылку
         </button>
-
       </div>
 
     </div>
   `;
 
+  /*
+   * Ссылка больше НЕ отправляется в чат.
+   * При нажатии она только копируется в буфер обмена.
+   */
+  document.getElementById('shareBtn').onclick=async()=>{
+    try{
+      if(navigator.clipboard?.writeText){
+        await navigator.clipboard.writeText(shareUrl);
+        showToast('Ссылка скопирована');
+        return;
+      }
 
-  // =======================================================
-  // Share
-  // =======================================================
+      /*
+       * Запасной вариант для браузеров,
+       * где navigator.clipboard недоступен.
+       */
+      const textarea=document.createElement('textarea');
 
-  document
-    .getElementById(
-      'shareBtn'
-    )
-    .addEventListener(
-      'click',
-      async () => {
+      textarea.value=shareUrl;
+      textarea.style.position='fixed';
+      textarea.style.opacity='0';
 
-        try {
+      document.body.appendChild(textarea);
 
-          if (
-            tg &&
-            tg.openTelegramLink
-          ) {
+      textarea.focus();
+      textarea.select();
 
-            tg.openTelegramLink(
-              `https://t.me/share/url?url=${
-                encodeURIComponent(
-                  shareUrl
-                )
-              }&text=${
-                encodeURIComponent(
-                  article.title ||
-                  'Статья'
-                )
-              }`
-            );
+      const copied=document.execCommand('copy');
 
-            return;
-          }
+      textarea.remove();
 
-          if (
-            navigator.share
-          ) {
+      if(copied){
+        showToast('Ссылка скопирована');
+      }else{
+        showToast('Не удалось скопировать ссылку');
+      }
 
-            await navigator.share({
-              title:
-                article.title,
+    }catch(e){
+      console.error(e);
+      showToast('Не удалось скопировать ссылку');
+    }
+  };
 
-              url:
-                shareUrl
-            });
+  if(owner){
+    document.getElementById('editBtn').onclick=
+      ()=>editArticle(article);
 
-            return;
-          }
+    document.getElementById('deleteBtn').onclick=
+      async()=>{
+        if(!confirm('Удалить статью безвозвратно?')){
+          return;
+        }
 
-          await navigator
-            .clipboard
-            .writeText(
-              shareUrl
-            );
+        const b=document.getElementById('deleteBtn');
+
+        b.disabled=true;
+        b.textContent='Удаляем…';
+
+        try{
+          await callTelegramApi(
+            'delete-article',
+            {articleId:article.id}
+          );
+
+          showToast('Статья удалена');
+
+          await renderFeed();
+
+        }catch(e){
+          b.disabled=false;
+          b.textContent='Удалить';
 
           showToast(
-            'Ссылка скопирована'
-          );
-
-        } catch (err) {
-
-          console.error(err);
-        }
-      }
-    );
-
-
-  // =======================================================
-  // Edit / Delete
-  // =======================================================
-
-  if (owner) {
-
-    document
-      .getElementById(
-        'editBtn'
-      )
-      .addEventListener(
-        'click',
-        () => {
-          editArticle(
-            article
+            e.message||
+            'Не удалось удалить статью'
           );
         }
-      );
-
-    document
-      .getElementById(
-        'deleteBtn'
-      )
-      .addEventListener(
-        'click',
-        async () => {
-
-          if (
-            !confirm(
-              'Удалить статью безвозвратно?'
-            )
-          ) {
-            return;
-          }
-
-          const btn =
-            document.getElementById(
-              'deleteBtn'
-            );
-
-          btn.disabled =
-            true;
-
-          btn.textContent =
-            'Удаляем…';
-
-          try {
-
-            await callTelegramApi(
-              'delete-article',
-              {
-                articleId:
-                  article.id
-              }
-            );
-
-            showToast(
-              'Статья удалена'
-            );
-
-            await renderFeed();
-
-          } catch (err) {
-
-            console.error(err);
-
-            btn.disabled =
-              false;
-
-            btn.textContent =
-              'Удалить';
-
-            showToast(
-              err.message ||
-              'Не удалось удалить статью'
-            );
-          }
-        }
-      );
+      };
   }
 }
 
-
-// =========================================================
-// New draft
-// =========================================================
-
-function newDraft() {
-
+function newDraft(){
   return {
-
-    id: null,
-
-    title: '',
-
-    cover: null,
-
-    blocks: [
+    id:null,
+    title:'',
+    cover:null,
+    blocks:[
       {
-        type: 'text',
-        html: ''
+        type:'text',
+        html:''
       }
     ]
   };
 }
 
-
-// =========================================================
-// New editor
-// =========================================================
-
-async function openEditor() {
-
-  try {
-
-    if (
-      !tg ||
-      !tg.initData
-    ) {
-
+async function openEditor(){
+  try{
+    if(!tg?.initData){
       showToast(
         'Откройте приложение внутри Telegram'
       );
-
       return;
     }
 
-    const profile =
-      await ensureProfile(
-        true
-      );
+    const p=await ensureProfile(true);
 
-    if (!profile) {
-      return;
-    }
+    if(!p)return;
 
-    state.view =
-      'editor';
-
-    state.currentId =
-      null;
-
-    state.draft =
-      newDraft();
+    state.view='editor';
+    state.currentId=null;
+    state.draft=newDraft();
 
     setBackButton(
       true,
-      () => {
-
-        if (
+      ()=>{
+        if(
           confirm(
             'Отменить редактирование? Черновик будет потерян.'
           )
-        ) {
-
+        ){
           renderFeed();
         }
       }
@@ -2081,92 +793,52 @@ async function openEditor() {
 
     renderEditor();
 
-  } catch (err) {
-
-    console.error(err);
-
+  }catch(e){
     showToast(
-      err.message ||
+      e.message||
       'Не удалось открыть редактор'
     );
   }
 }
 
-
-// =========================================================
-// Edit article
-// =========================================================
-
-function editArticle(
-  article
-) {
-
-  if (
-    !isArticleOwner(
-      article
-    )
-  ) {
-
+function editArticle(article){
+  if(!isArticleOwner(article)){
     showToast(
       'Вы не являетесь автором этой статьи'
     );
-
     return;
   }
 
-  state.view =
-    'editor';
+  state.view='editor';
+  state.currentId=article.id;
 
-  state.currentId =
-    article.id;
-
-  state.draft = {
-
-    id:
-      article.id,
-
-    title:
-      article.title ||
-      '',
-
-    cover:
-      article.cover ||
-      null,
-
-    blocks:
-      JSON.parse(
-        JSON.stringify(
-          article.blocks ||
-          []
-        )
-      )
+  state.draft={
+    id:article.id,
+    title:article.title||'',
+    cover:article.cover||null,
+    blocks:JSON.parse(
+      JSON.stringify(article.blocks||[])
+    )
   };
 
-  if (
-    !state.draft.blocks.length
-  ) {
-
-    state.draft.blocks = [
+  if(!state.draft.blocks.length){
+    state.draft.blocks=[
       {
-        type: 'text',
-        html: ''
+        type:'text',
+        html:''
       }
     ];
   }
 
   setBackButton(
     true,
-    () => {
-
-      if (
+    ()=>{
+      if(
         confirm(
           'Отменить редактирование? Изменения будут потеряны.'
         )
-      ) {
-
-        openReader(
-          article.id
-        );
+      ){
+        openReader(article.id);
       }
     }
   );
@@ -2174,246 +846,32 @@ function editArticle(
   renderEditor();
 }
 
+function renderEditor(){
+  const main=document.getElementById('main');
+  const d=state.draft;
 
-// =========================================================
-// Upload image
-// =========================================================
-
-async function uploadImage(
-  dataUrl,
-  filename
-) {
-
-  const res =
-    await fetch(
-      dataUrl
-    );
-
-  const blob =
-    await res.blob();
-
-  const safeFilename =
-    String(
-      filename ||
-      'image.jpg'
-    )
-      .replace(
-        /[^a-zA-Z0-9._-]/g,
-        '_'
-      );
-
-  const path =
-    `${Date.now()}-${Math.random()
-      .toString(36)
-      .slice(2, 8)}-${safeFilename}`;
-
-  const {
-    error
-  } =
-    await db
-      .storage
-      .from('images')
-      .upload(
-        path,
-        blob,
-        {
-          contentType:
-            blob.type ||
-            'image/jpeg',
-
-          upsert: false
-        }
-      );
-
-  if (error) {
-    throw error;
-  }
-
-  const {
-    data
-  } =
-    db
-      .storage
-      .from('images')
-      .getPublicUrl(
-        path
-      );
-
-  return data.publicUrl;
-}
-
-
-// =========================================================
-// Compress image
-// =========================================================
-
-function compressImageFile(
-  file,
-  maxW = 1200,
-  quality = 0.82
-) {
-
-  return new Promise(
-    (
-      resolve,
-      reject
-    ) => {
-
-      const reader =
-        new FileReader();
-
-      reader.onload =
-        e => {
-
-          const img =
-            new Image();
-
-          img.onload =
-            () => {
-
-              let w =
-                img.width;
-
-              let h =
-                img.height;
-
-              if (
-                w > maxW
-              ) {
-
-                h =
-                  Math.round(
-                    h *
-                    (
-                      maxW /
-                      w
-                    )
-                  );
-
-                w =
-                  maxW;
-              }
-
-              const canvas =
-                document.createElement(
-                  'canvas'
-                );
-
-              canvas.width =
-                w;
-
-              canvas.height =
-                h;
-
-              canvas
-                .getContext(
-                  '2d'
-                )
-                .drawImage(
-                  img,
-                  0,
-                  0,
-                  w,
-                  h
-                );
-
-              resolve(
-                canvas.toDataURL(
-                  'image/jpeg',
-                  quality
-                )
-              );
-            };
-
-          img.onerror =
-            reject;
-
-          img.src =
-            e.target.result;
-        };
-
-      reader.onerror =
-        reject;
-
-      reader.readAsDataURL(
-        file
-      );
-    }
-  );
-}
-
-
-// =========================================================
-// Is owner
-// =========================================================
-
-function isArticleOwner(
-  article
-) {
-
-  if (
-    !tgUser ||
-    !article ||
-    !article.author_id
-  ) {
-
-    return false;
-  }
-
-  return (
-    Number(
-      article.author_id
-    ) ===
-    Number(
-      tgUser.id
-    )
-  );
-}
-
-
-// =========================================================
-// Editor
-// =========================================================
-
-function renderEditor() {
-
-  const main =
-    document.getElementById(
-      'main'
-    );
-
-  const d =
-    state.draft;
-
-  main.innerHTML = `
-
+  main.innerHTML=`
     <input
       class="editor-title-input"
       id="titleInput"
       placeholder="Заголовок статьи"
-      value="${escapeHtml(
-        d.title
-      )}"
+      value="${escapeHtml(d.title)}"
     >
 
     <div
       class="cover-editor"
       id="coverEditor"
     >
-
       <div class="cover-editor-header">
 
         <div>
-
           <div class="cover-editor-title">
             Обложка
           </div>
 
           <div class="cover-editor-subtitle">
-            Она будет видна на главной,
-            но не внутри статьи.
+            Она будет видна на главной, но не внутри статьи.
           </div>
-
         </div>
 
         ${
@@ -2438,9 +896,7 @@ function renderEditor() {
             <div class="cover-preview">
 
               <img
-                src="${escapeHtml(
-                  d.cover
-                )}"
+                src="${escapeHtml(d.cover)}"
                 alt=""
               >
 
@@ -2460,7 +916,6 @@ function renderEditor() {
               id="addCoverBtn"
               type="button"
             >
-
               <span class="cover-empty-icon">
                 ＋
               </span>
@@ -2468,18 +923,15 @@ function renderEditor() {
               <span>
                 Добавить обложку
               </span>
-
             </button>
           `
       }
-
     </div>
 
     <div
       class="toolbar chrome"
       id="toolbar"
     >
-
       <button
         data-cmd="bold"
         title="Жирный"
@@ -2500,23 +952,16 @@ function renderEditor() {
       >
         U
       </button>
-
     </div>
 
-    <div
-      id="blocksHost"
-    ></div>
+    <div id="blocksHost"></div>
 
     <button
       class="btn btn-primary publish-btn"
       id="publishBtn"
       type="button"
     >
-      ${
-        d.id
-          ? 'Сохранить изменения'
-          : 'Опубликовать'
-      }
+      ${d.id?'Сохранить изменения':'Опубликовать'}
     </button>
 
     <input
@@ -2538,398 +983,171 @@ function renderEditor() {
       class="hint chrome"
       id="editorHint"
     ></div>
-
   `;
 
+  document.getElementById('titleInput').oninput=
+    e=>d.title=e.target.value;
 
   document
-    .getElementById(
-      'titleInput'
-    )
-    .addEventListener(
-      'input',
-      e => {
+    .querySelectorAll('#toolbar button')
+    .forEach(btn=>{
+      btn.addEventListener(
+        'mousedown',
+        e=>{
+          e.preventDefault();
 
-        d.title =
-          e.target.value;
+          if(!activeBlockEl)return;
+
+          document.execCommand(
+            btn.dataset.cmd,
+            false,
+            null
+          );
+
+          activeBlockEl.dispatchEvent(
+            new Event('input')
+          );
+        }
+      );
+    });
+
+  document
+    .getElementById('addCoverBtn')
+    ?.addEventListener(
+      'click',
+      ()=>document.getElementById('coverInput').click()
+    );
+
+  document
+    .getElementById('changeCoverBtn')
+    ?.addEventListener(
+      'click',
+      ()=>document.getElementById('coverInput').click()
+    );
+
+  document
+    .getElementById('removeCoverBtn')
+    ?.addEventListener(
+      'click',
+      ()=>{
+        d.cover=null;
+        renderEditor();
+        showToast('Обложка убрана');
       }
     );
 
+  document.getElementById('coverInput').onchange=
+    async e=>{
+      const f=e.target.files[0];
 
-  document
-    .getElementById(
-      'toolbar'
-    )
-    .querySelectorAll(
-      'button'
-    )
-    .forEach(
-      btn => {
+      if(!f)return;
 
-        btn.addEventListener(
-          'mousedown',
-          e => {
-
-            e.preventDefault();
-
-            if (
-              !activeBlockEl
-            ) {
-              return;
-            }
-
-            document.execCommand(
-              btn.dataset.cmd,
-              false,
-              null
-            );
-
-            activeBlockEl.dispatchEvent(
-              new Event(
-                'input'
-              )
-            );
-          }
+      try{
+        d.cover=await compressImageFile(
+          f,
+          1600,
+          .84
         );
-      }
-    );
-
-
-  const addCoverBtn =
-    document.getElementById(
-      'addCoverBtn'
-    );
-
-  if (
-    addCoverBtn
-  ) {
-
-    addCoverBtn.addEventListener(
-      'click',
-      () => {
-
-        document
-          .getElementById(
-            'coverInput'
-          )
-          .click();
-      }
-    );
-  }
-
-
-  const changeCoverBtn =
-    document.getElementById(
-      'changeCoverBtn'
-    );
-
-  if (
-    changeCoverBtn
-  ) {
-
-    changeCoverBtn.addEventListener(
-      'click',
-      () => {
-
-        document
-          .getElementById(
-            'coverInput'
-          )
-          .click();
-      }
-    );
-  }
-
-
-  const removeCoverBtn =
-    document.getElementById(
-      'removeCoverBtn'
-    );
-
-  if (
-    removeCoverBtn
-  ) {
-
-    removeCoverBtn.addEventListener(
-      'click',
-      () => {
-
-        d.cover =
-          null;
 
         renderEditor();
 
+      }catch(err){
         showToast(
-          'Обложка убрана'
+          'Не удалось обработать обложку'
         );
       }
-    );
-  }
 
+      e.target.value='';
+    };
 
-  document
-    .getElementById(
-      'coverInput'
-    )
-    .addEventListener(
-      'change',
-      async e => {
+  document.getElementById('fileInput').onchange=
+    async e=>{
+      const files=[
+        ...e.target.files||[]
+      ];
 
-        const file =
-          e.target.files[0];
+      if(!files.length)return;
 
-        if (!file) {
-          return;
-        }
+      try{
+        const idx=
+          Number.isInteger(
+            state.pendingImageInsertIndex
+          )
+            ? state.pendingImageInsertIndex
+            : d.blocks.length;
 
-        const hint =
-          document.getElementById(
-            'editorHint'
-          );
+        const blocks=[];
 
-        hint.textContent =
-          'Обрабатываем обложку…';
-
-        try {
-
-          const dataUrl =
-            await compressImageFile(
-              file,
-              1600,
-              0.84
-            );
-
-          d.cover =
-            dataUrl;
-
-          renderEditor();
-
-        } catch (err) {
-
-          console.error(err);
-
-          showToast(
-            'Не удалось обработать обложку'
-          );
-        }
-
-        const currentHint =
-          document.getElementById(
-            'editorHint'
-          );
-
-        if (
-          currentHint
-        ) {
-
-          currentHint.textContent =
-            '';
-        }
-
-        e.target.value =
-          '';
-      }
-    );
-
-
-  document
-    .getElementById(
-      'fileInput'
-    )
-    .addEventListener(
-      'change',
-      async e => {
-
-        const files =
-          Array.from(
-            e.target.files ||
-            []
-          );
-
-        if (
-          !files.length
-        ) {
-          return;
-        }
-
-        const hint =
-          document.getElementById(
-            'editorHint'
-          );
-
-        hint.textContent =
-          files.length === 1
-            ? 'Обрабатываем изображение…'
-            : `Обрабатываем ${files.length} изображений…`;
-
-        try {
-
-          const insertIndex =
-            Number.isInteger(
-              state.pendingImageInsertIndex
-            )
-              ? state.pendingImageInsertIndex
-              : d.blocks.length;
-
-          const newBlocks =
-            [];
-
-          for (
-            const file of files
-          ) {
-
-            const dataUrl =
-              await compressImageFile(
-                file
-              );
-
-            newBlocks.push({
-              type:
-                'image',
-
-              src:
-                dataUrl,
-
-              caption:
-                '',
-
-              _pendingFile:
-                true
-            });
-          }
-
-          d.blocks.splice(
-            insertIndex,
-            0,
-            ...newBlocks
-          );
-
-          state.pendingImageInsertIndex =
-            null;
-
-          renderBlocks({
-            focusIndex:
-              insertIndex
+        for(const f of files){
+          blocks.push({
+            type:'image',
+            src:await compressImageFile(f),
+            caption:'',
+            _pendingFile:true
           });
-
-        } catch (err) {
-
-          console.error(err);
-
-          showToast(
-            'Не удалось обработать одно из изображений'
-          );
-
-        } finally {
-
-          const currentHint =
-            document.getElementById(
-              'editorHint'
-            );
-
-          if (
-            currentHint
-          ) {
-
-            currentHint.textContent =
-              '';
-          }
-
-          e.target.value =
-            '';
         }
+
+        d.blocks.splice(
+          idx,
+          0,
+          ...blocks
+        );
+
+        state.pendingImageInsertIndex=null;
+
+        renderBlocks({
+          focusIndex:idx
+        });
+
+      }catch(err){
+        showToast(
+          'Не удалось обработать изображение'
+        );
       }
-    );
 
+      e.target.value='';
+    };
 
-  document
-    .getElementById(
-      'publishBtn'
-    )
-    .addEventListener(
-      'click',
-      publishDraft
-    );
+  document.getElementById('publishBtn').onclick=
+    publishDraft;
 
   renderBlocks();
 }
 
-
-// =========================================================
-// Insert block
-// =========================================================
-
-function insertBlockAfter(
-  index,
-  block
-) {
-
-  const d =
-    state.draft;
-
-  const insertIndex =
-    index + 1;
-
-  d.blocks.splice(
-    insertIndex,
+function insertBlockAfter(index,block){
+  state.draft.blocks.splice(
+    index+1,
     0,
     block
   );
 
   renderBlocks({
     focusIndex:
-      block.type === 'text'
-        ? insertIndex
+      block.type==='text'
+        ? index+1
         : null
   });
 }
 
+function openImagePicker(insertIndex){
+  state.pendingImageInsertIndex=insertIndex;
 
-// =========================================================
-// Open image picker
-// =========================================================
+  const input=document.getElementById(
+    'fileInput'
+  );
 
-function openImagePicker(
-  insertIndex
-) {
-
-  state.pendingImageInsertIndex =
-    insertIndex;
-
-  const input =
-    document.getElementById(
-      'fileInput'
-    );
-
-  if (!input) {
-    return;
+  if(input){
+    input.value='';
+    input.click();
   }
-
-  input.value =
-    '';
-
-  input.click();
 }
 
+function createBlockAddControls(index){
+  const row=document.createElement('div');
 
-// =========================================================
-// Add controls
-// =========================================================
+  row.className='block-add-row';
 
-function createBlockAddControls(
-  index
-) {
-
-  const row =
-    document.createElement(
-      'div'
-    );
-
-  row.className =
-    'block-add-row';
-
-  row.innerHTML = `
-
+  row.innerHTML=`
     <button
       class="block-add-btn"
       type="button"
@@ -2945,1012 +1163,760 @@ function createBlockAddControls(
     >
       ＋ Картинка
     </button>
-
   `;
 
   row
-    .querySelector(
-      '[data-add="text"]'
-    )
-    .addEventListener(
-      'click',
-      () => {
-
-        insertBlockAfter(
-          index,
-          {
-            type:
-              'text',
-
-            html:
-              ''
-          }
-        );
-      }
-    );
+    .querySelector('[data-add="text"]')
+    .onclick=()=>{
+      insertBlockAfter(
+        index,
+        {
+          type:'text',
+          html:''
+        }
+      );
+    };
 
   row
-    .querySelector(
-      '[data-add="image"]'
-    )
-    .addEventListener(
-      'click',
-      () => {
-
-        openImagePicker(
-          index + 1
-        );
-      }
-    );
+    .querySelector('[data-add="image"]')
+    .onclick=()=>{
+      openImagePicker(index+1);
+    };
 
   return row;
 }
 
+function renderBlocks(options={}){
+  const host=document.getElementById(
+    'blocksHost'
+  );
 
-// =========================================================
-// Blocks
-// =========================================================
+  if(!host)return;
 
-function renderBlocks(
-  options = {}
-) {
+  const d=state.draft;
+  const old=activeBlockEl;
 
-  const host =
-    document.getElementById(
-      'blocksHost'
+  let activeIndex=null;
+  let offset=null;
+
+  if(
+    old?.isConnected &&
+    old.dataset.i!==undefined
+  ){
+    activeIndex=Number(old.dataset.i);
+
+    try{
+      const s=getSelection();
+
+      if(s?.rangeCount){
+        const r=s.getRangeAt(0);
+
+        if(old.contains(r.startContainer)){
+          offset=getCaretOffset(
+            old,
+            r
+          );
+        }
+      }
+
+    }catch(e){}
+  }
+
+  host.innerHTML='';
+
+  d.blocks.forEach((b,i)=>{
+    const block=document.createElement('div');
+
+    block.className='block';
+    block.dataset.i=i;
+
+    if(b.type==='text'){
+      block.innerHTML=`
+        <button
+          class="block-remove"
+          data-act="del"
+          data-i="${i}"
+          type="button"
+        >
+          ✕
+        </button>
+
+        <div
+          class="block-text"
+          contenteditable="true"
+          data-i="${i}"
+          data-placeholder="Текст абзаца…"
+        >
+          ${sanitizeHtml(b.html||'')}
+        </div>
+      `;
+    }
+
+    else if(b.type==='image'){
+      block.className=
+        'block block-image-wrap';
+
+      block.innerHTML=`
+        <button
+          class="block-remove"
+          data-act="del"
+          data-i="${i}"
+          type="button"
+        >
+          ✕
+        </button>
+
+        <img
+          src="${escapeHtml(b.src||'')}"
+          alt=""
+        >
+
+        <input
+          class="block-caption"
+          data-i="${i}"
+          placeholder="Подпись (необязательно)"
+          value="${escapeHtml(b.caption||'')}"
+        >
+      `;
+    }
+
+    else{
+      return;
+    }
+
+    host.appendChild(block);
+    host.appendChild(
+      createBlockAddControls(i)
+    );
+  });
+
+  host
+    .querySelectorAll('.block-text')
+    .forEach(el=>{
+      el.onfocus=()=>{
+        activeBlockEl=el;
+      };
+
+      el.oninput=e=>{
+        const i=+e.target.dataset.i;
+
+        if(d.blocks[i]?.type==='text'){
+          d.blocks[i].html=
+            sanitizeHtml(
+              e.target.innerHTML
+            );
+        }
+      };
+
+      el.onkeyup=()=>{
+        activeBlockEl=el;
+      };
+
+      el.onmouseup=()=>{
+        activeBlockEl=el;
+      };
+    });
+
+  host
+    .querySelectorAll('.block-caption')
+    .forEach(el=>{
+      el.oninput=e=>{
+        const i=+e.target.dataset.i;
+
+        if(d.blocks[i]?.type==='image'){
+          d.blocks[i].caption=
+            e.target.value;
+        }
+      };
+    });
+
+  host
+    .querySelectorAll('[data-act="del"]')
+    .forEach(el=>{
+      el.onclick=()=>{
+        const i=+el.dataset.i;
+
+        if(!d.blocks[i])return;
+
+        d.blocks.splice(i,1);
+
+        if(!d.blocks.length){
+          d.blocks.push({
+            type:'text',
+            html:''
+          });
+        }
+
+        renderBlocks({
+          focusIndex:
+            Math.min(
+              i,
+              d.blocks.length-1
+            )
+        });
+      };
+    });
+
+  if(
+    options.focusIndex!==undefined &&
+    options.focusIndex!==null
+  ){
+    const t=host.querySelector(
+      `.block-text[data-i="${options.focusIndex}"]`
     );
 
-  if (!host) {
+    if(t){
+      requestAnimationFrame(()=>{
+        t.focus();
+        activeBlockEl=t;
+        placeCaretAtEnd(t);
+      });
+    }
+
     return;
   }
 
-  const d =
-    state.draft;
-
-  const oldActiveEl =
-    activeBlockEl;
-
-  let activeIndex =
-    null;
-
-  let selectionOffset =
-    null;
-
-  if (
-    oldActiveEl &&
-    oldActiveEl.isConnected &&
-    oldActiveEl.dataset.i !==
-      undefined
-  ) {
-
-    activeIndex =
-      Number(
-        oldActiveEl.dataset.i
-      );
-
-    try {
-
-      const selection =
-        window.getSelection();
-
-      if (
-        selection &&
-        selection.rangeCount
-      ) {
-
-        const range =
-          selection.getRangeAt(
-            0
-          );
-
-        if (
-          oldActiveEl.contains(
-            range.startContainer
-          )
-        ) {
-
-          selectionOffset =
-            getCaretOffset(
-              oldActiveEl,
-              range
-            );
-        }
-      }
-
-    } catch (err) {
-
-      console.warn(
-        'Не удалось сохранить курсор:',
-        err
-      );
-    }
-  }
-
-  host.innerHTML =
-    '';
-
-  d.blocks.forEach(
-    (b, i) => {
-
-      const block =
-        document.createElement(
-          'div'
-        );
-
-      block.className =
-        'block';
-
-      block.dataset.i =
-        i;
-
-      if (
-        b.type === 'text'
-      ) {
-
-        block.innerHTML = `
-
-          <button
-            class="block-remove"
-            data-act="del"
-            data-i="${i}"
-            type="button"
-          >
-            ✕
-          </button>
-
-          <div
-            class="block-text"
-            contenteditable="true"
-            data-i="${i}"
-            data-placeholder="Текст абзаца…"
-          >
-            ${sanitizeHtml(
-              b.html ||
-              ''
-            )}
-          </div>
-
-        `;
-      }
-
-      else if (
-        b.type === 'image'
-      ) {
-
-        block.className =
-          'block block-image-wrap';
-
-        block.innerHTML = `
-
-          <button
-            class="block-remove"
-            data-act="del"
-            data-i="${i}"
-            type="button"
-          >
-            ✕
-          </button>
-
-          <img
-            src="${escapeHtml(
-              b.src ||
-              ''
-            )}"
-            alt=""
-          >
-
-          <input
-            class="block-caption"
-            data-i="${i}"
-            placeholder="Подпись (необязательно)"
-            value="${escapeHtml(
-              b.caption ||
-              ''
-            )}"
-          >
-
-        `;
-      }
-
-      else {
-        return;
-      }
-
-      host.appendChild(
-        block
-      );
-
-      host.appendChild(
-        createBlockAddControls(
-          i
-        )
-      );
-    }
-  );
-
-
-  host
-    .querySelectorAll(
-      '.block-text'
-    )
-    .forEach(
-      el => {
-
-        el.addEventListener(
-          'focus',
-          () => {
-
-            activeBlockEl =
-              el;
-          }
-        );
-
-        el.addEventListener(
-          'input',
-          e => {
-
-            const index =
-              Number(
-                e.target.dataset.i
-              );
-
-            if (
-              !d.blocks[index] ||
-              d.blocks[index].type !==
-                'text'
-            ) {
-
-              return;
-            }
-
-            d.blocks[index].html =
-              sanitizeHtml(
-                e.target.innerHTML
-              );
-          }
-        );
-
-        el.addEventListener(
-          'keyup',
-          () => {
-
-            activeBlockEl =
-              el;
-          }
-        );
-
-        el.addEventListener(
-          'mouseup',
-          () => {
-
-            activeBlockEl =
-              el;
-          }
-        );
-      }
+  if(
+    activeIndex!==null &&
+    activeIndex<d.blocks.length
+  ){
+    const t=host.querySelector(
+      `.block-text[data-i="${activeIndex}"]`
     );
 
+    if(
+      t &&
+      document.activeElement===document.body
+    ){
+      t.focus();
+      activeBlockEl=t;
 
-  host
-    .querySelectorAll(
-      '.block-caption'
-    )
-    .forEach(
-      el => {
-
-        el.addEventListener(
-          'input',
-          e => {
-
-            const index =
-              Number(
-                e.target.dataset.i
-              );
-
-            if (
-              !d.blocks[index] ||
-              d.blocks[index].type !==
-                'image'
-            ) {
-
-              return;
-            }
-
-            d.blocks[index].caption =
-              e.target.value;
-          }
-        );
-      }
-    );
-
-
-  host
-    .querySelectorAll(
-      '[data-act="del"]'
-    )
-    .forEach(
-      el => {
-
-        el.addEventListener(
-          'click',
-          () => {
-
-            const index =
-              Number(
-                el.dataset.i
-              );
-
-            if (
-              !d.blocks[index]
-            ) {
-              return;
-            }
-
-            const wasActive =
-              activeIndex ===
-              index;
-
-            d.blocks.splice(
-              index,
-              1
-            );
-
-            if (
-              !d.blocks.length
-            ) {
-
-              d.blocks.push({
-                type:
-                  'text',
-
-                html:
-                  ''
-              });
-            }
-
-            let focusIndex =
-              null;
-
-            if (
-              wasActive
-            ) {
-
-              focusIndex =
-                Math.min(
-                  index,
-                  d.blocks.length -
-                    1
-                );
-
-            } else if (
-              activeIndex !==
-              null
-            ) {
-
-              if (
-                activeIndex >
-                index
-              ) {
-
-                focusIndex =
-                  activeIndex -
-                  1;
-
-              } else {
-
-                focusIndex =
-                  activeIndex;
-              }
-            }
-
-            renderBlocks({
-              focusIndex
-            });
-          }
-        );
-      }
-    );
-
-
-  if (
-    options.focusIndex !==
-      undefined &&
-    options.focusIndex !==
-      null
-  ) {
-
-    const focusIndex =
-      options.focusIndex;
-
-    const target =
-      host.querySelector(
-        `.block-text[data-i="${focusIndex}"]`
-      );
-
-    if (target) {
-
-      requestAnimationFrame(
-        () => {
-
-          target.focus();
-
-          activeBlockEl =
-            target;
-
-          placeCaretAtEnd(
-            target
-          );
-        }
-      );
-
-      return;
-    }
-  }
-
-  if (
-    activeIndex !==
-      null &&
-    activeIndex >= 0 &&
-    activeIndex <
-      d.blocks.length
-  ) {
-
-    const target =
-      host.querySelector(
-        `.block-text[data-i="${activeIndex}"]`
-      );
-
-    if (
-      target &&
-      document.activeElement ===
-        document.body
-    ) {
-
-      target.focus();
-
-      activeBlockEl =
-        target;
-
-      if (
-        selectionOffset !==
-        null
-      ) {
-
-        setCaretOffset(
-          target,
-          selectionOffset
-        );
+      if(offset!==null){
+        setCaretOffset(t,offset);
       }
     }
   }
 }
 
+function getCaretOffset(el,range){
+  const r=range.cloneRange();
 
-// =========================================================
-// Caret helpers
-// =========================================================
+  r.selectNodeContents(el);
 
-function getCaretOffset(
-  element,
-  range
-) {
-
-  const preRange =
-    range.cloneRange();
-
-  preRange.selectNodeContents(
-    element
-  );
-
-  preRange.setEnd(
+  r.setEnd(
     range.startContainer,
     range.startOffset
   );
 
-  return preRange
-    .toString()
-    .length;
+  return r.toString().length;
 }
 
+function setCaretOffset(el,offset){
+  const s=getSelection();
 
-function setCaretOffset(
-  element,
-  offset
-) {
+  if(!s)return;
 
-  const selection =
-    window.getSelection();
+  const r=document.createRange();
 
-  if (!selection) {
-    return;
-  }
+  let cur=0;
+  let found=false;
 
-  const range =
-    document.createRange();
+  function walk(n){
+    if(found)return;
 
-  let currentOffset =
-    0;
+    if(n.nodeType===3){
+      const len=n.nodeValue.length;
 
-  let found =
-    false;
-
-  function walk(node) {
-
-    if (found) {
-      return;
-    }
-
-    if (
-      node.nodeType ===
-      3
-    ) {
-
-      const length =
-        node.nodeValue.length;
-
-      if (
-        currentOffset +
-          length >=
-        offset
-      ) {
-
-        range.setStart(
-          node,
+      if(cur+len>=offset){
+        r.setStart(
+          n,
           Math.max(
             0,
-            offset -
-              currentOffset
+            offset-cur
           )
         );
 
-        range.collapse(
-          true
-        );
-
-        found =
-          true;
-
+        r.collapse(true);
+        found=true;
         return;
       }
 
-      currentOffset +=
-        length;
-
+      cur+=len;
       return;
     }
 
-    node.childNodes.forEach(
-      child => {
-        walk(child);
-      }
-    );
+    n.childNodes.forEach(walk);
   }
 
-  walk(element);
+  walk(el);
 
-  if (!found) {
-
-    placeCaretAtEnd(
-      element
-    );
-
+  if(!found){
+    placeCaretAtEnd(el);
     return;
   }
 
-  selection.removeAllRanges();
-
-  selection.addRange(
-    range
-  );
+  s.removeAllRanges();
+  s.addRange(r);
 }
 
+function placeCaretAtEnd(el){
+  const s=getSelection();
 
-function placeCaretAtEnd(
-  element
-) {
+  if(!s)return;
 
-  const selection =
-    window.getSelection();
+  const r=document.createRange();
 
-  if (!selection) {
-    return;
-  }
+  r.selectNodeContents(el);
+  r.collapse(false);
 
-  const range =
-    document.createRange();
-
-  range.selectNodeContents(
-    element
-  );
-
-  range.collapse(
-    false
-  );
-
-  selection.removeAllRanges();
-
-  selection.addRange(
-    range
-  );
+  s.removeAllRanges();
+  s.addRange(r);
 }
 
+async function uploadImage(dataUrl,filename){
+  const res=await fetch(dataUrl);
+  const blob=await res.blob();
 
-// =========================================================
-// Publish / Update
-// =========================================================
+  const safe=String(
+    filename||'image.jpg'
+  ).replace(
+    /[^a-zA-Z0-9._-]/g,
+    '_'
+  );
 
-async function publishDraft() {
+  const path=
+    `${Date.now()}-${Math.random().toString(36).slice(2,8)}-${safe}`;
 
-  const d =
-    state.draft;
+  const {error}=
+    await db.storage
+      .from('images')
+      .upload(
+        path,
+        blob,
+        {
+          contentType:
+            blob.type||'image/jpeg',
+          upsert:false
+        }
+      );
 
-  const hasContent =
-    Boolean(
-      d.title.trim()
-    ) ||
-    Boolean(
-      d.cover
-    ) ||
-    d.blocks.some(
-      b => {
+  if(error)throw error;
 
-        if (
-          b.type === 'text'
-        ) {
+  return db.storage
+    .from('images')
+    .getPublicUrl(path)
+    .data.publicUrl;
+}
 
-          return (
-            b.html
-              .replace(
-                /<[^>]+>/g,
-                ''
-              )
-              .trim()
-              .length > 0
+function compressImageFile(
+  file,
+  maxW=1200,
+  quality=.82
+){
+  return new Promise((resolve,reject)=>{
+    const r=new FileReader();
+
+    r.onload=e=>{
+      const img=new Image();
+
+      img.onload=()=>{
+        let w=img.width;
+        let h=img.height;
+
+        if(w>maxW){
+          h=Math.round(
+            h*maxW/w
           );
+
+          w=maxW;
         }
 
-        return (
-          b.type ===
-          'image'
+        const c=document.createElement(
+          'canvas'
         );
-      }
+
+        c.width=w;
+        c.height=h;
+
+        c
+          .getContext('2d')
+          .drawImage(
+            img,
+            0,
+            0,
+            w,
+            h
+          );
+
+        resolve(
+          c.toDataURL(
+            'image/jpeg',
+            quality
+          )
+        );
+      };
+
+      img.onerror=reject;
+      img.src=e.target.result;
+    };
+
+    r.onerror=reject;
+    r.readAsDataURL(file);
+  });
+}
+
+async function publishDraft(){
+  const d=state.draft;
+
+  const hasContent=
+    !!d.title.trim() ||
+    !!d.cover ||
+    d.blocks.some(
+      b=>
+        b.type==='image' ||
+        (
+          b.type==='text' &&
+          b.html
+            .replace(/<[^>]+>/g,'')
+            .trim()
+        )
     );
 
-  if (!hasContent) {
-
+  if(!hasContent){
     showToast(
       'Добавьте заголовок или содержимое'
     );
-
     return;
   }
 
-  const hint =
-    document.getElementById(
-      'editorHint'
-    );
-
-  const button =
+  const button=
     document.getElementById(
       'publishBtn'
     );
 
-  button.disabled =
-    true;
+  const hint=
+    document.getElementById(
+      'editorHint'
+    );
 
-  hint.textContent =
+  button.disabled=true;
+
+  hint.textContent=
     d.id
       ? 'Сохраняем изменения…'
       : 'Публикуем…';
 
-  try {
+  try{
+    const profile=
+      await ensureProfile(true);
 
-    const profile =
-      await ensureProfile(
-        true
-      );
-
-    if (!profile) {
-
+    if(!profile){
       throw new Error(
         'Необходимо указать ник'
       );
     }
 
-    let finalCover =
-      d.cover ||
-      null;
+    let cover=d.cover||null;
 
-    if (
-      finalCover &&
-      finalCover.startsWith(
-        'data:'
-      )
-    ) {
-
-      finalCover =
-        await uploadImage(
-          finalCover,
-          'cover.jpg'
-        );
+    if(cover?.startsWith('data:')){
+      cover=await uploadImage(
+        cover,
+        'cover.jpg'
+      );
     }
 
-    for (
-      const block of
-      d.blocks
-    ) {
+    for(const b of d.blocks){
+      if(
+        b.type==='image' &&
+        b._pendingFile
+      ){
+        b.src=await uploadImage(
+          b.src,
+          'image.jpg'
+        );
 
-      if (
-        block.type ===
-          'image' &&
-        block._pendingFile
-      ) {
-
-        const url =
-          await uploadImage(
-            block.src,
-            'image.jpg'
-          );
-
-        block.src =
-          url;
-
-        delete block._pendingFile;
+        delete b._pendingFile;
       }
     }
 
-    const firstText =
-      d.blocks.find(
-        b =>
-          b.type ===
-            'text' &&
-          b.html &&
-          b.html.trim()
-      );
+    const first=d.blocks.find(
+      b=>
+        b.type==='text' &&
+        b.html?.trim()
+    );
 
-    const excerpt =
-      firstText
-        ? firstText.html
-            .replace(
-              /<[^>]+>/g,
-              ''
-            )
+    const excerpt=
+      first
+        ? first.html
+            .replace(/<[^>]+>/g,'')
             .trim()
-            .slice(
-              0,
-              140
-            )
+            .slice(0,140)
         : '';
 
-    const payload = {
-
+    const payload={
       title:
-        d.title.trim() ||
+        d.title.trim()||
         'Без названия',
-
       excerpt,
-
-      cover:
-        finalCover,
-
-      blocks:
-        d.blocks
+      cover,
+      blocks:d.blocks
     };
 
-    if (!d.id) {
-
-      const result =
+    if(!d.id){
+      const r=
         await callTelegramApi(
           'create-article',
+          {article:payload}
+        );
+
+      showToast('Опубликовано');
+
+      await openReader(
+        r.article.id
+      );
+
+    }else{
+      const r=
+        await callTelegramApi(
+          'update-article',
           {
-            article:
-              payload
+            article:{
+              id:d.id,
+              ...payload
+            }
           }
         );
 
       showToast(
-        'Опубликовано'
+        'Изменения сохранены'
       );
 
       await openReader(
-        result.article.id
+        r.article.id
       );
+    }
+
+  }catch(e){
+    console.error(e);
+
+    showToast(
+      e.message||
+      'Ошибка публикации'
+    );
+
+    hint.textContent='';
+
+  }finally{
+    button.disabled=false;
+  }
+}
+
+async function openProfile(){
+  state.view='profile';
+  state.currentId=null;
+
+  setBackButton(
+    true,
+    renderFeed
+  );
+
+  const main=
+    document.getElementById('main');
+
+  main.innerHTML=
+    '<div class="loading">Загрузка профиля…</div>';
+
+  try{
+    const p=
+      await ensureProfile(false);
+
+    if(!p){
+      main.innerHTML=`
+        <div class="profile-page">
+          <div class="profile-card chrome">
+
+            <div class="profile-avatar">
+              ?
+            </div>
+
+            <h2>Профиль</h2>
+
+            <p>
+              У вас пока нет ника
+            </p>
+
+            <button
+              class="btn btn-primary"
+              id="createProfileBtn"
+            >
+              Придумать ник
+            </button>
+
+          </div>
+        </div>
+      `;
+
+      document
+        .getElementById('createProfileBtn')
+        .onclick=async()=>{
+          if(
+            await ensureProfile(true)
+          ){
+            openProfile();
+          }
+        };
 
       return;
     }
 
-    const result =
-      await callTelegramApi(
-        'update-article',
-        {
-          article: {
+    const first=
+      p.username
+        .trim()
+        .charAt(0)
+        .toUpperCase();
 
-            id:
-              d.id,
+    main.innerHTML=`
+      <div class="profile-page">
 
-            ...payload
-          }
+        <div class="profile-card chrome">
+
+          <div class="profile-avatar">
+            ${escapeHtml(first||'?')}
+          </div>
+
+          <div class="profile-label">
+            Ваш ник
+          </div>
+
+          <div class="profile-username">
+            ${escapeHtml(p.username)}
+          </div>
+
+          <button
+            class="btn btn-primary profile-edit-btn"
+            id="changeUsernameBtn"
+          >
+            Изменить ник
+          </button>
+
+          <div class="profile-description">
+            Этот ник отображается рядом с вашими статьями.
+          </div>
+
+        </div>
+
+      </div>
+    `;
+
+    document
+      .getElementById('changeUsernameBtn')
+      .onclick=async()=>{
+        if(
+          await openUsernameDialog(
+            p.username
+          )
+        ){
+          openProfile();
         }
-      );
+      };
 
-    showToast(
-      'Изменения сохранены'
-    );
+  }catch(e){
+    main.innerHTML=`
+      <div class="empty-state">
+        <h2>
+          Не удалось открыть профиль
+        </h2>
 
-    await openReader(
-      result.article.id
-    );
-
-  } catch (err) {
-
-    console.error(err);
-
-    showToast(
-      err.message ||
-      'Ошибка публикации'
-    );
-
-    hint.textContent =
-      '';
-
-  } finally {
-
-    button.disabled =
-      false;
+        <p>
+          ${escapeHtml(e.message||'')}
+        </p>
+      </div>
+    `;
   }
 }
-
-
-// =========================================================
-// Telegram Back Button
-// =========================================================
 
 function setBackButton(
   show,
   onClick
-) {
+){
+  if(!tg?.BackButton)return;
 
-  if (!tg) {
-    return;
-  }
-
-  if (
-    !tg.BackButton ||
-    typeof tg.BackButton.show !==
-      'function'
-  ) {
-    return;
-  }
-
-  try {
-
-    if (
+  try{
+    if(
       setBackButton._last &&
-      typeof tg.BackButton.offClick ===
-        'function'
-    ) {
-
+      tg.BackButton.offClick
+    ){
       tg.BackButton.offClick(
         setBackButton._last
       );
     }
 
-    if (show) {
-
+    if(show){
       tg.BackButton.show();
 
-      if (
-        typeof tg.BackButton.onClick ===
-          'function'
-      ) {
-
+      if(tg.BackButton.onClick){
         tg.BackButton.onClick(
           onClick
         );
 
-        setBackButton._last =
+        setBackButton._last=
           onClick;
       }
-
-    } else {
-
+    }else{
       tg.BackButton.hide();
-
-      setBackButton._last =
-        null;
+      setBackButton._last=null;
     }
 
-  } catch (err) {
-
+  }catch(e){
     console.warn(
       'BackButton:',
-      err
+      e
     );
   }
 }
 
-
-// =========================================================
-// Navigation
-// =========================================================
-
-const homeLink =
-  document.getElementById(
-    'homeLink'
-  );
-
-if (homeLink) {
-
-  homeLink.addEventListener(
+document
+  .getElementById('homeLink')
+  ?.addEventListener(
     'click',
     renderFeed
   );
-}
 
-
-const newArticleBtn =
-  document.getElementById(
-    'newArticleBtn'
-  );
-
-if (newArticleBtn) {
-
-  newArticleBtn.addEventListener(
+document
+  .getElementById('newArticleBtn')
+  ?.addEventListener(
     'click',
     openEditor
   );
-}
 
-
-const profileBtn =
-  document.getElementById(
-    'profileBtn'
-  );
-
-if (profileBtn) {
-
-  profileBtn.addEventListener(
+document
+  .getElementById('profileBtn')
+  ?.addEventListener(
     'click',
     openProfile
   );
-}
 
+(async function init(){
+  try{
+    const startParam=
+      tg?.initDataUnsafe?.start_param;
 
-// =========================================================
-// Init
-// =========================================================
-
-(async function init() {
-
-  try {
-
-    const startParam =
-      tg &&
-      tg.initDataUnsafe
-        ? tg.initDataUnsafe.start_param
-        : null;
-
-    if (startParam) {
-
+    if(startParam){
       await openReader(
         startParam
       );
-
-    } else {
-
+    }else{
       await renderFeed();
     }
 
-  } catch (err) {
-
+  }catch(e){
     console.error(
       'Init:',
-      err
+      e
     );
 
     showToast(
       'Ошибка запуска приложения'
     );
   }
-
 })();
