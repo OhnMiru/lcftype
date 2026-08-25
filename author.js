@@ -106,35 +106,22 @@ function renderAuthorPage(profile, articles) {
             ${escapeHtml(profile.username)}
           </h1>
 
+          <div class="author-stats">
+            <span class="author-stat">
+              <span class="author-stat-number">${articles.length}</span>
+              ${getDeclension(articles.length, 'статья', 'статьи', 'статей')}
+            </span>
+            <span class="author-stat-divider">·</span>
+            <span class="author-stat">
+              С <time datetime="${profile.created_at}">${fmtDate(profile.created_at)}</time>
+            </span>
+          </div>
+
           ${bio ? `
             <div class="author-bio">
               ${escapeHtml(bio)}
             </div>
           ` : ''}
-
-          <div class="author-stats">
-
-            <span class="author-stat">
-              <span class="author-stat-number">${articles.length}</span>
-              ${getDeclension(articles.length, 'статья', 'статьи', 'статей')}
-            </span>
-
-            <span class="author-stat-divider">·</span>
-
-            <span class="author-stat">
-              С <time datetime="${profile.created_at}">
-                ${fmtDate(profile.created_at)}
-              </time>
-            </span>
-
-            ${hasDonations ? `
-              <span class="author-stat-divider">·</span>
-              <span class="author-stat">
-                ⭐ Принимает донаты
-              </span>
-            ` : ''}
-
-          </div>
 
           ${hasDonations ? `
             <div class="author-donate-action">
@@ -236,9 +223,7 @@ function getDeclension(count, one, two, five) {
 function makeAuthorClickable(container) {
   if (!container) return;
 
-  // Ищем все элементы с классом author-clickable
   container.querySelectorAll('.author-clickable').forEach(el => {
-    // Удаляем старые обработчики, чтобы не было дублирования
     el.removeEventListener('click', el._authorClickHandler);
 
     const authorId = el.dataset.authorId;
@@ -248,14 +233,13 @@ function makeAuthorClickable(container) {
 
     const handler = (event) => {
       event.preventDefault();
-      event.stopPropagation(); // Чтобы не открывалась статья
+      event.stopPropagation();
       openAuthor(authorId, authorName);
     };
 
     el._authorClickHandler = handler;
     el.addEventListener('click', handler);
 
-    // Стилизуем как ссылку
     el.style.cursor = 'pointer';
     el.style.textDecoration = 'underline';
     el.style.textDecorationStyle = 'dotted';
