@@ -1696,7 +1696,7 @@ img{
 
 /* Контейнер реакций */
 
-.article-reaction-list{
+.article-reactions-list{
   display:flex;
 
   align-items:stretch;
@@ -1831,7 +1831,7 @@ img{
   }
 
 
-  .article-reaction-list{
+  .article-reactions-list{
     gap:6px;
   }
 
@@ -1871,7 +1871,7 @@ img{
   }
 
 
-  .article-reaction-list{
+  .article-reactions-list{
     gap:4px;
   }
 
