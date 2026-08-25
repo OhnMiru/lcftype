@@ -10,9 +10,14 @@
 function getAuthors() {
   const authors = new Map();
 
-  for (const article of state.articles || []) {
+  const articles =
+    Array.isArray(state?.articles)
+      ? state.articles
+      : [];
+
+  for (const article of articles) {
     const name = String(
-      article?.author_name || ''
+      article?.author_name ?? ''
     ).trim();
 
     if (!name) {
@@ -23,14 +28,41 @@ function getAuthors() {
   }
 
   return [...authors.values()].sort(
-    (a, b) => a.localeCompare(
-      b,
-      'ru',
-      {
-        sensitivity: 'base'
-      }
-    )
+    (a, b) =>
+      a.localeCompare(
+        b,
+        'ru',
+        {
+          sensitivity: 'base'
+        }
+      )
   );
+}
+
+
+// =========================================================
+// Нормализация фильтра авторов
+// =========================================================
+
+function ensureAuthorFilter() {
+  if (!(state.authorFilter instanceof Set)) {
+    state.authorFilter = new Set();
+  }
+
+  return state.authorFilter;
+}
+
+
+// =========================================================
+// Текст поиска
+// =========================================================
+
+function getSearchQuery() {
+  return String(
+    state?.search ?? ''
+  )
+    .trim()
+    .toLocaleLowerCase('ru-RU');
 }
 
 
@@ -39,27 +71,29 @@ function getAuthors() {
 // =========================================================
 
 function filteredArticles() {
-  const query = String(
-    state.search || ''
-  )
-    .trim()
-    .toLocaleLowerCase('ru-RU');
+  const query =
+    getSearchQuery();
 
   const selectedAuthors =
-    state.authorFilter instanceof Set
-      ? state.authorFilter
-      : new Set();
+    ensureAuthorFilter();
 
-  return (state.articles || []).filter(
+  const articles =
+    Array.isArray(state?.articles)
+      ? state.articles
+      : [];
+
+  return articles.filter(
     article => {
-      const title = String(
-        article?.title || ''
-      )
-        .toLocaleLowerCase('ru-RU');
+      const title =
+        String(
+          article?.title ?? ''
+        )
+          .toLocaleLowerCase('ru-RU');
 
-      const author = String(
-        article?.author_name || ''
-      ).trim();
+      const author =
+        String(
+          article?.author_name ?? ''
+        ).trim();
 
       const matchesSearch =
         !query ||
@@ -83,15 +117,19 @@ function filteredArticles() {
 // =========================================================
 
 function renderFeedTools() {
-  const authors = getAuthors();
+  const authors =
+    getAuthors();
+
+  const selectedAuthors =
+    ensureAuthorFilter();
 
   const selectedCount =
-    state.authorFilter instanceof Set
-      ? state.authorFilter.size
-      : 0;
+    selectedAuthors.size;
 
   const searchValue =
-    String(state.search || '');
+    String(
+      state?.search ?? ''
+    );
 
   return `
     <div class="feed-tools chrome">
@@ -124,7 +162,7 @@ function renderFeedTools() {
           class="feed-search-clear"
           type="button"
           aria-label="Очистить поиск"
-          ${searchValue ? '' : 'hidden'}
+          ${searchValue.trim() ? '' : 'hidden'}
         >
           ×
         </button>
@@ -136,9 +174,9 @@ function renderFeedTools() {
 
       <button
         id="authorFilterBtn"
-        class="author-filter-btn ${
+        class="author-filter-btn${
           selectedCount > 0
-            ? 'has-selection'
+            ? ' has-selection'
             : ''
         }"
         type="button"
@@ -200,20 +238,19 @@ function renderFeedTools() {
 
 
         ${
-          authors.length
+          authors.length > 0
             ? `
               <div class="author-filter-list">
 
-                ${authors.map(
-                  author => {
+                ${authors
+                  .map(author => {
                     const checked =
-                      state.authorFilter instanceof Set &&
-                      state.authorFilter.has(author);
+                      selectedAuthors.has(
+                        author
+                      );
 
                     return `
-                      <label
-                        class="author-option"
-                      >
+                      <label class="author-option">
 
                         <input
                           type="checkbox"
@@ -231,8 +268,8 @@ function renderFeedTools() {
 
                       </label>
                     `;
-                  }
-                ).join('')}
+                  })
+                  .join('')}
 
               </div>
             `
@@ -266,7 +303,7 @@ function renderFeedTools() {
 
 
 // =========================================================
-// Обновление состояния кнопки фильтра
+// Обновление кнопки фильтра
 // =========================================================
 
 function updateAuthorFilterButton() {
@@ -280,9 +317,7 @@ function updateAuthorFilterButton() {
   }
 
   const selectedCount =
-    state.authorFilter instanceof Set
-      ? state.authorFilter.size
-      : 0;
+    ensureAuthorFilter().size;
 
   button.classList.toggle(
     'has-selection',
@@ -329,9 +364,10 @@ function updateSearchClearButton() {
   }
 
   const hasSearch =
-    String(state.search || '').trim() !== '';
+    getSearchQuery() !== '';
 
-  clear.hidden = !hasSearch;
+  clear.hidden =
+    !hasSearch;
 }
 
 
@@ -428,20 +464,33 @@ function syncAuthorFilterCheckboxes() {
   }
 
   const selected =
-    state.authorFilter instanceof Set
-      ? state.authorFilter
-      : new Set();
+    ensureAuthorFilter();
 
   panel
     .querySelectorAll(
       'input[type="checkbox"]'
     )
-    .forEach(checkbox => {
-      checkbox.checked =
-        selected.has(
-          checkbox.value
-        );
-    });
+    .forEach(
+      checkbox => {
+        checkbox.checked =
+          selected.has(
+            checkbox.value
+          );
+      }
+    );
+}
+
+
+// =========================================================
+// Обновить список после изменения фильтра
+// =========================================================
+
+function refreshFilteredFeed() {
+  renderFeedListOnly();
+
+  updateSearchClearButton();
+
+  updateAuthorFilterButton();
 }
 
 
@@ -470,9 +519,8 @@ function bindFeedTools() {
       'authorFilterPanel'
     );
 
-  if (!state.authorFilter) {
-    state.authorFilter = new Set();
-  }
+  ensureAuthorFilter();
+
 
   // -------------------------------------------------------
   // Поиск
@@ -482,7 +530,7 @@ function bindFeedTools() {
     'input',
     event => {
       state.search =
-        event.target.value || '';
+        event.target?.value || '';
 
       updateSearchClearButton();
 
@@ -497,7 +545,10 @@ function bindFeedTools() {
 
   clear?.addEventListener(
     'click',
-    () => {
+    event => {
+      event.preventDefault();
+      event.stopPropagation();
+
       state.search = '';
 
       if (search) {
@@ -520,6 +571,7 @@ function bindFeedTools() {
   filter?.addEventListener(
     'click',
     event => {
+      event.preventDefault();
       event.stopPropagation();
 
       toggleAuthorFilter();
@@ -538,6 +590,7 @@ function bindFeedTools() {
     ?.addEventListener(
       'click',
       event => {
+        event.preventDefault();
         event.stopPropagation();
 
         closeAuthorFilter();
@@ -558,35 +611,27 @@ function bindFeedTools() {
         checkbox.addEventListener(
           'change',
           () => {
-            if (!state.authorFilter) {
-              state.authorFilter =
-                new Set();
-            }
+            const selected =
+              ensureAuthorFilter();
 
             if (checkbox.checked) {
-              state.authorFilter.add(
+              selected.add(
                 checkbox.value
               );
             } else {
-              state.authorFilter.delete(
+              selected.delete(
                 checkbox.value
               );
             }
 
             /*
-             * ВАЖНО:
+             * Не вызываем renderFeed().
              *
-             * Здесь НЕ вызываем renderFeed().
-             *
-             * renderFeed() заново запрашивает статьи
-             * из Supabase и пересоздаёт весь интерфейс.
-             *
-             * Для локального фильтра это не нужно.
+             * Фильтрация происходит локально
+             * по уже загруженному state.articles.
              */
 
-            updateAuthorFilterButton();
-
-            renderFeedListOnly();
+            refreshFilteredFeed();
           }
         );
       }
@@ -604,20 +649,14 @@ function bindFeedTools() {
     ?.addEventListener(
       'click',
       event => {
+        event.preventDefault();
         event.stopPropagation();
 
-        if (!state.authorFilter) {
-          state.authorFilter =
-            new Set();
-        }
-
-        state.authorFilter.clear();
+        ensureAuthorFilter().clear();
 
         syncAuthorFilterCheckboxes();
 
-        updateAuthorFilterButton();
-
-        renderFeedListOnly();
+        refreshFilteredFeed();
       }
     );
 
@@ -669,6 +708,10 @@ function bindFeedOutsideClick() {
       const target =
         event.target;
 
+      if (!(target instanceof Node)) {
+        return;
+      }
+
       if (
         panel.contains(target) ||
         button.contains(target)
@@ -677,6 +720,141 @@ function bindFeedOutsideClick() {
       }
 
       closeAuthorFilter();
+    }
+  );
+}
+
+
+// =========================================================
+// Создание карточки статьи
+// =========================================================
+
+function renderFeedItem(article) {
+  const id =
+    String(
+      article?.id ?? ''
+    );
+
+  const title =
+    String(
+      article?.title ||
+      'Без названия'
+    );
+
+  const excerpt =
+    String(
+      article?.excerpt || ''
+    );
+
+  const author =
+    String(
+      article?.author_name || ''
+    ).trim();
+
+  const cover =
+    String(
+      article?.cover || ''
+    ).trim();
+
+  return `
+    <div
+      class="feed-item"
+      data-id="${escapeHtml(id)}"
+      role="button"
+      tabindex="0"
+    >
+
+      ${
+        cover
+          ? `
+            <img
+              class="thumb"
+              src="${escapeHtml(cover)}"
+              alt=""
+              loading="lazy"
+              decoding="async"
+            >
+          `
+          : ''
+      }
+
+
+      <div class="feed-meta">
+
+        ${escapeHtml(
+          fmtDate(
+            article?.created_at
+          )
+        )}
+
+        ${
+          author
+            ? `
+              ·
+              ${escapeHtml(author)}
+            `
+            : ''
+        }
+
+      </div>
+
+
+      <h3>
+        ${escapeHtml(title)}
+      </h3>
+
+
+      ${
+        excerpt
+          ? `
+            <p>
+              ${escapeHtml(excerpt)}
+            </p>
+          `
+          : ''
+      }
+
+    </div>
+  `;
+}
+
+
+// =========================================================
+// Открытие статьи
+// =========================================================
+
+function bindFeedItem(item) {
+  if (!item) {
+    return;
+  }
+
+  const open = () => {
+    const id =
+      item.dataset.id;
+
+    if (!id) {
+      return;
+    }
+
+    openReader(id);
+  };
+
+  item.addEventListener(
+    'click',
+    open
+  );
+
+  item.addEventListener(
+    'keydown',
+    event => {
+      if (
+        event.key === 'Enter' ||
+        event.key === ' '
+      ) {
+        event.preventDefault();
+
+        open();
+      }
     }
   );
 }
@@ -706,18 +884,19 @@ function renderFeedListOnly() {
 
   if (!rows.length) {
     const hasArticles =
-      Array.isArray(state.articles) &&
+      Array.isArray(state?.articles) &&
       state.articles.length > 0;
 
     const hasSearch =
-      String(
-        state.search || ''
-      ).trim() !== '';
+      getSearchQuery() !== '';
 
     const hasAuthorsFilter =
-      state.authorFilter instanceof Set &&
-      state.authorFilter.size > 0;
+      ensureAuthorFilter().size > 0;
 
+
+    // -----------------------------------------------------
+    // Вообще нет статей
+    // -----------------------------------------------------
 
     if (!hasArticles) {
       list.innerHTML = `
@@ -738,8 +917,9 @@ function renderFeedListOnly() {
     }
 
 
-    let title =
-      'Ничего не найдено';
+    // -----------------------------------------------------
+    // Статьи есть, но фильтр ничего не нашёл
+    // -----------------------------------------------------
 
     let description =
       'Попробуйте изменить параметры поиска.';
@@ -766,7 +946,7 @@ function renderFeedListOnly() {
       <div class="empty-state feed-empty">
 
         <h2>
-          ${escapeHtml(title)}
+          Ничего не найдено
         </h2>
 
         <p>
@@ -786,93 +966,7 @@ function renderFeedListOnly() {
 
   list.innerHTML =
     rows
-      .map(article => {
-        const id =
-          String(
-            article?.id ?? ''
-          );
-
-        const title =
-          String(
-            article?.title ||
-            'Без названия'
-          );
-
-        const excerpt =
-          String(
-            article?.excerpt || ''
-          );
-
-        const author =
-          String(
-            article?.author_name || ''
-          ).trim();
-
-        const cover =
-          String(
-            article?.cover || ''
-          ).trim();
-
-        return `
-          <div
-            class="feed-item"
-            data-id="${escapeHtml(id)}"
-            role="button"
-            tabindex="0"
-          >
-
-            ${
-              cover
-                ? `
-                  <img
-                    class="thumb"
-                    src="${escapeHtml(cover)}"
-                    alt=""
-                    loading="lazy"
-                  >
-                `
-                : ''
-            }
-
-
-            <div class="feed-meta">
-
-              ${escapeHtml(
-                fmtDate(
-                  article?.created_at
-                )
-              )}
-
-              ${
-                author
-                  ? `
-                    ·
-                    ${escapeHtml(author)}
-                  `
-                  : ''
-              }
-
-            </div>
-
-
-            <h3>
-              ${escapeHtml(title)}
-            </h3>
-
-
-            ${
-              excerpt
-                ? `
-                  <p>
-                    ${escapeHtml(excerpt)}
-                  </p>
-                `
-                : ''
-            }
-
-          </div>
-        `;
-      })
+      .map(renderFeedItem)
       .join('');
 
 
@@ -884,39 +978,9 @@ function renderFeedListOnly() {
     .querySelectorAll(
       '.feed-item'
     )
-    .forEach(item => {
-      const open = () => {
-        const id =
-          item.dataset.id;
-
-        if (!id) {
-          return;
-        }
-
-        openReader(id);
-      };
-
-
-      item.addEventListener(
-        'click',
-        open
-      );
-
-
-      item.addEventListener(
-        'keydown',
-        event => {
-          if (
-            event.key === 'Enter' ||
-            event.key === ' '
-          ) {
-            event.preventDefault();
-
-            open();
-          }
-        }
-      );
-    });
+    .forEach(
+      bindFeedItem
+    );
 
 
   // -------------------------------------------------------
@@ -937,10 +1001,7 @@ async function renderFeed() {
   state.view = 'feed';
   state.currentId = null;
 
-  if (!state.authorFilter) {
-    state.authorFilter =
-      new Set();
-  }
+  ensureAuthorFilter();
 
   setBackButton(false);
 
@@ -951,7 +1012,7 @@ async function renderFeed() {
 
   if (!main) {
     console.error(
-      'Элемент #main не найден'
+      'renderFeed: элемент #main не найден'
     );
 
     return;
@@ -970,8 +1031,18 @@ async function renderFeed() {
 
 
   try {
-    state.articles =
+    const articles =
       await fetchFeed();
+
+    /*
+     * Защищаем state.articles от неожиданных
+     * null / undefined / не-массива.
+     */
+
+    state.articles =
+      Array.isArray(articles)
+        ? articles
+        : [];
 
 
     // -----------------------------------------------------
@@ -1031,7 +1102,9 @@ async function renderFeed() {
       )
       ?.addEventListener(
         'click',
-        renderFeed
+        () => {
+          renderFeed();
+        }
       );
   }
 }
