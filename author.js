@@ -49,9 +49,6 @@ async function openAuthor(authorId, authorName) {
     const profile = result.profile;
     const articles = Array.isArray(result.articles) ? result.articles : [];
 
-    // Сохраняем в state для обратной совместимости
-    state.articles = articles;
-
     renderAuthorPage(profile, articles);
 
   } catch (error) {
@@ -81,7 +78,12 @@ function renderAuthorPage(profile, articles) {
 
   if (!main) return;
 
-  const avatar = profile.username?.charAt(0)?.toUpperCase() || '?';
+  const avatarUrl = profile.avatar || null;
+  const avatarLetter = profile.username?.charAt(0)?.toUpperCase() || '?';
+
+  // Проверяем, есть ли у автора донаты
+  const donationLink = profile.donation_link || null;
+  const hasDonations = !!(donationLink);
 
   main.innerHTML = `
     <div class="author-page">
@@ -90,7 +92,11 @@ function renderAuthorPage(profile, articles) {
       <div class="author-header chrome">
 
         <div class="author-avatar">
-          ${escapeHtml(avatar)}
+          ${avatarUrl ? `
+            <img src="${escapeHtml(avatarUrl)}" alt="${escapeHtml(profile.username)}" class="author-avatar-img">
+          ` : `
+            ${escapeHtml(avatarLetter)}
+          `}
         </div>
 
         <div class="author-info">
@@ -114,7 +120,26 @@ function renderAuthorPage(profile, articles) {
               </time>
             </span>
 
+            ${hasDonations ? `
+              <span class="author-stat-divider">·</span>
+              <span class="author-stat">
+                ⭐ Принимает донаты
+              </span>
+            ` : ''}
+
           </div>
+
+          ${hasDonations ? `
+            <div class="author-donate-action">
+              <button
+                class="btn btn-primary author-donate-btn"
+                id="authorDonateBtn"
+                type="button"
+              >
+                ⭐ Поддержать автора
+              </button>
+            </div>
+          ` : ''}
 
         </div>
 
@@ -140,6 +165,14 @@ function renderAuthorPage(profile, articles) {
 
   // Привязываем клики по карточкам
   main.querySelectorAll('.feed-item').forEach(bindFeedItem);
+
+  // Кнопка доната на странице автора
+  const donateBtn = document.getElementById('authorDonateBtn');
+  if (donateBtn && donationLink) {
+    donateBtn.addEventListener('click', () => {
+      window.open(donationLink, '_blank');
+    });
+  }
 }
 
 
