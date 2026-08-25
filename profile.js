@@ -457,7 +457,7 @@ function openUsernameDialog(currentUsername) {
           class="profile-input"
           id="profileUsernameInput"
           maxlength="30"
-          placeholder="Например: Кейл"
+          placeholder="Например: Боб"
           value="${escapeHtml(currentUsername || '')}"
         >
 
