@@ -966,6 +966,7 @@ document
         const reactionType =
           button.dataset.commentReaction;
 
+
         if (
           !commentId ||
           !reactionType
@@ -975,22 +976,37 @@ document
 
 
         // -------------------------------------------------
-        // Запоминаем именно тот комментарий,
-        // на котором нажали кнопку
+        // Находим именно ARTICLE этого комментария
+        //
+        // ВАЖНО:
+        // НЕ .comment-thread
+        //
+        // Потому что .comment-thread может содержать
+        // дочерние комментарии.
         // -------------------------------------------------
 
-        const commentElement =
+        const commentArticle =
           button.closest(
-            '.comment-thread'
+            'article.comment'
           );
 
-        if (!commentElement) {
+
+        if (!commentArticle) {
+
+          console.error(
+            'Не найден article.comment для реакции',
+            {
+              commentId,
+              reactionType
+            }
+          );
+
           return;
         }
 
 
         // -------------------------------------------------
-        // Блокируем только нажатую кнопку
+        // Блокируем кнопку
         // -------------------------------------------------
 
         button.disabled = true;
@@ -1008,6 +1024,12 @@ document
             );
 
 
+          console.log(
+            'reaction result:',
+            result
+          );
+
+
           const reactions =
             result?.reactions;
 
@@ -1021,11 +1043,11 @@ document
 
 
           // -------------------------------------------------
-          // Получаем кнопки реакций ТОЛЬКО этого комментария
+          // ИЩЕМ КНОПКИ ТОЛЬКО ВНУТРИ ЭТОГО ARTICLE
           // -------------------------------------------------
 
           const reactionButtons =
-            commentElement.querySelectorAll(
+            commentArticle.querySelectorAll(
               '[data-comment-reaction]'
             );
 
@@ -1037,13 +1059,14 @@ document
                 reactionButton.dataset
                   .commentReaction;
 
+
               if (!type) {
                 return;
               }
 
 
               // ---------------------------------------------
-              // Новый счётчик
+              // Количество реакций этого типа
               // ---------------------------------------------
 
               const count =
@@ -1053,7 +1076,7 @@ document
 
 
               // ---------------------------------------------
-              // Активна ли реакция текущего пользователя
+              // Активная реакция пользователя
               // ---------------------------------------------
 
               const isActive =
@@ -1067,7 +1090,7 @@ document
 
 
               // ---------------------------------------------
-              // Обновляем счётчик
+              // Счётчик
               // ---------------------------------------------
 
               let countElement =
@@ -1099,9 +1122,7 @@ document
 
               } else {
 
-                if (countElement) {
-                  countElement.remove();
-                }
+                countElement?.remove();
 
               }
 
@@ -1120,6 +1141,7 @@ document
             e.message ||
             'Не удалось поставить реакцию'
           );
+
 
         } finally {
 
