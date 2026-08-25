@@ -434,7 +434,7 @@ function openBioDialog(currentBio) {
 
 
 // =========================================================
-// Диалог создания / изменения ника (ИСПРАВЛЕННЫЙ)
+// Диалог создания / изменения ника
 // =========================================================
 
 function openUsernameDialog(currentUsername) {
@@ -519,7 +519,6 @@ function openUsernameDialog(currentUsername) {
       save.textContent = 'Сохраняем…';
 
       try {
-        // Возвращаем только новое имя, сохранение делает openProfile
         resolve(username);
         overlay.remove();
         showToast('Ник сохранён');
@@ -902,7 +901,7 @@ async function openProfile() {
       }
     };
 
-    // Изменить ник — ИСПРАВЛЕНО!
+    // Изменить ник
     document.getElementById('changeUsernameBtn').onclick = async () => {
       const newUsername = await openUsernameDialog(p.username);
       if (newUsername) {
