@@ -740,37 +740,40 @@ function bindComments(
     });
 
 
-  // -------------------------------------------------------
-  // Реакции
-  // -------------------------------------------------------
+// -------------------------------------------------------
+// Реакции
+// -------------------------------------------------------
 
-  document
-    .querySelectorAll(
-      '[data-comment-reaction]'
-    )
-    .forEach(button => {
+document
+  .querySelectorAll(
+    '[data-comment-reaction]'
+  )
+  .forEach(button => {
 
-      button.addEventListener(
-        'click',
-        async () => {
+    button.addEventListener(
+      'click',
+      async () => {
 
-          const commentId =
-            button.dataset.commentId;
+        const commentId =
+          button.dataset.commentId;
 
-          const reactionType =
-            button.dataset.commentReaction;
+        const reactionType =
+          button.dataset.commentReaction;
 
-          if (
-            !commentId ||
-            !reactionType
-          ) {
-            return;
-          }
+        if (
+          !commentId ||
+          !reactionType
+        ) {
+          return;
+        }
 
-          button.disabled = true;
+        // Не даём нажать повторно,
+        // пока запрос ещё выполняется
+        button.disabled = true;
 
-          try {
+        try {
 
+          const result =
             await callTelegramApi(
               'react-comment',
               {
@@ -779,22 +782,137 @@ function bindComments(
               }
             );
 
-            await renderComments(
-              articleId
+          /*
+           * Backend возвращает:
+           *
+           * {
+           *   reactions: {
+           *     counts: {...},
+           *     total: ...,
+           *     my_reaction: ...
+           *   }
+           * }
+           */
+
+          const reactions =
+            result?.reactions;
+
+          if (!reactions) {
+            throw new Error(
+              'Сервер не вернул данные реакции'
             );
-
-          } catch (e) {
-
-            showToast(
-              e.message ||
-              'Не удалось поставить реакцию'
-            );
-
-          } finally {
-
-            button.disabled = false;
           }
+
+
+          // -------------------------------------------------
+          // Обновляем только кнопки реакций
+          // -------------------------------------------------
+
+          const commentElement =
+            document.querySelector(
+              `.comment-thread[data-comment-id="${CSS.escape(commentId)}"]`
+            );
+
+          if (!commentElement) {
+            return;
+          }
+
+
+          const reactionButtons =
+            commentElement.querySelectorAll(
+              '[data-comment-reaction]'
+            );
+
+
+          reactionButtons.forEach(
+            reactionButton => {
+
+              const type =
+                reactionButton.dataset.commentReaction;
+
+              if (!type) {
+                return;
+              }
+
+
+              const count =
+                Number(
+                  reactions.counts?.[type] || 0
+                );
+
+
+              const isActive =
+                reactions.my_reaction === type;
+
+
+              // ---------------------------------------------
+              // active
+              // ---------------------------------------------
+
+              reactionButton.classList.toggle(
+                'active',
+                isActive
+              );
+
+
+              // ---------------------------------------------
+              // Счётчик
+              // ---------------------------------------------
+
+              let countElement =
+                reactionButton.querySelector(
+                  '.comment-reaction-count'
+                );
+
+
+              if (count > 0) {
+
+                if (!countElement) {
+
+                  countElement =
+                    document.createElement(
+                      'span'
+                    );
+
+                  countElement.className =
+                    'comment-reaction-count';
+
+                  reactionButton.appendChild(
+                    countElement
+                  );
+                }
+
+                countElement.textContent =
+                  String(count);
+
+              } else {
+
+                countElement?.remove();
+              }
+
+            }
+          );
+
+
+        } catch (e) {
+
+          console.error(
+            'comment reaction:',
+            e
+          );
+
+          showToast(
+            e.message ||
+            'Не удалось поставить реакцию'
+          );
+
+        } finally {
+
+          button.disabled = false;
+
         }
-      );
-    });
-}
+
+      }
+    );
+
+  });
