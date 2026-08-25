@@ -667,7 +667,7 @@ async function openProfile() {
           </button>
 
           <div class="profile-description">
-            Этот ник отображается рядом с вашими статьями.
+            Этот ник отображается рядом с вашими статьями и комментариями.
           </div>
 
         </div>
