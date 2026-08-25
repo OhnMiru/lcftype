@@ -41,14 +41,25 @@ async function ensureProfile(ask = true) {
 // =========================================================
 
 async function fetchProfileStats() {
-  const r = await callTelegramApi('get-profile-stats');
-  return r.stats || {
-    articles_count: 0,
-    comments_count: 0,
-    article_reactions_received: 0,
-    comment_reactions_received: 0,
-    total_reactions_received: 0
-  };
+  try {
+    const r = await callTelegramApi('get-profile-stats');
+    return r.stats || {
+      articles_count: 0,
+      comments_count: 0,
+      article_reactions_received: 0,
+      comment_reactions_received: 0,
+      total_reactions_received: 0
+    };
+  } catch (e) {
+    console.error('fetchProfileStats:', e);
+    return {
+      articles_count: 0,
+      comments_count: 0,
+      article_reactions_received: 0,
+      comment_reactions_received: 0,
+      total_reactions_received: 0
+    };
+  }
 }
 
 
@@ -57,8 +68,13 @@ async function fetchProfileStats() {
 // =========================================================
 
 async function fetchMyArticles() {
-  const r = await callTelegramApi('get-my-articles');
-  return Array.isArray(r.articles) ? r.articles : [];
+  try {
+    const r = await callTelegramApi('get-my-articles');
+    return Array.isArray(r.articles) ? r.articles : [];
+  } catch (e) {
+    console.error('fetchMyArticles:', e);
+    return [];
+  }
 }
 
 
@@ -67,8 +83,13 @@ async function fetchMyArticles() {
 // =========================================================
 
 async function fetchMyComments() {
-  const r = await callTelegramApi('get-my-comments');
-  return Array.isArray(r.comments) ? r.comments : [];
+  try {
+    const r = await callTelegramApi('get-my-comments');
+    return Array.isArray(r.comments) ? r.comments : [];
+  } catch (e) {
+    console.error('fetchMyComments:', e);
+    return [];
+  }
 }
 
 
@@ -145,11 +166,13 @@ function openUsernameDialog(currentUsername) {
       const username = input.value.trim().replace(/\s+/g, ' ');
 
       if (username.length < 2) {
-        return showToast('Минимум 2 символа');
+        showToast('Минимум 2 символа');
+        return;
       }
 
       if (username.length > 30) {
-        return showToast('Максимум 30 символов');
+        showToast('Максимум 30 символов');
+        return;
       }
 
       save.disabled = true;
@@ -176,6 +199,22 @@ function openUsernameDialog(currentUsername) {
 
 
 // =========================================================
+// Склонение существительных
+// =========================================================
+
+function getDeclension(count, one, two, five) {
+  const n = Math.abs(count) % 100;
+  const n1 = n % 10;
+
+  if (n > 10 && n < 20) return five;
+  if (n1 > 1 && n1 < 5) return two;
+  if (n1 === 1) return one;
+
+  return five;
+}
+
+
+// =========================================================
 // Рендер вкладки статистики
 // =========================================================
 
@@ -186,17 +225,17 @@ function renderStatsTab(stats) {
       <div class="profile-stats-grid">
 
         <div class="profile-stat-card">
-          <div class="profile-stat-number">${stats.articles_count}</div>
-          <div class="profile-stat-label">${getDeclension(stats.articles_count, 'статья', 'статьи', 'статей')}</div>
+          <div class="profile-stat-number">${stats.articles_count || 0}</div>
+          <div class="profile-stat-label">${getDeclension(stats.articles_count || 0, 'статья', 'статьи', 'статей')}</div>
         </div>
 
         <div class="profile-stat-card">
-          <div class="profile-stat-number">${stats.comments_count}</div>
-          <div class="profile-stat-label">${getDeclension(stats.comments_count, 'комментарий', 'комментария', 'комментариев')}</div>
+          <div class="profile-stat-number">${stats.comments_count || 0}</div>
+          <div class="profile-stat-label">${getDeclension(stats.comments_count || 0, 'комментарий', 'комментария', 'комментариев')}</div>
         </div>
 
         <div class="profile-stat-card">
-          <div class="profile-stat-number">${stats.total_reactions_received}</div>
+          <div class="profile-stat-number">${stats.total_reactions_received || 0}</div>
           <div class="profile-stat-label">реакций получили</div>
         </div>
 
@@ -205,11 +244,11 @@ function renderStatsTab(stats) {
       <div class="profile-stats-detail">
         <div class="profile-stats-detail-item">
           <span>На статьях:</span>
-          <span>${stats.article_reactions_received}</span>
+          <span>${stats.article_reactions_received || 0}</span>
         </div>
         <div class="profile-stats-detail-item">
           <span>На комментариях:</span>
-          <span>${stats.comment_reactions_received}</span>
+          <span>${stats.comment_reactions_received || 0}</span>
         </div>
       </div>
 
@@ -223,7 +262,7 @@ function renderStatsTab(stats) {
 // =========================================================
 
 function renderMyArticlesTab(articles) {
-  if (!articles.length) {
+  if (!articles || !articles.length) {
     return `
       <div class="profile-tab-content" id="myArticlesTab">
         <div class="profile-empty-state">
@@ -259,7 +298,7 @@ function renderMyArticlesTab(articles) {
 // =========================================================
 
 function renderMyCommentsTab(comments) {
-  if (!comments.length) {
+  if (!comments || !comments.length) {
     return `
       <div class="profile-tab-content" id="myCommentsTab">
         <div class="profile-empty-state">
@@ -290,22 +329,6 @@ function renderMyCommentsTab(comments) {
 
 
 // =========================================================
-// Склонение существительных
-// =========================================================
-
-function getDeclension(count, one, two, five) {
-  const n = Math.abs(count) % 100;
-  const n1 = n % 10;
-
-  if (n > 10 && n < 20) return five;
-  if (n1 > 1 && n1 < 5) return two;
-  if (n1 === 1) return one;
-
-  return five;
-}
-
-
-// =========================================================
 // Страница профиля
 // =========================================================
 
@@ -316,6 +339,11 @@ async function openProfile() {
   setBackButton(true, renderFeed);
 
   const main = document.getElementById('main');
+
+  if (!main) {
+    console.error('openProfile: элемент #main не найден');
+    return;
+  }
 
   main.innerHTML = '<div class="loading">Загрузка профиля…</div>';
 
@@ -363,6 +391,8 @@ async function openProfile() {
       fetchMyArticles(),
       fetchMyComments()
     ]);
+
+    console.log('Profile data:', { stats, articles, comments });
 
     const first = p.username.trim().charAt(0).toUpperCase();
 
@@ -434,11 +464,9 @@ async function openProfile() {
     // Переключение вкладок
     document.querySelectorAll('.profile-tab-btn').forEach(btn => {
       btn.addEventListener('click', () => {
-        // Убираем активный класс у всех кнопок
         document.querySelectorAll('.profile-tab-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
 
-        // Показываем нужную вкладку
         const tabName = btn.dataset.tab;
         document.querySelectorAll('.profile-tab-content').forEach(content => {
           content.style.display = 'none';
@@ -477,12 +505,12 @@ async function openProfile() {
     }
 
   } catch (e) {
-    console.error('openProfile:', e);
+    console.error('openProfile error:', e);
 
     main.innerHTML = `
       <div class="empty-state">
         <h2>Не удалось открыть профиль</h2>
-        <p>${escapeHtml(e.message || '')}</p>
+        <p>${escapeHtml(e.message || 'Произошла ошибка')}</p>
         <button class="btn btn-primary" id="retryProfileBtn" type="button">
           Повторить
         </button>
