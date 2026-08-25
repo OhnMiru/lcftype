@@ -431,13 +431,13 @@ async function openProfile() {
 
           <div class="profile-tabs-nav">
             <button class="profile-tab-btn active" data-tab="stats">
-              📊 Статистика
+              Статистика
             </button>
             <button class="profile-tab-btn" data-tab="articles">
-              📝 Статьи (${articles.length})
+              Статьи (${articles.length})
             </button>
             <button class="profile-tab-btn" data-tab="comments">
-              💬 Комментарии (${comments.length})
+              Комментарии (${comments.length})
             </button>
           </div>
 
