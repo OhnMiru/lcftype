@@ -557,6 +557,13 @@ async function openReader(id) {
 
 
   // =======================================================
+  // Проверяем донаты автора
+  // =======================================================
+
+  const donationLink = await getDonationLink(article.author_id);
+
+
+  // =======================================================
   // Тело статьи
   // =======================================================
 
@@ -678,6 +685,8 @@ async function openReader(id) {
 
         <span>
 
+          ${escapeHtml(fmtDate(article.created_at))}
+
           ${article.author_name ? `
             · 
             <span 
@@ -761,6 +770,26 @@ async function openReader(id) {
 
 
       <!-- =================================================
+           DONATE
+           ================================================= -->
+
+      ${donationLink ? `
+        <div class="donate-box chrome">
+          <button
+            class="btn btn-primary donate-btn"
+            id="donateBtn"
+            type="button"
+          >
+            ⭐ Поддержать автора
+          </button>
+          <div class="donate-box-info">
+            Автор получит вашу поддержку напрямую через CloudTips
+          </div>
+        </div>
+      ` : ''}
+
+
+      <!-- =================================================
            SHARE
            ================================================= -->
 
@@ -793,7 +822,28 @@ async function openReader(id) {
     </div>
   `;
 
-  makeAuthorClickable(main);
+  // =======================================================
+  // Делаем имена авторов кликабельными
+  // =======================================================
+
+  if (typeof makeAuthorClickable === 'function') {
+    makeAuthorClickable(main);
+  }
+
+
+  // =======================================================
+  // Донат — открывает ссылку CloudTips
+  // =======================================================
+
+  const donateBtn = document.getElementById('donateBtn');
+
+  if (donateBtn && donationLink) {
+    donateBtn.addEventListener('click', () => {
+      // Открываем ссылку в новом окне
+      window.open(donationLink, '_blank');
+    });
+  }
+
 
   // =======================================================
   // Копирование ссылки
