@@ -3360,13 +3360,6 @@ img{
   min-width: 0;
 }
 
-.author-donate-btn {
-  font-size: 13px;
-  padding: 6px 14px;
-  flex-shrink: 0;
-  white-space: nowrap;
-}
-
 .author-stats {
   font-family: 'Inter', sans-serif;
   font-size: 13px;
@@ -3387,16 +3380,37 @@ img{
   margin: 0 2px;
 }
 
+/* Описание автора — теперь слева, с разделителем */
+.author-bio-wrapper {
+  margin-top: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
 .author-bio {
   font-family: 'Source Serif 4', serif;
   font-size: 15px;
   line-height: 1.6;
   color: var(--ink);
-  margin-top: 2px;
   white-space: pre-wrap;
   word-wrap: break-word;
   text-align: left;
   width: 100%;
+}
+
+/* Кнопка доната — теперь под описанием */
+.author-donate-wrapper {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  justify-content: flex-end;
+}
+
+.author-donate-btn {
+  font-size: 13px;
+  padding: 6px 18px;
+  flex-shrink: 0;
 }
 
 .author-articles {
@@ -3455,18 +3469,8 @@ img{
     height: 52px;
   }
 
-  .author-name-row {
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-
   .author-name {
     font-size: 19px;
-  }
-
-  .author-donate-btn {
-    font-size: 12px;
-    padding: 5px 12px;
   }
 
   .author-stats {
@@ -3475,6 +3479,11 @@ img{
 
   .author-bio {
     font-size: 14px;
+  }
+
+  .author-donate-btn {
+    font-size: 12px;
+    padding: 5px 14px;
   }
 }
 
@@ -3499,20 +3508,9 @@ img{
     height: 56px;
   }
 
-  .author-name-row {
-    flex-direction: column;
-    align-items: center;
-    gap: 6px;
-  }
-
   .author-name {
     font-size: 18px;
     text-align: center;
-  }
-
-  .author-donate-btn {
-    font-size: 12px;
-    padding: 5px 14px;
   }
 
   .author-stats {
@@ -3523,6 +3521,10 @@ img{
   .author-bio {
     font-size: 14px;
     text-align: left;
+  }
+
+  .author-donate-wrapper {
+    justify-content: center;
   }
 }
 
