@@ -10,7 +10,7 @@
 const ARTICLE_REACTIONS = {
   like: '👍',
   love: '❤️',
-  laugh: '😂',
+  laugh: '🔥',
   wow: '😮',
   sad: '😢'
 };
