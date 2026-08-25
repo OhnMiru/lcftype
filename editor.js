@@ -176,7 +176,7 @@ function renderEditor() {
   // Отображаем баннер, если есть сохраненный черновик
   const draftBanner = state.hasDraft && !isDraftEmpty(d) ? `
     <div class="draft-banner chrome" id="draftBanner">
-      <span>📝 Черновик сохранен</span>
+      <span>Черновик сохранен</span>
       <button class="draft-banner-close" id="clearDraftBtn">✕</button>
     </div>
   ` : '';
