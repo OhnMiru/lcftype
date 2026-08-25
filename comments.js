@@ -946,125 +946,190 @@ function bindComments(
     });
 
 
-  // -------------------------------------------------------
-  // Реакции
-  // -------------------------------------------------------
+// =========================================================
+// Реакции
+// =========================================================
 
-  document
-    .querySelectorAll(
-      '[data-comment-reaction]'
-    )
-    .forEach(button => {
+document
+  .querySelectorAll(
+    '[data-comment-reaction]'
+  )
+  .forEach(button => {
 
-      button.addEventListener(
-        'click',
-        async () => {
+    button.addEventListener(
+      'click',
+      async () => {
 
-          const commentId =
-            button.dataset.commentId;
+        const commentId =
+          button.dataset.commentId;
+
+        const reactionType =
+          button.dataset.commentReaction;
+
+        if (
+          !commentId ||
+          !reactionType
+        ) {
+          return;
+        }
 
 
-          const reactionType =
-            button.dataset.commentReaction;
+        // -------------------------------------------------
+        // Запоминаем именно тот комментарий,
+        // на котором нажали кнопку
+        // -------------------------------------------------
+
+        const commentElement =
+          button.closest(
+            '.comment-thread'
+          );
+
+        if (!commentElement) {
+          return;
+        }
 
 
-          if (
-            !commentId ||
-            !reactionType
-          ) {
-            return;
+        // -------------------------------------------------
+        // Блокируем только нажатую кнопку
+        // -------------------------------------------------
+
+        button.disabled = true;
+
+
+        try {
+
+          const result =
+            await callTelegramApi(
+              'react-comment',
+              {
+                commentId,
+                reactionType
+              }
+            );
+
+
+          const reactions =
+            result?.reactions;
+
+
+          if (!reactions) {
+
+            throw new Error(
+              'Сервер не вернул данные реакции'
+            );
           }
 
 
           // -------------------------------------------------
-          // Блокируем только нажатую кнопку
+          // Получаем кнопки реакций ТОЛЬКО этого комментария
           // -------------------------------------------------
 
-          button.disabled = true;
+          const reactionButtons =
+            commentElement.querySelectorAll(
+              '[data-comment-reaction]'
+            );
 
 
-          try {
+          reactionButtons.forEach(
+            reactionButton => {
 
-            const result =
-              await callTelegramApi(
-                'react-comment',
-                {
-                  commentId,
-                  reactionType
+              const type =
+                reactionButton.dataset
+                  .commentReaction;
+
+              if (!type) {
+                return;
+              }
+
+
+              // ---------------------------------------------
+              // Новый счётчик
+              // ---------------------------------------------
+
+              const count =
+                Number(
+                  reactions.counts?.[type] || 0
+                );
+
+
+              // ---------------------------------------------
+              // Активна ли реакция текущего пользователя
+              // ---------------------------------------------
+
+              const isActive =
+                reactions.my_reaction === type;
+
+
+              reactionButton.classList.toggle(
+                'active',
+                isActive
+              );
+
+
+              // ---------------------------------------------
+              // Обновляем счётчик
+              // ---------------------------------------------
+
+              let countElement =
+                reactionButton.querySelector(
+                  '.comment-reaction-count'
+                );
+
+
+              if (count > 0) {
+
+                if (!countElement) {
+
+                  countElement =
+                    document.createElement(
+                      'span'
+                    );
+
+                  countElement.className =
+                    'comment-reaction-count';
+
+                  reactionButton.appendChild(
+                    countElement
+                  );
                 }
-              );
 
 
-            /*
-             * Edge Function возвращает:
-             *
-             * {
-             *   reactions: {
-             *     counts: {
-             *       like: 1,
-             *       love: 0,
-             *       laugh: 0,
-             *       wow: 0,
-             *       sad: 0
-             *     },
-             *
-             *     total: 1,
-             *
-             *     my_reaction: "like"
-             *   }
-             * }
-             */
+                countElement.textContent =
+                  String(count);
 
+              } else {
 
-            const reactions =
-              result?.reactions;
+                if (countElement) {
+                  countElement.remove();
+                }
 
-
-            if (!reactions) {
-
-              throw new Error(
-                'Сервер не вернул данные реакции'
-              );
+              }
 
             }
+          );
 
 
-            // -------------------------------------------------
-            // ВАЖНО:
-            // НЕ вызываем renderComments().
-            //
-            // Обновляем только реакции текущего комментария.
-            // -------------------------------------------------
+        } catch (e) {
 
-            updateCommentReactions(
-              commentId,
-              reactions
-            );
+          console.error(
+            'comment reaction:',
+            e
+          );
 
+          showToast(
+            e.message ||
+            'Не удалось поставить реакцию'
+          );
 
-          } catch (e) {
+        } finally {
 
-            console.error(
-              'comment reaction:',
-              e
-            );
-
-
-            showToast(
-              e.message ||
-              'Не удалось поставить реакцию'
-            );
-
-
-          } finally {
-
-            button.disabled = false;
-
-          }
+          button.disabled = false;
 
         }
-      );
 
-    });
+      }
+    );
+
+  });
 
 }
