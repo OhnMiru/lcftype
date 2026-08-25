@@ -670,8 +670,6 @@ async function openReader(id) {
   main.innerHTML = `
     <div class="reader">
 
-  makeAuthorClickable(main);
-
       <!-- =================================================
            META
            ================================================= -->
@@ -795,6 +793,7 @@ async function openReader(id) {
     </div>
   `;
 
+  makeAuthorClickable(main);
 
   // =======================================================
   // Копирование ссылки
