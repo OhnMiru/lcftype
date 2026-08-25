@@ -18,10 +18,11 @@ async function getProfile() {
 // Сохранить профиль
 // =========================================================
 
-async function saveProfile(username, avatar = null) {
+async function saveProfile(username, avatar = null, bio = null) {
   const r = await callTelegramApi('set-profile', { 
     username,
-    avatar
+    avatar,
+    bio
   });
   state.profile = r.profile;
   return state.profile;
@@ -312,6 +313,113 @@ function openAvatarDialog(currentAvatar) {
       resolve('cancel');
       overlay.remove();
     });
+
+    // Закрытие по клику вне
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) {
+        resolve('cancel');
+        overlay.remove();
+      }
+    });
+
+  });
+}
+
+
+// =========================================================
+// Диалог изменения описания
+// =========================================================
+
+function openBioDialog(currentBio) {
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.className = 'profile-overlay';
+
+    overlay.innerHTML = `
+      <div class="profile-dialog bio-dialog">
+
+        <div class="profile-dialog-title">
+          Описание автора
+        </div>
+
+        <div class="profile-dialog-text">
+          Расскажите о себе. Это будет отображаться на вашей странице.
+        </div>
+
+        <textarea
+          id="bioInput"
+          class="profile-bio-input"
+          rows="4"
+          maxlength="500"
+          placeholder="Например: Пишу о путешествиях и фотографии. Живу в Москве."
+        >${escapeHtml(currentBio || '')}</textarea>
+
+        <div class="profile-bio-counter">
+          <span id="bioCounter">${(currentBio || '').length}</span> / 500
+        </div>
+
+        <div class="profile-dialog-actions">
+
+          <button
+            class="btn btn-secondary"
+            id="bioCancelBtn"
+          >
+            Отмена
+          </button>
+
+          <button
+            class="btn btn-primary"
+            id="bioSaveBtn"
+          >
+            Сохранить
+          </button>
+
+        </div>
+
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    const input = overlay.querySelector('#bioInput');
+    const save = overlay.querySelector('#bioSaveBtn');
+    const cancel = overlay.querySelector('#bioCancelBtn');
+    const counter = overlay.querySelector('#bioCounter');
+
+    // Счетчик символов
+    input.addEventListener('input', () => {
+      counter.textContent = input.value.length;
+    });
+
+    setTimeout(() => {
+      input.focus();
+    }, 50);
+
+    cancel.onclick = () => {
+      overlay.remove();
+      resolve('cancel');
+    };
+
+    save.onclick = async () => {
+      const bio = input.value.trim();
+      
+      if (bio.length > 500) {
+        showToast('Максимум 500 символов');
+        return;
+      }
+
+      save.disabled = true;
+      save.textContent = 'Сохраняем…';
+
+      try {
+        resolve(bio || null);
+        overlay.remove();
+      } catch (e) {
+        showToast(e.message || 'Не удалось сохранить описание');
+        save.disabled = false;
+        save.textContent = 'Сохранить';
+      }
+    };
 
     // Закрытие по клику вне
     overlay.addEventListener('click', (e) => {
@@ -629,6 +737,7 @@ async function openProfile() {
 
     const first = p.username.trim().charAt(0).toUpperCase();
     const avatar = p.avatar || null;
+    const bio = p.bio || null;
     const donationLink = donationSettings?.donation_link || '';
     const isDonationEnabled = donationSettings?.is_enabled || false;
 
@@ -667,7 +776,23 @@ async function openProfile() {
           </button>
 
           <div class="profile-description">
-            Этот ник отображается рядом с вашими статьями и комментариями.
+            Этот ник отображается рядом с вашими статьями.
+          </div>
+
+          <!-- Описание -->
+          <div class="profile-bio-section">
+            <div class="profile-bio-label">О себе</div>
+            ${bio ? `
+              <div class="profile-bio-text">${escapeHtml(bio)}</div>
+            ` : `
+              <div class="profile-bio-empty">Описание не добавлено</div>
+            `}
+            <button
+              class="btn btn-secondary profile-bio-edit-btn"
+              id="changeBioBtn"
+            >
+              ${bio ? 'Изменить описание' : 'Добавить описание'}
+            </button>
           </div>
 
         </div>
@@ -766,7 +891,7 @@ async function openProfile() {
           avatarUrl = await uploadImage(result, 'avatar.jpg');
         }
         
-        await saveProfile(p.username, avatarUrl);
+        await saveProfile(p.username, avatarUrl, bio);
         
         showToast(avatarUrl ? 'Аватарка обновлена ✅' : 'Аватарка удалена');
         openProfile();
@@ -781,6 +906,22 @@ async function openProfile() {
     document.getElementById('changeUsernameBtn').onclick = async () => {
       if (await openUsernameDialog(p.username)) {
         openProfile();
+      }
+    };
+
+    // Изменить описание
+    document.getElementById('changeBioBtn').onclick = async () => {
+      const result = await openBioDialog(bio);
+      
+      if (result === 'cancel') return;
+      
+      try {
+        await saveProfile(p.username, avatar, result);
+        showToast(result ? 'Описание сохранено ✅' : 'Описание удалено');
+        openProfile();
+      } catch (e) {
+        console.error('save bio error:', e);
+        showToast(e.message || 'Не удалось сохранить описание');
       }
     };
 
