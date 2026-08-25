@@ -780,22 +780,17 @@ function renderFeedItem(article) {
 
 
       <div class="feed-meta">
-
-        ${escapeHtml(
-          fmtDate(
-            article?.created_at
-          )
-        )}
-
-        ${
-          author
-            ? `
-              ·
-              ${escapeHtml(author)}
-            `
-            : ''
-        }
-
+        ${escapeHtml(fmtDate(article?.created_at))}
+        ${author ? `
+          · 
+          <span 
+            class="author-clickable" 
+            data-author-id="${escapeHtml(article.author_id)}" 
+            data-author-name="${escapeHtml(author)}"
+          >
+            ${escapeHtml(author)}
+          </span>
+        ` : ''}
       </div>
 
 
@@ -981,6 +976,8 @@ function renderFeedListOnly() {
     .forEach(
       bindFeedItem
     );
+
+  makeAuthorClickable(list);
 
 
   // -------------------------------------------------------
