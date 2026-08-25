@@ -798,7 +798,7 @@ async function openProfile() {
 
         <!-- Настройки донатов -->
         <div class="profile-card donation-settings-card chrome">
-          <h3 class="donation-settings-title">⭐ Донаты</h3>
+          <h3 class="donation-settings-title">Донаты</h3>
 
           <div class="donation-settings-desc">
             Вставьте ссылку на вашу страницу в CloudTips, чтобы читатели могли вас поддержать.
@@ -834,11 +834,11 @@ async function openProfile() {
 
           ${donationLink ? `
             <div class="donation-settings-status enabled">
-              ✅ Донаты включены
+              Донаты включены
             </div>
           ` : `
             <div class="donation-settings-status disabled">
-              ❌ Донаты отключены
+              Донаты отключены
             </div>
           `}
 
@@ -854,13 +854,13 @@ async function openProfile() {
 
           <div class="profile-tabs-nav">
             <button class="profile-tab-btn active" data-tab="stats">
-              📊 Статистика
+              Статистика
             </button>
             <button class="profile-tab-btn" data-tab="articles">
-              📝 Статьи (${articles.length})
+              Статьи (${articles.length})
             </button>
             <button class="profile-tab-btn" data-tab="comments">
-              💬 Комментарии (${comments.length})
+              Комментарии (${comments.length})
             </button>
           </div>
 
