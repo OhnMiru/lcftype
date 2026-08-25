@@ -4,6 +4,19 @@
 
 
 // =========================================================
+// Реакции статей
+// =========================================================
+
+const ARTICLE_REACTIONS = {
+  like: '👍',
+  love: '❤️',
+  laugh: '😂',
+  wow: '😮',
+  sad: '😢'
+};
+
+
+// =========================================================
 // Проверка владельца статьи
 // =========================================================
 
@@ -18,30 +31,458 @@ function isArticleOwner(a) {
 
 
 // =========================================================
+// Экранирование ID для CSS
+// =========================================================
+
+function escapeSelectorValue(value) {
+
+  return CSS.escape(
+    String(value || '')
+  );
+}
+
+
+// =========================================================
+// Рендер одной реакции статьи
+// =========================================================
+
+function renderArticleReaction(
+  type,
+  count,
+  active
+) {
+
+  return `
+    <button
+      class="article-reaction${
+        active
+          ? ' active'
+          : ''
+      }"
+      type="button"
+      data-article-reaction="${escapeHtml(
+        type
+      )}"
+      aria-label="${escapeHtml(
+        type
+      )}"
+      aria-pressed="${
+        active
+          ? 'true'
+          : 'false'
+      }"
+    >
+
+      <span class="article-reaction-emoji">
+        ${ARTICLE_REACTIONS[type]}
+      </span>
+
+      ${
+        count > 0
+          ? `
+            <span class="article-reaction-count">
+              ${count}
+            </span>
+          `
+          : ''
+      }
+
+    </button>
+  `;
+}
+
+
+// =========================================================
+// Рендер блока реакций статьи
+// =========================================================
+
+function renderArticleReactionsHtml(
+  reactions
+) {
+
+  const counts =
+    reactions?.counts || {};
+
+  const myReaction =
+    reactions?.my_reaction || null;
+
+
+  return `
+    <div
+      class="article-reactions"
+      id="articleReactions"
+    >
+
+      <div class="article-reactions-label">
+        Реакция
+      </div>
+
+      <div class="article-reactions-list">
+
+        ${
+          Object.keys(
+            ARTICLE_REACTIONS
+          )
+            .map(type => {
+
+              const count =
+                Number(
+                  counts[type] || 0
+                );
+
+              const active =
+                myReaction === type;
+
+              return renderArticleReaction(
+                type,
+                count,
+                active
+              );
+
+            })
+            .join('')
+        }
+
+      </div>
+
+    </div>
+  `;
+}
+
+
+// =========================================================
+// Получить реакции статьи
+// =========================================================
+
+async function fetchArticleReactions(
+  articleId
+) {
+
+  const result =
+    await callTelegramApi(
+      'get-article-reactions',
+      {
+        articleId
+      }
+    );
+
+
+  return (
+    result?.reactions || {
+      counts: {},
+      total: 0,
+      my_reaction: null
+    }
+  );
+}
+
+
+// =========================================================
+// Обновить только реакции статьи
+// =========================================================
+
+function updateArticleReactions(
+  reactions
+) {
+
+  const container =
+    document.getElementById(
+      'articleReactions'
+    );
+
+
+  if (!container) {
+    return;
+  }
+
+
+  const counts =
+    reactions?.counts || {};
+
+  const myReaction =
+    reactions?.my_reaction || null;
+
+
+  const buttons =
+    container.querySelectorAll(
+      '[data-article-reaction]'
+    );
+
+
+  buttons.forEach(button => {
+
+    const type =
+      button.dataset.articleReaction;
+
+
+    if (!type) {
+      return;
+    }
+
+
+    const count =
+      Number(
+        counts[type] || 0
+      );
+
+
+    const active =
+      myReaction === type;
+
+
+    // -------------------------------------------------------
+    // Активная реакция
+    // -------------------------------------------------------
+
+    button.classList.toggle(
+      'active',
+      active
+    );
+
+
+    button.setAttribute(
+      'aria-pressed',
+      active
+        ? 'true'
+        : 'false'
+    );
+
+
+    // -------------------------------------------------------
+    // Счётчик
+    // -------------------------------------------------------
+
+    let countElement =
+      button.querySelector(
+        '.article-reaction-count'
+      );
+
+
+    if (count > 0) {
+
+      if (!countElement) {
+
+        countElement =
+          document.createElement(
+            'span'
+          );
+
+        countElement.className =
+          'article-reaction-count';
+
+        button.appendChild(
+          countElement
+        );
+      }
+
+
+      countElement.textContent =
+        String(count);
+
+    } else {
+
+      countElement?.remove();
+
+    }
+
+  });
+}
+
+
+// =========================================================
+// Привязка реакций статьи
+// =========================================================
+
+function bindArticleReactions(
+  articleId
+) {
+
+  const container =
+    document.getElementById(
+      'articleReactions'
+    );
+
+
+  if (!container) {
+    return;
+  }
+
+
+  const buttons =
+    container.querySelectorAll(
+      '[data-article-reaction]'
+    );
+
+
+  buttons.forEach(button => {
+
+    button.addEventListener(
+      'click',
+      async () => {
+
+        const reactionType =
+          button.dataset.articleReaction;
+
+
+        if (!articleId || !reactionType) {
+          return;
+        }
+
+
+        // ---------------------------------------------------
+        // Блокируем только нажатую кнопку
+        // ---------------------------------------------------
+
+        button.disabled = true;
+
+
+        try {
+
+          const result =
+            await callTelegramApi(
+              'react-article',
+              {
+                articleId,
+                reactionType
+              }
+            );
+
+
+          const reactions =
+            result?.reactions;
+
+
+          if (!reactions) {
+
+            throw new Error(
+              'Сервер не вернул данные реакции'
+            );
+          }
+
+
+          // -------------------------------------------------
+          // Обновляем только блок реакций статьи
+          // -------------------------------------------------
+
+          updateArticleReactions(
+            reactions
+          );
+
+
+        } catch (e) {
+
+          console.error(
+            'article reaction:',
+            e
+          );
+
+
+          showToast(
+            e?.message ||
+            'Не удалось поставить реакцию'
+          );
+
+
+        } finally {
+
+          button.disabled = false;
+
+        }
+
+      }
+    );
+
+  });
+}
+
+
+// =========================================================
+// Инициализация реакций статьи
+// =========================================================
+
+async function initArticleReactions(
+  articleId
+) {
+
+  const container =
+    document.getElementById(
+      'articleReactions'
+    );
+
+
+  if (!container) {
+    return;
+  }
+
+
+  try {
+
+    const reactions =
+      await fetchArticleReactions(
+        articleId
+      );
+
+
+    updateArticleReactions(
+      reactions
+    );
+
+
+    bindArticleReactions(
+      articleId
+    );
+
+
+  } catch (e) {
+
+    console.error(
+      'initArticleReactions:',
+      e
+    );
+
+
+    container.innerHTML = `
+      <div class="article-reactions-error">
+        Реакции временно недоступны.
+      </div>
+    `;
+
+  }
+}
+
+
+// =========================================================
 // Открыть статью
 // =========================================================
 
 async function openReader(id) {
+
   state.view = 'reader';
+
   state.currentId = id;
+
 
   setBackButton(
     true,
     renderFeed
   );
 
+
   const main =
     document.getElementById(
       'main'
     );
 
+
   if (!main) {
+
     console.error(
       'openReader: элемент #main не найден'
     );
 
     return;
   }
+
 
   main.innerHTML =
     '<div class="loading">Открываем статью…</div>';
@@ -53,10 +494,12 @@ async function openReader(id) {
 
   let article;
 
+
   try {
 
     article =
       await fetchArticle(id);
+
 
   } catch (e) {
 
@@ -64,6 +507,7 @@ async function openReader(id) {
       'openReader:',
       e
     );
+
 
     main.innerHTML = `
       <div class="empty-state">
@@ -81,6 +525,7 @@ async function openReader(id) {
 
       </div>
     `;
+
 
     return;
   }
@@ -105,6 +550,7 @@ async function openReader(id) {
 
       </div>
     `;
+
 
     return;
   }
@@ -187,6 +633,34 @@ async function openReader(id) {
 
   const owner =
     isArticleOwner(article);
+
+
+  // =======================================================
+  // Загружаем начальные реакции
+  // =======================================================
+
+  let initialReactions = {
+    counts: {},
+    total: 0,
+    my_reaction: null
+  };
+
+
+  try {
+
+    initialReactions =
+      await fetchArticleReactions(
+        article.id
+      );
+
+  } catch (e) {
+
+    console.error(
+      'fetchArticleReactions:',
+      e
+    );
+
+  }
 
 
   // =======================================================
@@ -284,6 +758,15 @@ async function openReader(id) {
 
 
       <!-- =================================================
+           ARTICLE REACTIONS
+           ================================================= -->
+
+      ${renderArticleReactionsHtml(
+        initialReactions
+      )}
+
+
+      <!-- =================================================
            SHARE
            ================================================= -->
 
@@ -345,9 +828,11 @@ async function openReader(id) {
             shareUrl
           );
 
+
           showToast(
             'Ссылка скопирована'
           );
+
 
           return;
         }
@@ -362,32 +847,41 @@ async function openReader(id) {
             'textarea'
           );
 
+
         textarea.value =
           shareUrl;
+
 
         textarea.style.position =
           'fixed';
 
+
         textarea.style.left =
           '-9999px';
+
 
         textarea.style.top =
           '0';
 
+
         textarea.style.opacity =
           '0';
+
 
         document.body.appendChild(
           textarea
         );
 
+
         textarea.focus();
         textarea.select();
+
 
         const copied =
           document.execCommand(
             'copy'
           );
+
 
         textarea.remove();
 
@@ -403,7 +897,9 @@ async function openReader(id) {
           showToast(
             'Не удалось скопировать ссылку'
           );
+
         }
+
 
       } catch (e) {
 
@@ -412,11 +908,23 @@ async function openReader(id) {
           e
         );
 
+
         showToast(
           'Не удалось скопировать ссылку'
         );
+
       }
+
     }
+  );
+
+
+  // =======================================================
+  // Реакции статьи
+  // =======================================================
+
+  bindArticleReactions(
+    article.id
   );
 
 
@@ -431,6 +939,7 @@ async function openReader(id) {
         'editBtn'
       );
 
+
     const deleteBtn =
       document.getElementById(
         'deleteBtn'
@@ -444,7 +953,11 @@ async function openReader(id) {
     editBtn?.addEventListener(
       'click',
       () => {
-        editArticle(article);
+
+        editArticle(
+          article
+        );
+
       }
     );
 
@@ -462,6 +975,7 @@ async function openReader(id) {
             'Удалить статью безвозвратно?'
           )
         ) {
+
           return;
         }
 
@@ -490,6 +1004,7 @@ async function openReader(id) {
 
           await renderFeed();
 
+
         } catch (e) {
 
           console.error(
@@ -501,6 +1016,7 @@ async function openReader(id) {
           deleteBtn.disabled =
             false;
 
+
           deleteBtn.textContent =
             'Удалить';
 
@@ -509,9 +1025,12 @@ async function openReader(id) {
             e?.message ||
             'Не удалось удалить статью'
           );
+
         }
+
       }
     );
+
   }
 
 
@@ -541,16 +1060,19 @@ async function openReader(id) {
       article.id
     );
 
+
   } else {
 
     console.error(
       'renderComments: функция не найдена. Проверьте подключение comments.js.'
     );
 
+
     const comments =
       document.getElementById(
         'articleComments'
       );
+
 
     if (comments) {
 
@@ -571,6 +1093,9 @@ async function openReader(id) {
 
         </section>
       `;
+
     }
+
   }
+
 }
