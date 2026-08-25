@@ -772,7 +772,7 @@ function bindComments(
           try {
 
             await callTelegramApi(
-              'toggle-comment-reaction',
+              'react-comment',
               {
                 commentId,
                 reactionType
