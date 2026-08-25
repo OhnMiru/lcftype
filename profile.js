@@ -351,7 +351,7 @@ function openBioDialog(currentBio) {
           class="profile-bio-input"
           rows="4"
           maxlength="500"
-          placeholder="Например: Пишу о путешествиях и фотографии. Живу в Москве."
+          placeholder="Например: Пишу о любви к ясгу фд! Всё на благо ясгу фд!"
         >${escapeHtml(currentBio || '')}</textarea>
 
         <div class="profile-bio-counter">
