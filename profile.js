@@ -450,14 +450,14 @@ function openUsernameDialog(currentUsername) {
         </div>
 
         <div class="profile-dialog-text">
-          Придумайте имя автора. Его будут видеть рядом с вашими статьями.
+          Придумайте имя. Его будут видеть рядом с вашими статьями и комментариями.
         </div>
 
         <input
           class="profile-input"
           id="profileUsernameInput"
           maxlength="30"
-          placeholder="Например: Анна"
+          placeholder="Например: Кейл"
           value="${escapeHtml(currentUsername || '')}"
         >
 
