@@ -30,7 +30,8 @@ const state = {
   profile: null,
   search: '',
   authorFilter: new Set(),
-  pendingImageInsertIndex: null
+  pendingImageInsertIndex: null,
+  sortOrder: 'desc' // 'desc' — новые сначала, 'asc' — старые сначала
 };
 
 let activeBlockEl = null;
