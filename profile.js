@@ -434,7 +434,7 @@ function openBioDialog(currentBio) {
 
 
 // =========================================================
-// Диалог создания / изменения ника
+// Диалог создания / изменения ника (ИСПРАВЛЕННЫЙ)
 // =========================================================
 
 function openUsernameDialog(currentUsername) {
@@ -519,10 +519,10 @@ function openUsernameDialog(currentUsername) {
       save.textContent = 'Сохраняем…';
 
       try {
-        const p = await saveProfile(username);
+        // Возвращаем только новое имя, сохранение делает openProfile
+        resolve(username);
         overlay.remove();
         showToast('Ник сохранён');
-        resolve(p);
       } catch (e) {
         showToast(e.message || 'Не удалось сохранить ник');
         save.disabled = false;
@@ -902,10 +902,18 @@ async function openProfile() {
       }
     };
 
-    // Изменить ник
+    // Изменить ник — ИСПРАВЛЕНО!
     document.getElementById('changeUsernameBtn').onclick = async () => {
-      if (await openUsernameDialog(p.username)) {
-        openProfile();
+      const newUsername = await openUsernameDialog(p.username);
+      if (newUsername) {
+        try {
+          await saveProfile(newUsername, avatar, bio);
+          showToast('Ник изменён ✅');
+          openProfile();
+        } catch (e) {
+          console.error('save username error:', e);
+          showToast(e.message || 'Не удалось сохранить ник');
+        }
       }
     };
 
