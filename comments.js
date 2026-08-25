@@ -6,7 +6,7 @@
 const COMMENT_REACTIONS = {
   like: '👍',
   love: '❤️',
-  laugh: '😂',
+  laugh: '🔥',
   wow: '😮',
   sad: '😢'
 };
