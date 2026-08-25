@@ -214,45 +214,58 @@ img{
   display:flex;
   align-items:center;
 
-  gap:8px;
-
-  padding:12px 0 6px;
+  gap:9px;
 
   width:100%;
+
+  padding:14px 0 8px;
+
+  font-family:'Inter',sans-serif;
 }
 
-.feed-search{
-  position:relative;
 
-  min-width:0;
+/* =========================================================
+   SEARCH
+   ========================================================= */
+
+.feed-search-wrap{
+  position:relative;
 
   flex:1 1 auto;
 
-  height:40px;
+  min-width:0;
+
+  height:42px;
 
   display:flex;
   align-items:center;
 
   border:1px solid var(--line);
 
-  border-radius:8px;
+  border-radius:10px;
 
   background:var(--paper);
 
   transition:
-    border-color .15s ease,
-    box-shadow .15s ease;
+    border-color .18s ease,
+    box-shadow .18s ease,
+    background .18s ease;
 }
 
-.feed-search:focus-within{
+.feed-search-wrap:focus-within{
   border-color:var(--indigo);
 
+  background:var(--paper);
+
   box-shadow:
-    0 0 0 2px
-    rgba(43,76,126,.08);
+    0 0 0 3px
+    rgba(43,76,126,.09);
 }
 
-.search-icon{
+
+/* Иконка поиска */
+
+.feed-search-icon{
   flex:0 0 auto;
 
   width:38px;
@@ -263,16 +276,27 @@ img{
 
   color:var(--ink-soft);
 
+  font-family:Arial,sans-serif;
+
   font-size:21px;
 
   line-height:1;
+
+  opacity:.75;
+
+  pointer-events:none;
 }
 
-.feed-search input{
+
+/* Сам input */
+
+.feed-search{
   width:100%;
   min-width:0;
 
   height:100%;
+
+  padding:0 4px 0 0;
 
   border:0;
   outline:0;
@@ -284,69 +308,92 @@ img{
   font-family:'Inter',sans-serif;
 
   font-size:13px;
+
+  font-weight:400;
 }
 
-.feed-search input::placeholder{
+.feed-search::placeholder{
   color:var(--ink-soft);
 
-  opacity:.7;
+  opacity:.65;
 }
 
-.search-clear{
-  width:34px;
-  height:34px;
 
-  margin-right:3px;
+/* Убираем стандартный крестик браузера */
 
-  border-radius:50%;
+.feed-search::-webkit-search-cancel-button{
+  -webkit-appearance:none;
+  appearance:none;
+}
+
+
+/* Кнопка очистки */
+
+.feed-search-clear{
+  flex:0 0 auto;
+
+  width:32px;
+  height:32px;
+
+  margin-right:4px;
+
+  padding:0;
 
   display:flex;
   align-items:center;
   justify-content:center;
 
+  border-radius:50%;
+
   color:var(--ink-soft);
 
-  font-size:20px;
+  font-family:Arial,sans-serif;
 
-  opacity:0;
+  font-size:21px;
 
-  pointer-events:none;
+  line-height:1;
 
   transition:
-    opacity .15s ease,
-    background .15s ease;
+    background .15s ease,
+    color .15s ease,
+    transform .15s ease;
 }
 
-.search-clear.visible{
-  opacity:1;
-
-  pointer-events:auto;
-}
-
-.search-clear:hover{
+.feed-search-clear:hover{
   background:var(--paper-dim);
+
+  color:var(--ink);
 }
 
-.feed-filter-btn{
+.feed-search-clear:active{
+  transform:scale(.92);
+}
+
+
+/* =========================================================
+   FILTER BUTTON
+   ========================================================= */
+
+.author-filter-btn{
   position:relative;
 
   flex:0 0 auto;
 
-  height:40px;
+  height:42px;
 
   min-width:94px;
 
-  padding:0 12px;
+  padding:0 13px;
 
   display:flex;
   align-items:center;
   justify-content:center;
 
-  gap:6px;
+  gap:7px;
 
   border:1px solid var(--line);
 
-  border-radius:8px;
+  border-radius:10px;
 
   background:var(--paper);
 
@@ -358,50 +405,74 @@ img{
 
   font-weight:600;
 
+  white-space:nowrap;
+
   transition:
-    background .15s ease,
-    border-color .15s ease,
-    color .15s ease;
+    background .18s ease,
+    border-color .18s ease,
+    color .18s ease,
+    box-shadow .18s ease;
 }
 
-.feed-filter-btn:hover,
-.feed-filter-btn.active{
+.author-filter-btn:hover{
+  background:var(--paper-dim);
+
+  border-color:#C9C4B5;
+}
+
+.author-filter-btn[aria-expanded="true"],
+.author-filter-btn.has-selection{
+  background:var(--paper-dim);
+
   border-color:var(--indigo);
 
   color:var(--indigo);
 
-  background:var(--paper-dim);
+  box-shadow:
+    0 0 0 2px
+    rgba(43,76,126,.06);
 }
 
-.tool-icon{
-  font-size:18px;
+
+/* Иконка */
+
+.author-filter-icon{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+
+  font-size:17px;
 
   line-height:1;
 
   transform:rotate(90deg);
+
+  opacity:.85;
 }
 
-.tool-label{
-  white-space:nowrap;
-}
 
-.filter-count{
+/* Счётчик */
+
+.author-filter-count{
   min-width:18px;
   height:18px;
 
   padding:0 5px;
 
-  border-radius:10px;
-
   display:flex;
   align-items:center;
   justify-content:center;
+
+  border-radius:9px;
 
   background:var(--indigo);
 
   color:#fff;
 
+  font-family:'Inter',sans-serif;
+
   font-size:10px;
+
   font-weight:700;
 
   line-height:1;
@@ -409,19 +480,20 @@ img{
 
 
 /* =========================================================
-   AUTHOR FILTER POPUP
+   AUTHOR FILTER PANEL
    ========================================================= */
 
-.author-filter-popup{
+.author-filter-panel{
   position:absolute;
 
   z-index:50;
 
-  top:58px;
+  top:64px;
+
   right:0;
 
   width:min(
-    330px,
+    340px,
     calc(100vw - 32px)
   );
 
@@ -429,47 +501,63 @@ img{
 
   border:1px solid var(--line);
 
-  border-radius:12px;
+  border-radius:13px;
 
   background:var(--paper);
 
   box-shadow:
-    0 14px 40px
+    0 16px 45px
     rgba(28,27,25,.16);
+
+  animation:
+    filterPanelIn .16s ease-out;
 }
 
-.author-filter-header{
+@keyframes filterPanelIn{
+  from{
+    opacity:0;
+
+    transform:
+      translateY(-5px)
+      scale(.985);
+  }
+
+  to{
+    opacity:1;
+
+    transform:
+      translateY(0)
+      scale(1);
+  }
+}
+
+
+/* =========================================================
+   FILTER HEADER
+   ========================================================= */
+
+.author-filter-head{
   display:flex;
-  align-items:flex-start;
+
+  align-items:center;
   justify-content:space-between;
 
   gap:12px;
 
-  padding-bottom:12px;
+  padding:
+    2px 1px 12px;
 
   border-bottom:1px solid var(--line);
 }
 
-.author-filter-title{
+.author-filter-head strong{
+  color:var(--ink);
+
   font-family:'Inter',sans-serif;
 
-  font-size:14px;
+  font-size:13px;
 
   font-weight:700;
-
-  color:var(--ink);
-}
-
-.author-filter-subtitle{
-  margin-top:4px;
-
-  font-family:'Inter',sans-serif;
-
-  font-size:10.5px;
-
-  line-height:1.4;
-
-  color:var(--ink-soft);
 }
 
 .author-filter-close{
@@ -477,6 +565,8 @@ img{
 
   width:28px;
   height:28px;
+
+  padding:0;
 
   display:flex;
   align-items:center;
@@ -486,24 +576,62 @@ img{
 
   color:var(--ink-soft);
 
-  font-size:22px;
+  font-family:Arial,sans-serif;
+
+  font-size:21px;
 
   line-height:1;
+
+  transition:
+    background .15s ease,
+    color .15s ease;
 }
 
 .author-filter-close:hover{
   background:var(--paper-dim);
+
+  color:var(--ink);
 }
+
+
+/* =========================================================
+   AUTHOR LIST
+   ========================================================= */
 
 .author-filter-list{
   max-height:280px;
 
   overflow-y:auto;
 
-  padding:7px 0;
+  padding:8px 0;
+
+  scrollbar-width:thin;
+
+  scrollbar-color:
+    var(--line)
+    transparent;
 }
 
-.author-filter-option{
+.author-filter-list::-webkit-scrollbar{
+  width:5px;
+}
+
+.author-filter-list::-webkit-scrollbar-track{
+  background:transparent;
+}
+
+.author-filter-list::-webkit-scrollbar-thumb{
+  background:var(--line);
+
+  border-radius:10px;
+}
+
+
+/* =========================================================
+   AUTHOR OPTION
+   ========================================================= */
+
+.author-option{
   position:relative;
 
   display:flex;
@@ -511,30 +639,44 @@ img{
 
   gap:10px;
 
-  min-height:40px;
+  min-height:42px;
 
-  padding:6px 7px;
+  padding:6px 8px;
 
-  border-radius:7px;
+  border-radius:8px;
 
   cursor:pointer;
 
   user-select:none;
+
+  transition:
+    background .15s ease;
 }
 
-.author-filter-option:hover{
+.author-option:hover{
   background:var(--paper-dim);
 }
 
-.author-filter-option input{
+
+/* Настоящий checkbox скрываем */
+
+.author-option input{
   position:absolute;
+
+  width:1px;
+  height:1px;
 
   opacity:0;
 
   pointer-events:none;
 }
 
-.author-filter-check{
+
+/* Кастомный checkbox через псевдоэлемент */
+
+.author-option::before{
+  content:'';
+
   flex:0 0 auto;
 
   width:19px;
@@ -546,27 +688,49 @@ img{
 
   background:var(--paper);
 
-  position:relative;
+  transition:
+    background .15s ease,
+    border-color .15s ease,
+    box-shadow .15s ease;
 }
 
-.author-filter-option input:checked
-+ .author-filter-check{
+
+/* Checked */
+
+.author-option:has(
+  input:checked
+){
+  background:
+    rgba(43,76,126,.045);
+}
+
+.author-option:has(
+  input:checked
+)::before{
+  border-color:var(--indigo);
+
   background:var(--indigo);
 
-  border-color:var(--indigo);
+  box-shadow:
+    0 0 0 2px
+    rgba(43,76,126,.08);
 }
 
-.author-filter-option input:checked
-+ .author-filter-check::after{
+
+/* Галочка */
+
+.author-option:has(
+  input:checked
+)::after{
   content:'';
 
   position:absolute;
 
-  left:5px;
-  top:2px;
+  left:14px;
+  top:11px;
 
-  width:6px;
-  height:10px;
+  width:5px;
+  height:9px;
 
   border:
     solid #fff;
@@ -578,7 +742,10 @@ img{
     rotate(45deg);
 }
 
-.author-filter-name{
+
+/* Имя автора */
+
+.author-option span{
   min-width:0;
 
   overflow:hidden;
@@ -587,53 +754,196 @@ img{
 
   white-space:nowrap;
 
+  color:var(--ink);
+
   font-family:'Inter',sans-serif;
 
   font-size:13px;
 
-  color:var(--ink);
+  line-height:1.3;
 }
 
-.author-filter-footer{
-  display:flex;
 
-  align-items:center;
-  justify-content:flex-end;
+/* =========================================================
+   EMPTY FILTER
+   ========================================================= */
 
-  gap:7px;
+.author-filter-empty{
+  padding:18px 8px;
 
-  padding-top:10px;
+  text-align:center;
 
-  border-top:1px solid var(--line);
+  color:var(--ink-soft);
+
+  font-family:'Inter',sans-serif;
+
+  font-size:12px;
+
+  line-height:1.5;
 }
 
-.author-filter-reset,
-.author-filter-done{
-  min-height:32px;
 
-  padding:7px 11px;
+/* =========================================================
+   RESET FILTER
+   ========================================================= */
 
-  border-radius:6px;
+.author-filter-reset{
+  width:100%;
+
+  min-height:34px;
+
+  margin-top:4px;
+
+  padding:8px 12px;
+
+  border:1px solid var(--line);
+
+  border-radius:7px;
+
+  background:transparent;
+
+  color:var(--ink-soft);
 
   font-family:'Inter',sans-serif;
 
   font-size:11px;
 
   font-weight:600;
+
+  transition:
+    background .15s ease,
+    border-color .15s ease,
+    color .15s ease;
 }
 
-.author-filter-reset{
-  color:var(--ink-soft);
+.author-filter-reset:hover{
+  background:var(--paper-dim);
 
-  border:1px solid var(--line);
+  border-color:#C9C4B5;
+
+  color:var(--ink);
 }
 
-.author-filter-done{
-  color:#fff;
 
-  background:var(--indigo);
+/* =========================================================
+   MOBILE
+   ========================================================= */
+
+@media (max-width:520px){
+
+  .feed-tools{
+    gap:7px;
+
+    padding-top:11px;
+
+    padding-bottom:7px;
+  }
+
+  .feed-search-wrap{
+    height:40px;
+
+    border-radius:9px;
+  }
+
+  .feed-search-icon{
+    width:34px;
+
+    font-size:20px;
+  }
+
+  .feed-search{
+    font-size:12px;
+  }
+
+  .feed-search-clear{
+    width:30px;
+    height:30px;
+
+    margin-right:3px;
+
+    font-size:20px;
+  }
+
+  .author-filter-btn{
+    height:40px;
+
+    min-width:82px;
+
+    padding:
+      0 10px;
+
+    gap:6px;
+
+    border-radius:9px;
+
+    font-size:11px;
+  }
+
+  .author-filter-icon{
+    font-size:16px;
+  }
+
+  .author-filter-panel{
+    position:fixed;
+
+    top:auto;
+    right:12px;
+    left:12px;
+    bottom:12px;
+
+    width:auto;
+
+    max-height:
+      calc(100vh - 24px);
+
+    padding:14px;
+
+    border-radius:15px;
+
+    box-shadow:
+      0 20px 55px
+      rgba(28,27,25,.25);
+  }
+
+  .author-filter-list{
+    max-height:
+      calc(100vh - 185px);
+  }
 }
 
+
+/* =========================================================
+   VERY SMALL PHONES
+   ========================================================= */
+
+@media (max-width:380px){
+
+  .feed-tools{
+    gap:5px;
+  }
+
+  .feed-search-icon{
+    width:31px;
+  }
+
+  .author-filter-btn{
+    min-width:76px;
+
+    padding-left:8px;
+    padding-right:8px;
+  }
+
+  .author-filter-icon{
+    font-size:15px;
+  }
+
+  .author-filter-count{
+    min-width:17px;
+    height:17px;
+
+    font-size:9px;
+  }
+}
 
 /* =========================================================
    FEED
