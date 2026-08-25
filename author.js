@@ -102,9 +102,20 @@ function renderAuthorPage(profile, articles) {
 
         <div class="author-info">
 
-          <h1 class="author-name">
-            ${escapeHtml(profile.username)}
-          </h1>
+          <div class="author-name-row">
+            <h1 class="author-name">
+              ${escapeHtml(profile.username)}
+            </h1>
+            ${hasDonations ? `
+              <button
+                class="btn btn-primary author-donate-btn"
+                id="authorDonateBtn"
+                type="button"
+              >
+                Поддержать
+              </button>
+            ` : ''}
+          </div>
 
           <div class="author-stats">
             <span class="author-stat">
@@ -120,18 +131,6 @@ function renderAuthorPage(profile, articles) {
           ${bio ? `
             <div class="author-bio">
               ${escapeHtml(bio)}
-            </div>
-          ` : ''}
-
-          ${hasDonations ? `
-            <div class="author-donate-action">
-              <button
-                class="btn btn-primary author-donate-btn"
-                id="authorDonateBtn"
-                type="button"
-              >
-                ⭐ Поддержать автора
-              </button>
             </div>
           ` : ''}
 
@@ -168,7 +167,6 @@ function renderAuthorPage(profile, articles) {
     });
   }
 }
-
 
 // =========================================================
 // Карточка статьи на странице автора
