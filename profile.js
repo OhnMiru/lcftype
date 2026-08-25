@@ -18,8 +18,11 @@ async function getProfile() {
 // Сохранить профиль
 // =========================================================
 
-async function saveProfile(username) {
-  const r = await callTelegramApi('set-profile', { username });
+async function saveProfile(username, avatar = null) {
+  const r = await callTelegramApi('set-profile', { 
+    username,
+    avatar
+  });
   state.profile = r.profile;
   return state.profile;
 }
@@ -153,6 +156,172 @@ async function canAcceptDonations(userId) {
 async function getDonationLink(userId) {
   const settings = await getDonationSettings(userId);
   return settings.is_enabled ? settings.donation_link : null;
+}
+
+
+// =========================================================
+// Загрузить аватарку
+// =========================================================
+
+async function uploadAvatar(file) {
+  try {
+    const dataUrl = await compressImageFile(file, 400, 0.9);
+    const url = await uploadImage(dataUrl, 'avatar.jpg');
+    return url;
+  } catch (e) {
+    console.error('uploadAvatar error:', e);
+    throw new Error('Не удалось загрузить аватарку');
+  }
+}
+
+
+// =========================================================
+// Диалог изменения аватарки
+// =========================================================
+
+function openAvatarDialog(currentAvatar) {
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.className = 'profile-overlay';
+
+    overlay.innerHTML = `
+      <div class="profile-dialog avatar-dialog">
+
+        <div class="profile-dialog-title">
+          Аватарка
+        </div>
+
+        <div class="profile-dialog-text">
+          Выберите изображение для аватарки.
+        </div>
+
+        <div class="avatar-preview-container">
+          ${currentAvatar ? `
+            <img src="${escapeHtml(currentAvatar)}" alt="Аватар" class="avatar-preview-img">
+          ` : `
+            <div class="avatar-preview-placeholder">
+              <span>📷</span>
+            </div>
+          `}
+        </div>
+
+        <input
+          type="file"
+          id="avatarFileInput"
+          accept="image/*"
+          style="display:none"
+        >
+
+        <div class="profile-dialog-actions">
+
+          <button
+            class="btn btn-secondary"
+            id="avatarCancelBtn"
+          >
+            Отмена
+          </button>
+
+          ${currentAvatar ? `
+            <button
+              class="btn btn-danger"
+              id="avatarRemoveBtn"
+            >
+              Удалить
+            </button>
+          ` : ''}
+
+          <button
+            class="btn btn-primary"
+            id="avatarChooseBtn"
+          >
+            Выбрать фото
+          </button>
+
+          <button
+            class="btn btn-primary"
+            id="avatarSaveBtn"
+            style="display:none"
+          >
+            Сохранить
+          </button>
+
+        </div>
+
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    const fileInput = overlay.querySelector('#avatarFileInput');
+    const chooseBtn = overlay.querySelector('#avatarChooseBtn');
+    const saveBtn = overlay.querySelector('#avatarSaveBtn');
+    const cancelBtn = overlay.querySelector('#avatarCancelBtn');
+    const removeBtn = overlay.querySelector('#avatarRemoveBtn');
+    const preview = overlay.querySelector('.avatar-preview-container');
+    let newAvatarDataUrl = null;
+
+    // Выбрать фото
+    chooseBtn.addEventListener('click', () => {
+      fileInput.click();
+    });
+
+    // Обработка выбора файла
+    fileInput.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      try {
+        chooseBtn.disabled = true;
+        chooseBtn.textContent = 'Загрузка…';
+
+        const dataUrl = await compressImageFile(file, 400, 0.9);
+        newAvatarDataUrl = dataUrl;
+
+        preview.innerHTML = `
+          <img src="${dataUrl}" alt="Аватар" class="avatar-preview-img">
+        `;
+
+        chooseBtn.style.display = 'none';
+        saveBtn.style.display = 'inline-flex';
+        saveBtn.disabled = false;
+
+      } catch (e) {
+        showToast('Не удалось обработать изображение');
+        console.error(e);
+      } finally {
+        chooseBtn.disabled = false;
+        chooseBtn.textContent = 'Выбрать фото';
+        fileInput.value = '';
+      }
+    });
+
+    // Сохранить
+    saveBtn.addEventListener('click', () => {
+      resolve(newAvatarDataUrl);
+      overlay.remove();
+    });
+
+    // Удалить
+    removeBtn?.addEventListener('click', () => {
+      resolve(null);
+      overlay.remove();
+    });
+
+    // Отмена
+    cancelBtn.addEventListener('click', () => {
+      resolve('cancel');
+      overlay.remove();
+    });
+
+    // Закрытие по клику вне
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) {
+        resolve('cancel');
+        overlay.remove();
+      }
+    });
+
+  });
 }
 
 
@@ -459,6 +628,7 @@ async function openProfile() {
     console.log('Profile data:', { stats, articles, comments, donationSettings });
 
     const first = p.username.trim().charAt(0).toUpperCase();
+    const avatar = p.avatar || null;
     const donationLink = donationSettings?.donation_link || '';
     const isDonationEnabled = donationSettings?.is_enabled || false;
 
@@ -467,8 +637,18 @@ async function openProfile() {
 
         <div class="profile-card chrome">
 
-          <div class="profile-avatar">
-            ${escapeHtml(first || '?')}
+          <!-- Аватарка -->
+          <div class="profile-avatar-wrapper">
+            ${avatar ? `
+              <img src="${escapeHtml(avatar)}" alt="Аватар" class="profile-avatar-img">
+            ` : `
+              <div class="profile-avatar">
+                ${escapeHtml(first || '?')}
+              </div>
+            `}
+            <button class="profile-avatar-edit" id="changeAvatarBtn" title="Изменить аватарку">
+              ✎
+            </button>
           </div>
 
           <div class="profile-label">
@@ -494,7 +674,7 @@ async function openProfile() {
 
         <!-- Настройки донатов -->
         <div class="profile-card donation-settings-card chrome">
-          <h3 class="donation-settings-title">Донаты</h3>
+          <h3 class="donation-settings-title">⭐ Донаты</h3>
 
           <div class="donation-settings-desc">
             Вставьте ссылку на вашу страницу в CloudTips, чтобы читатели могли вас поддержать.
@@ -530,11 +710,11 @@ async function openProfile() {
 
           ${donationLink ? `
             <div class="donation-settings-status enabled">
-              Донаты включены
+              ✅ Донаты включены
             </div>
           ` : `
             <div class="donation-settings-status disabled">
-              Донаты отключены
+              ❌ Донаты отключены
             </div>
           `}
 
@@ -573,6 +753,30 @@ async function openProfile() {
 
     // === Привязываем события ===
 
+    // Изменить аватарку
+    document.getElementById('changeAvatarBtn').onclick = async () => {
+      const result = await openAvatarDialog(avatar);
+      
+      if (result === 'cancel') return;
+      
+      try {
+        let avatarUrl = null;
+        
+        if (result !== null) {
+          avatarUrl = await uploadImage(result, 'avatar.jpg');
+        }
+        
+        await saveProfile(p.username, avatarUrl);
+        
+        showToast(avatarUrl ? 'Аватарка обновлена ✅' : 'Аватарка удалена');
+        openProfile();
+        
+      } catch (e) {
+        console.error('save avatar error:', e);
+        showToast(e.message || 'Не удалось сохранить аватарку');
+      }
+    };
+
     // Изменить ник
     document.getElementById('changeUsernameBtn').onclick = async () => {
       if (await openUsernameDialog(p.username)) {
@@ -587,7 +791,6 @@ async function openProfile() {
     saveDonationBtn?.addEventListener('click', async () => {
       const link = donationInput.value.trim();
 
-      // Валидация ссылки
       if (link && !link.startsWith('https://pay.cloudtips.ru/')) {
         showToast('Ссылка должна начинаться с https://pay.cloudtips.ru/');
         return;
@@ -600,7 +803,7 @@ async function openProfile() {
         });
 
         showToast(link ? 'Ссылка сохранена! Донаты включены ✅' : 'Донаты отключены');
-        openProfile(); // Обновляем страницу
+        openProfile();
 
       } catch (e) {
         console.error('saveDonation error:', e);
