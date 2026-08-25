@@ -8,26 +8,28 @@
 // =========================================================
 
 function getAuthors() {
-  const map = new Map();
+  const authors = new Map();
 
-  state.articles.forEach(a => {
-    const name =
-      (a.author_name || '').trim();
+  for (const article of state.articles || []) {
+    const name = String(
+      article?.author_name || ''
+    ).trim();
 
-    if (name) {
-      map.set(name, name);
+    if (!name) {
+      continue;
     }
-  });
 
-  return [...map.values()].sort(
-    (a, b) =>
-      a.localeCompare(
-        b,
-        'ru',
-        {
-          sensitivity: 'base'
-        }
-      )
+    authors.set(name, name);
+  }
+
+  return [...authors.values()].sort(
+    (a, b) => a.localeCompare(
+      b,
+      'ru',
+      {
+        sensitivity: 'base'
+      }
+    )
   );
 }
 
@@ -37,49 +39,71 @@ function getAuthors() {
 // =========================================================
 
 function filteredArticles() {
-  const q =
-    state.search
-      .trim()
-      .toLocaleLowerCase('ru-RU');
+  const query = String(
+    state.search || ''
+  )
+    .trim()
+    .toLocaleLowerCase('ru-RU');
 
-  return state.articles.filter(a => {
-    const title =
-      (a.title || '')
+  const selectedAuthors =
+    state.authorFilter instanceof Set
+      ? state.authorFilter
+      : new Set();
+
+  return (state.articles || []).filter(
+    article => {
+      const title = String(
+        article?.title || ''
+      )
         .toLocaleLowerCase('ru-RU');
 
-    const author =
-      (a.author_name || '').trim();
+      const author = String(
+        article?.author_name || ''
+      ).trim();
 
-    const searchOk =
-      !q ||
-      title.includes(q);
+      const matchesSearch =
+        !query ||
+        title.includes(query);
 
-    const authorOk =
-      !state.authorFilter.size ||
-      state.authorFilter.has(author);
+      const matchesAuthor =
+        selectedAuthors.size === 0 ||
+        selectedAuthors.has(author);
 
-    return searchOk && authorOk;
-  });
+      return (
+        matchesSearch &&
+        matchesAuthor
+      );
+    }
+  );
 }
 
 
 // =========================================================
-// Панель поиска и фильтра
+// HTML панели поиска и фильтра
 // =========================================================
 
 function renderFeedTools() {
-  const authors =
-    getAuthors();
+  const authors = getAuthors();
 
   const selectedCount =
-    state.authorFilter.size;
+    state.authorFilter instanceof Set
+      ? state.authorFilter.size
+      : 0;
+
+  const searchValue =
+    String(state.search || '');
 
   return `
     <div class="feed-tools chrome">
 
+      <!-- Поиск -->
+
       <div class="feed-search-wrap">
 
-        <span class="feed-search-icon">
+        <span
+          class="feed-search-icon"
+          aria-hidden="true"
+        >
           ⌕
         </span>
 
@@ -88,45 +112,68 @@ function renderFeedTools() {
           class="feed-search"
           type="search"
           autocomplete="off"
+          autocapitalize="off"
+          spellcheck="false"
           placeholder="Поиск по названию"
-          value="${escapeHtml(
-            state.search
-          )}"
+          value="${escapeHtml(searchValue)}"
+          aria-label="Поиск по названию"
         >
 
         <button
           id="clearSearchBtn"
           class="feed-search-clear"
           type="button"
-          aria-label="Очистить"
-          ${state.search ? '' : 'hidden'}
+          aria-label="Очистить поиск"
+          ${searchValue ? '' : 'hidden'}
         >
           ×
         </button>
 
       </div>
 
+
+      <!-- Фильтр -->
+
       <button
         id="authorFilterBtn"
         class="author-filter-btn ${
-          selectedCount
+          selectedCount > 0
             ? 'has-selection'
             : ''
         }"
         type="button"
+        aria-expanded="false"
+        aria-controls="authorFilterPanel"
       >
 
-        <span>☷</span>
+        <span
+          class="author-filter-icon"
+          aria-hidden="true"
+        >
+          ☷
+        </span>
 
-        <span>Фильтр</span>
+        <span>
+          Фильтр
+        </span>
 
         ${
-          selectedCount
-            ? `<b>${selectedCount}</b>`
+          selectedCount > 0
+            ? `
+              <b
+                class="author-filter-count"
+                aria-label="Выбрано авторов"
+              >
+                ${selectedCount}
+              </b>
+            `
             : ''
         }
 
       </button>
+
+
+      <!-- Панель фильтра -->
 
       <div
         id="authorFilterPanel"
@@ -142,39 +189,63 @@ function renderFeedTools() {
 
           <button
             id="closeAuthorFilter"
+            class="author-filter-close"
             type="button"
+            aria-label="Закрыть фильтр"
           >
             ×
           </button>
 
         </div>
 
-        <div class="author-filter-list">
-
-          ${authors.map(name => `
-            <label class="author-option">
-
-              <input
-                type="checkbox"
-                value="${escapeHtml(name)}"
-                ${
-                  state.authorFilter.has(name)
-                    ? 'checked'
-                    : ''
-                }
-              >
-
-              <span>
-                ${escapeHtml(name)}
-              </span>
-
-            </label>
-          `).join('')}
-
-        </div>
 
         ${
-          state.authorFilter.size
+          authors.length
+            ? `
+              <div class="author-filter-list">
+
+                ${authors.map(
+                  author => {
+                    const checked =
+                      state.authorFilter instanceof Set &&
+                      state.authorFilter.has(author);
+
+                    return `
+                      <label
+                        class="author-option"
+                      >
+
+                        <input
+                          type="checkbox"
+                          value="${escapeHtml(author)}"
+                          ${
+                            checked
+                              ? 'checked'
+                              : ''
+                          }
+                        >
+
+                        <span>
+                          ${escapeHtml(author)}
+                        </span>
+
+                      </label>
+                    `;
+                  }
+                ).join('')}
+
+              </div>
+            `
+            : `
+              <div class="author-filter-empty">
+                Авторов пока нет.
+              </div>
+            `
+        }
+
+
+        ${
+          selectedCount > 0
             ? `
               <button
                 id="resetAuthorFilter"
@@ -191,6 +262,186 @@ function renderFeedTools() {
 
     </div>
   `;
+}
+
+
+// =========================================================
+// Обновление состояния кнопки фильтра
+// =========================================================
+
+function updateAuthorFilterButton() {
+  const button =
+    document.getElementById(
+      'authorFilterBtn'
+    );
+
+  if (!button) {
+    return;
+  }
+
+  const selectedCount =
+    state.authorFilter instanceof Set
+      ? state.authorFilter.size
+      : 0;
+
+  button.classList.toggle(
+    'has-selection',
+    selectedCount > 0
+  );
+
+  const oldCount =
+    button.querySelector(
+      '.author-filter-count'
+    );
+
+  if (oldCount) {
+    oldCount.remove();
+  }
+
+  if (selectedCount > 0) {
+    button.insertAdjacentHTML(
+      'beforeend',
+      `
+        <b
+          class="author-filter-count"
+          aria-label="Выбрано авторов"
+        >
+          ${selectedCount}
+        </b>
+      `
+    );
+  }
+}
+
+
+// =========================================================
+// Обновление кнопки очистки поиска
+// =========================================================
+
+function updateSearchClearButton() {
+  const clear =
+    document.getElementById(
+      'clearSearchBtn'
+    );
+
+  if (!clear) {
+    return;
+  }
+
+  const hasSearch =
+    String(state.search || '').trim() !== '';
+
+  clear.hidden = !hasSearch;
+}
+
+
+// =========================================================
+// Открыть панель фильтра
+// =========================================================
+
+function openAuthorFilter() {
+  const panel =
+    document.getElementById(
+      'authorFilterPanel'
+    );
+
+  const button =
+    document.getElementById(
+      'authorFilterBtn'
+    );
+
+  if (!panel || !button) {
+    return;
+  }
+
+  panel.hidden = false;
+
+  button.setAttribute(
+    'aria-expanded',
+    'true'
+  );
+}
+
+
+// =========================================================
+// Закрыть панель фильтра
+// =========================================================
+
+function closeAuthorFilter() {
+  const panel =
+    document.getElementById(
+      'authorFilterPanel'
+    );
+
+  const button =
+    document.getElementById(
+      'authorFilterBtn'
+    );
+
+  if (!panel || !button) {
+    return;
+  }
+
+  panel.hidden = true;
+
+  button.setAttribute(
+    'aria-expanded',
+    'false'
+  );
+}
+
+
+// =========================================================
+// Переключить панель фильтра
+// =========================================================
+
+function toggleAuthorFilter() {
+  const panel =
+    document.getElementById(
+      'authorFilterPanel'
+    );
+
+  if (!panel) {
+    return;
+  }
+
+  if (panel.hidden) {
+    openAuthorFilter();
+  } else {
+    closeAuthorFilter();
+  }
+}
+
+
+// =========================================================
+// Синхронизация checkbox-фильтров
+// =========================================================
+
+function syncAuthorFilterCheckboxes() {
+  const panel =
+    document.getElementById(
+      'authorFilterPanel'
+    );
+
+  if (!panel) {
+    return;
+  }
+
+  const selected =
+    state.authorFilter instanceof Set
+      ? state.authorFilter
+      : new Set();
+
+  panel
+    .querySelectorAll(
+      'input[type="checkbox"]'
+    )
+    .forEach(checkbox => {
+      checkbox.checked =
+        selected.has(
+          checkbox.value
+        );
+    });
 }
 
 
@@ -219,38 +470,66 @@ function bindFeedTools() {
       'authorFilterPanel'
     );
 
+  if (!state.authorFilter) {
+    state.authorFilter = new Set();
+  }
+
+  // -------------------------------------------------------
+  // Поиск
+  // -------------------------------------------------------
+
   search?.addEventListener(
     'input',
-    e => {
+    event => {
       state.search =
-        e.target.value;
+        event.target.value || '';
+
+      updateSearchClearButton();
 
       renderFeedListOnly();
     }
   );
+
+
+  // -------------------------------------------------------
+  // Очистка поиска
+  // -------------------------------------------------------
 
   clear?.addEventListener(
     'click',
     () => {
       state.search = '';
 
-      search.value = '';
+      if (search) {
+        search.value = '';
+      }
 
-      clear.hidden = true;
+      updateSearchClearButton();
 
       renderFeedListOnly();
 
-      search.focus();
+      search?.focus();
     }
   );
 
+
+  // -------------------------------------------------------
+  // Открытие / закрытие фильтра
+  // -------------------------------------------------------
+
   filter?.addEventListener(
     'click',
-    () => {
-      panel.hidden =
-        !panel.hidden;
+    event => {
+      event.stopPropagation();
+
+      toggleAuthorFilter();
     }
   );
+
+
+  // -------------------------------------------------------
+  // Закрытие фильтра
+  // -------------------------------------------------------
 
   document
     .getElementById(
@@ -258,33 +537,65 @@ function bindFeedTools() {
     )
     ?.addEventListener(
       'click',
-      () => {
-        panel.hidden = true;
+      event => {
+        event.stopPropagation();
+
+        closeAuthorFilter();
       }
     );
 
+
+  // -------------------------------------------------------
+  // Выбор автора
+  // -------------------------------------------------------
+
   panel
     ?.querySelectorAll(
-      'input[type=checkbox]'
+      'input[type="checkbox"]'
     )
-    .forEach(cb =>
-      cb.addEventListener(
-        'change',
-        () => {
-          if (cb.checked) {
-            state.authorFilter.add(
-              cb.value
-            );
-          } else {
-            state.authorFilter.delete(
-              cb.value
-            );
-          }
+    .forEach(
+      checkbox => {
+        checkbox.addEventListener(
+          'change',
+          () => {
+            if (!state.authorFilter) {
+              state.authorFilter =
+                new Set();
+            }
 
-          renderFeed();
-        }
-      )
+            if (checkbox.checked) {
+              state.authorFilter.add(
+                checkbox.value
+              );
+            } else {
+              state.authorFilter.delete(
+                checkbox.value
+              );
+            }
+
+            /*
+             * ВАЖНО:
+             *
+             * Здесь НЕ вызываем renderFeed().
+             *
+             * renderFeed() заново запрашивает статьи
+             * из Supabase и пересоздаёт весь интерфейс.
+             *
+             * Для локального фильтра это не нужно.
+             */
+
+            updateAuthorFilterButton();
+
+            renderFeedListOnly();
+          }
+        );
+      }
     );
+
+
+  // -------------------------------------------------------
+  // Сброс фильтра
+  // -------------------------------------------------------
 
   document
     .getElementById(
@@ -292,12 +603,82 @@ function bindFeedTools() {
     )
     ?.addEventListener(
       'click',
-      () => {
+      event => {
+        event.stopPropagation();
+
+        if (!state.authorFilter) {
+          state.authorFilter =
+            new Set();
+        }
+
         state.authorFilter.clear();
 
-        renderFeed();
+        syncAuthorFilterCheckboxes();
+
+        updateAuthorFilterButton();
+
+        renderFeedListOnly();
       }
     );
+
+
+  // -------------------------------------------------------
+  // Начальное состояние
+  // -------------------------------------------------------
+
+  updateSearchClearButton();
+
+  updateAuthorFilterButton();
+}
+
+
+// =========================================================
+// Закрытие фильтра при клике вне панели
+// =========================================================
+
+function bindFeedOutsideClick() {
+  if (
+    bindFeedOutsideClick._bound
+  ) {
+    return;
+  }
+
+  bindFeedOutsideClick._bound = true;
+
+  document.addEventListener(
+    'click',
+    event => {
+      const panel =
+        document.getElementById(
+          'authorFilterPanel'
+        );
+
+      const button =
+        document.getElementById(
+          'authorFilterBtn'
+        );
+
+      if (!panel || !button) {
+        return;
+      }
+
+      if (panel.hidden) {
+        return;
+      }
+
+      const target =
+        event.target;
+
+      if (
+        panel.contains(target) ||
+        button.contains(target)
+      ) {
+        return;
+      }
+
+      closeAuthorFilter();
+    }
+  );
 }
 
 
@@ -318,173 +699,28 @@ function renderFeedListOnly() {
   const rows =
     filteredArticles();
 
-  list.innerHTML =
-    rows.length
-      ? rows.map(a => `
-          <div
-            class="feed-item"
-            data-id="${escapeHtml(a.id)}"
-          >
 
-            ${
-              a.cover
-                ? `
-                  <img
-                    class="thumb"
-                    src="${escapeHtml(a.cover)}"
-                    alt=""
-                  >
-                `
-                : ''
-            }
+  // -------------------------------------------------------
+  // Нет результатов
+  // -------------------------------------------------------
 
-            <div class="feed-meta">
+  if (!rows.length) {
+    const hasArticles =
+      Array.isArray(state.articles) &&
+      state.articles.length > 0;
 
-              ${fmtDate(
-                a.created_at
-              )}
+    const hasSearch =
+      String(
+        state.search || ''
+      ).trim() !== '';
 
-              ${
-                a.author_name
-                  ? ` · ${escapeHtml(
-                      a.author_name
-                    )}`
-                  : ''
-              }
-
-            </div>
-
-            <h3>
-              ${escapeHtml(
-                a.title ||
-                'Без названия'
-              )}
-            </h3>
-
-            <p>
-              ${escapeHtml(
-                a.excerpt || ''
-              )}
-            </p>
-
-          </div>
-        `).join('')
-      : `
-          <div class="empty-state feed-empty">
-
-            <h2>
-              Ничего не найдено
-            </h2>
-
-            <p>
-              ${
-                state.authorFilter.size
-                  ? 'Попробуйте выбрать других авторов.'
-                  : 'Попробуйте изменить запрос поиска.'
-              }
-            </p>
-
-          </div>
-        `;
-
-  list
-    .querySelectorAll(
-      '.feed-item'
-    )
-    .forEach(el => {
-      el.addEventListener(
-        'click',
-        () =>
-          openReader(
-            el.dataset.id
-          )
-      );
-    });
-
-  const clear =
-    document.getElementById(
-      'clearSearchBtn'
-    );
-
-  if (clear) {
-    clear.hidden =
-      !state.search;
-  }
-
-  const filter =
-    document.getElementById(
-      'authorFilterBtn'
-    );
-
-  if (filter) {
-    filter.classList.toggle(
-      'has-selection',
-      !!state.authorFilter.size
-    );
-
-    const b =
-      filter.querySelector('b');
-
-    if (
-      state.authorFilter.size &&
-      !b
-    ) {
-      filter.insertAdjacentHTML(
-        'beforeend',
-        `<b>${state.authorFilter.size}</b>`
-      );
-
-    } else if (
-      !state.authorFilter.size &&
-      b
-    ) {
-      b.remove();
-
-    } else if (b) {
-      b.textContent =
-        state.authorFilter.size;
-    }
-  }
-}
+    const hasAuthorsFilter =
+      state.authorFilter instanceof Set &&
+      state.authorFilter.size > 0;
 
 
-// =========================================================
-// Главная лента
-// =========================================================
-
-async function renderFeed() {
-  state.view = 'feed';
-  state.currentId = null;
-
-  setBackButton(false);
-
-  const main =
-    document.getElementById(
-      'main'
-    );
-
-  main.innerHTML =
-    '<div class="loading">Загрузка статей…</div>';
-
-  state.articles =
-    await fetchFeed();
-
-  main.innerHTML = `
-    ${renderFeedTools()}
-
-    <div id="feedList"></div>
-  `;
-
-  bindFeedTools();
-
-  renderFeedListOnly();
-
-  if (!state.articles.length) {
-    document
-      .getElementById(
-        'feedList'
-      )
-      .innerHTML = `
+    if (!hasArticles) {
+      list.innerHTML = `
         <div class="empty-state">
 
           <h2>
@@ -497,5 +733,305 @@ async function renderFeed() {
 
         </div>
       `;
+
+      return;
+    }
+
+
+    let title =
+      'Ничего не найдено';
+
+    let description =
+      'Попробуйте изменить параметры поиска.';
+
+
+    if (
+      hasSearch &&
+      hasAuthorsFilter
+    ) {
+      description =
+        'Попробуйте изменить запрос или выбрать других авторов.';
+
+    } else if (hasSearch) {
+      description =
+        'Попробуйте изменить запрос поиска.';
+
+    } else if (hasAuthorsFilter) {
+      description =
+        'Попробуйте выбрать других авторов.';
+    }
+
+
+    list.innerHTML = `
+      <div class="empty-state feed-empty">
+
+        <h2>
+          ${escapeHtml(title)}
+        </h2>
+
+        <p>
+          ${escapeHtml(description)}
+        </p>
+
+      </div>
+    `;
+
+    return;
+  }
+
+
+  // -------------------------------------------------------
+  // Список статей
+  // -------------------------------------------------------
+
+  list.innerHTML =
+    rows
+      .map(article => {
+        const id =
+          String(
+            article?.id ?? ''
+          );
+
+        const title =
+          String(
+            article?.title ||
+            'Без названия'
+          );
+
+        const excerpt =
+          String(
+            article?.excerpt || ''
+          );
+
+        const author =
+          String(
+            article?.author_name || ''
+          ).trim();
+
+        const cover =
+          String(
+            article?.cover || ''
+          ).trim();
+
+        return `
+          <div
+            class="feed-item"
+            data-id="${escapeHtml(id)}"
+            role="button"
+            tabindex="0"
+          >
+
+            ${
+              cover
+                ? `
+                  <img
+                    class="thumb"
+                    src="${escapeHtml(cover)}"
+                    alt=""
+                    loading="lazy"
+                  >
+                `
+                : ''
+            }
+
+
+            <div class="feed-meta">
+
+              ${escapeHtml(
+                fmtDate(
+                  article?.created_at
+                )
+              )}
+
+              ${
+                author
+                  ? `
+                    ·
+                    ${escapeHtml(author)}
+                  `
+                  : ''
+              }
+
+            </div>
+
+
+            <h3>
+              ${escapeHtml(title)}
+            </h3>
+
+
+            ${
+              excerpt
+                ? `
+                  <p>
+                    ${escapeHtml(excerpt)}
+                  </p>
+                `
+                : ''
+            }
+
+          </div>
+        `;
+      })
+      .join('');
+
+
+  // -------------------------------------------------------
+  // Обработчики открытия статьи
+  // -------------------------------------------------------
+
+  list
+    .querySelectorAll(
+      '.feed-item'
+    )
+    .forEach(item => {
+      const open = () => {
+        const id =
+          item.dataset.id;
+
+        if (!id) {
+          return;
+        }
+
+        openReader(id);
+      };
+
+
+      item.addEventListener(
+        'click',
+        open
+      );
+
+
+      item.addEventListener(
+        'keydown',
+        event => {
+          if (
+            event.key === 'Enter' ||
+            event.key === ' '
+          ) {
+            event.preventDefault();
+
+            open();
+          }
+        }
+      );
+    });
+
+
+  // -------------------------------------------------------
+  // Синхронизация UI
+  // -------------------------------------------------------
+
+  updateSearchClearButton();
+
+  updateAuthorFilterButton();
+}
+
+
+// =========================================================
+// Главная лента
+// =========================================================
+
+async function renderFeed() {
+  state.view = 'feed';
+  state.currentId = null;
+
+  if (!state.authorFilter) {
+    state.authorFilter =
+      new Set();
+  }
+
+  setBackButton(false);
+
+  const main =
+    document.getElementById(
+      'main'
+    );
+
+  if (!main) {
+    console.error(
+      'Элемент #main не найден'
+    );
+
+    return;
+  }
+
+
+  // -------------------------------------------------------
+  // Загрузка
+  // -------------------------------------------------------
+
+  main.innerHTML = `
+    <div class="loading">
+      Загрузка статей…
+    </div>
+  `;
+
+
+  try {
+    state.articles =
+      await fetchFeed();
+
+
+    // -----------------------------------------------------
+    // Отрисовка панели и списка
+    // -----------------------------------------------------
+
+    main.innerHTML = `
+      ${renderFeedTools()}
+
+      <div id="feedList"></div>
+    `;
+
+
+    bindFeedTools();
+
+    bindFeedOutsideClick();
+
+    renderFeedListOnly();
+
+
+  } catch (error) {
+    console.error(
+      'renderFeed:',
+      error
+    );
+
+
+    main.innerHTML = `
+      <div class="empty-state">
+
+        <h2>
+          Не удалось загрузить статьи
+        </h2>
+
+        <p>
+          ${escapeHtml(
+            error?.message ||
+            'Произошла ошибка загрузки.'
+          )}
+        </p>
+
+        <button
+          class="btn btn-primary"
+          id="retryFeedBtn"
+          type="button"
+        >
+          Повторить
+        </button>
+
+      </div>
+    `;
+
+
+    document
+      .getElementById(
+        'retryFeedBtn'
+      )
+      ?.addEventListener(
+        'click',
+        renderFeed
+      );
   }
 }
