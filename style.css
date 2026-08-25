@@ -214,7 +214,7 @@ img{
   display:flex;
   align-items:center;
 
-  gap:9px;
+  gap:6px;
 
   width:100%;
 
@@ -235,7 +235,7 @@ img{
 
   min-width:0;
 
-  height:42px;
+  height:38px;
 
   display:flex;
   align-items:center;
@@ -268,7 +268,7 @@ img{
 .feed-search-icon{
   flex:0 0 auto;
 
-  width:38px;
+  width:34px;
 
   display:flex;
   align-items:center;
@@ -278,7 +278,7 @@ img{
 
   font-family:Arial,sans-serif;
 
-  font-size:21px;
+  font-size:18px;
 
   line-height:1;
 
@@ -332,8 +332,8 @@ img{
 .feed-search-clear{
   flex:0 0 auto;
 
-  width:32px;
-  height:32px;
+  width:28px;
+  height:28px;
 
   margin-right:4px;
 
@@ -349,7 +349,7 @@ img{
 
   font-family:Arial,sans-serif;
 
-  font-size:21px;
+  font-size:18px;
 
   line-height:1;
 
@@ -371,111 +371,111 @@ img{
 
 
 /* =========================================================
-   FILTER BUTTON
+   КНОПКИ ИНСТРУМЕНТОВ (сортировка и фильтр) — компактные
    ========================================================= */
 
-.author-filter-btn{
-  position:relative;
-
-  flex:0 0 auto;
-
-  height:42px;
-
-  min-width:94px;
-
-  padding:0 13px;
-
-  display:flex;
-  align-items:center;
-  justify-content:center;
-
-  gap:7px;
-
-  border:1px solid var(--line);
-
-  border-radius:10px;
-
-  background:var(--paper);
-
-  color:var(--ink);
-
-  font-family:'Inter',sans-serif;
-
-  font-size:12px;
-
-  font-weight:600;
-
-  white-space:nowrap;
-
-  transition:
-    background .18s ease,
-    border-color .18s ease,
-    color .18s ease,
-    box-shadow .18s ease;
+.feed-tool-btn {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 38px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper);
+  color: var(--ink-soft);
+  font-family: 'Inter', sans-serif;
+  font-size: 16px;
+  font-weight: 600;
+  transition: all 0.18s ease;
 }
 
-.author-filter-btn:hover{
-  background:var(--paper-dim);
+.feed-tool-btn:hover {
+  background: var(--paper-dim);
+  border-color: #C9C4B5;
+  color: var(--ink);
+}
 
-  border-color:#C9C4B5;
+.feed-tool-btn:active {
+  transform: scale(0.94);
+}
+
+/* Специфичный стиль для кнопки сортировки — стрелочка чуть жирнее */
+.feed-sort-btn {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+
+/* =========================================================
+   КНОПКА ФИЛЬТРА
+   ========================================================= */
+
+.author-filter-btn {
+  position: relative;
+  flex: 0 0 auto;
+  width: 36px;
+  height: 38px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper);
+  color: var(--ink-soft);
+  font-family: 'Inter', sans-serif;
+  font-size: 16px;
+  transition: all 0.18s ease;
+}
+
+.author-filter-btn:hover {
+  background: var(--paper-dim);
+  border-color: #C9C4B5;
+  color: var(--ink);
 }
 
 .author-filter-btn[aria-expanded="true"],
-.author-filter-btn.has-selection{
-  background:var(--paper-dim);
-
-  border-color:var(--indigo);
-
-  color:var(--indigo);
-
-  box-shadow:
-    0 0 0 2px
-    rgba(43,76,126,.06);
+.author-filter-btn.has-selection {
+  background: var(--paper-dim);
+  border-color: var(--indigo);
+  color: var(--indigo);
+  box-shadow: 0 0 0 2px rgba(43, 76, 126, 0.06);
 }
 
-
-/* Иконка */
-
-.author-filter-icon{
-  display:flex;
-  align-items:center;
-  justify-content:center;
-
-  font-size:17px;
-
-  line-height:1;
-
-  transform:rotate(90deg);
-
-  opacity:.85;
+.author-filter-btn:active {
+  transform: scale(0.94);
 }
 
+.author-filter-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  line-height: 1;
+  transform: rotate(90deg);
+  opacity: 0.85;
+}
 
-/* Счётчик */
-
-.author-filter-count{
-  min-width:18px;
-  height:18px;
-
-  padding:0 5px;
-
-  display:flex;
-  align-items:center;
-  justify-content:center;
-
-  border-radius:9px;
-
-  background:var(--indigo);
-
-  color:#fff;
-
-  font-family:'Inter',sans-serif;
-
-  font-size:10px;
-
-  font-weight:700;
-
-  line-height:1;
+.author-filter-count {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  background: var(--indigo);
+  color: #fff;
+  font-family: 'Inter', sans-serif;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
 }
 
 
@@ -832,7 +832,7 @@ img{
 @media (max-width:520px){
 
   .feed-tools{
-    gap:7px;
+    gap:5px;
 
     padding-top:11px;
 
@@ -840,15 +840,15 @@ img{
   }
 
   .feed-search-wrap{
-    height:40px;
+    height:36px;
 
     border-radius:9px;
   }
 
   .feed-search-icon{
-    width:34px;
+    width:30px;
 
-    font-size:20px;
+    font-size:16px;
   }
 
   .feed-search{
@@ -856,31 +856,42 @@ img{
   }
 
   .feed-search-clear{
-    width:30px;
-    height:30px;
+    width:26px;
+    height:26px;
 
     margin-right:3px;
 
-    font-size:20px;
-  }
-
-  .author-filter-btn{
-    height:40px;
-
-    min-width:82px;
-
-    padding:
-      0 10px;
-
-    gap:6px;
-
-    border-radius:9px;
-
-    font-size:11px;
-  }
-
-  .author-filter-icon{
     font-size:16px;
+  }
+
+  .feed-tool-btn {
+    width: 34px;
+    height: 36px;
+    font-size: 15px;
+    border-radius: 9px;
+  }
+
+  .feed-sort-btn {
+    font-size: 16px;
+  }
+
+  .author-filter-btn {
+    width: 34px;
+    height: 36px;
+    font-size: 15px;
+    border-radius: 9px;
+  }
+
+  .author-filter-icon {
+    font-size: 15px;
+  }
+
+  .author-filter-count {
+    min-width: 16px;
+    height: 16px;
+    font-size: 8px;
+    top: -3px;
+    right: -3px;
   }
 
   .author-filter-panel{
@@ -919,29 +930,46 @@ img{
 @media (max-width:380px){
 
   .feed-tools{
-    gap:5px;
+    gap:4px;
+  }
+
+  .feed-search-wrap{
+    height:34px;
   }
 
   .feed-search-icon{
-    width:31px;
-  }
+    width:28px;
 
-  .author-filter-btn{
-    min-width:76px;
-
-    padding-left:8px;
-    padding-right:8px;
-  }
-
-  .author-filter-icon{
     font-size:15px;
   }
 
-  .author-filter-count{
-    min-width:17px;
-    height:17px;
+  .feed-tool-btn {
+    width: 32px;
+    height: 34px;
+    font-size: 14px;
+  }
 
-    font-size:9px;
+  .feed-sort-btn {
+    font-size: 15px;
+  }
+
+  .author-filter-btn {
+    width: 32px;
+    height: 34px;
+    font-size: 14px;
+  }
+
+  .author-filter-icon {
+    font-size: 14px;
+  }
+
+  .author-filter-count {
+    min-width: 15px;
+    height: 15px;
+    font-size: 8px;
+    padding: 0 3px;
+    top: -3px;
+    right: -3px;
   }
 }
 
@@ -1912,6 +1940,8 @@ img{
   text-align:center;
 
   border-radius:18px;
+
+  background:var(--paper-dim);
 }
 
 .profile-avatar{
@@ -3174,7 +3204,7 @@ img{
 
 
 /* =========================================================
-   PROFILE — MOBILE
+   PROFILE — MOBILE (исправлено)
    ========================================================= */
 
 @media (max-width: 520px) {
@@ -3182,16 +3212,34 @@ img{
     gap: 3px;
     padding: 3px;
     border-radius: 10px;
+    background: var(--paper-dim);
+    border: 1px solid var(--line);
   }
 
   .profile-tab-btn {
     font-size: 10.5px;
     padding: 8px 8px;
+    border: 1px solid transparent;
+    border-radius: 7px;
+  }
+
+  .profile-tab-btn.active {
+    background: var(--paper);
+    color: var(--ink);
+    box-shadow: 0 2px 8px rgba(28, 27, 25, 0.08);
+    border: 1px solid var(--line);
   }
 
   .profile-stats-grid {
     grid-template-columns: repeat(3, 1fr);
     gap: 8px;
+  }
+
+  .profile-stat-card {
+    padding: 14px 10px;
+    background: var(--paper-dim);
+    border-radius: 8px;
+    border: 1px solid var(--line);
   }
 
   .profile-stat-number {
@@ -3205,6 +3253,8 @@ img{
   .profile-article-item,
   .profile-comment-item {
     padding: 12px 14px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
   }
 
   .profile-article-title {
@@ -3213,6 +3263,10 @@ img{
 
   .profile-comment-content {
     font-size: 13px;
+  }
+
+  .profile-stats-detail {
+    border: 1px solid var(--line);
   }
 }
 
@@ -3233,221 +3287,5 @@ img{
 
   .profile-stat-card {
     padding: 12px 8px;
-  }
-}
-
-/* =========================================================
-   FEED TOOLS
-   ========================================================= */
-
-.feed-tools {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  width: 100%;
-  padding: 14px 0 8px;
-  font-family: 'Inter', sans-serif;
-}
-
-/* =========================================================
-   Кнопки инструментов (сортировка и фильтр)
-   ========================================================= */
-
-.feed-tool-btn {
-  flex: 0 0 auto;
-  height: 42px;
-  padding: 0 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--paper);
-  color: var(--ink-soft);
-  font-family: 'Inter', sans-serif;
-  font-size: 12px;
-  font-weight: 600;
-  white-space: nowrap;
-  transition: all 0.18s ease;
-}
-
-.feed-tool-btn:hover {
-  background: var(--paper-dim);
-  border-color: #C9C4B5;
-  color: var(--ink);
-}
-
-.feed-tool-btn:active {
-  transform: scale(0.96);
-}
-
-/* =========================================================
-   Кнопка фильтра (без текста, только иконка)
-   ========================================================= */
-
-.author-filter-btn {
-  position: relative;
-  flex: 0 0 auto;
-  width: 42px;
-  height: 42px;
-  padding: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--paper);
-  color: var(--ink-soft);
-  font-family: 'Inter', sans-serif;
-  font-size: 18px;
-  transition: all 0.18s ease;
-}
-
-.author-filter-btn:hover {
-  background: var(--paper-dim);
-  border-color: #C9C4B5;
-  color: var(--ink);
-}
-
-.author-filter-btn[aria-expanded="true"],
-.author-filter-btn.has-selection {
-  background: var(--paper-dim);
-  border-color: var(--indigo);
-  color: var(--indigo);
-  box-shadow: 0 0 0 2px rgba(43, 76, 126, 0.06);
-}
-
-.author-filter-btn:active {
-  transform: scale(0.96);
-}
-
-.author-filter-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 18px;
-  line-height: 1;
-  transform: rotate(90deg);
-  opacity: 0.85;
-}
-
-.author-filter-count {
-  position: absolute;
-  top: -4px;
-  right: -4px;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 9px;
-  background: var(--indigo);
-  color: #fff;
-  font-family: 'Inter', sans-serif;
-  font-size: 10px;
-  font-weight: 700;
-  line-height: 1;
-}
-
-/* =========================================================
-   MOBILE
-   ========================================================= */
-
-@media (max-width: 520px) {
-  .feed-tools {
-    gap: 5px;
-    padding-top: 11px;
-    padding-bottom: 7px;
-  }
-
-  .feed-search-wrap {
-    height: 40px;
-    border-radius: 9px;
-  }
-
-  .feed-search-icon {
-    width: 34px;
-    font-size: 20px;
-  }
-
-  .feed-search {
-    font-size: 12px;
-  }
-
-  .feed-search-clear {
-    width: 30px;
-    height: 30px;
-    margin-right: 3px;
-    font-size: 20px;
-  }
-
-  .feed-tool-btn {
-    height: 40px;
-    padding: 0 10px;
-    font-size: 11px;
-    border-radius: 9px;
-  }
-
-  .author-filter-btn {
-    width: 40px;
-    height: 40px;
-    border-radius: 9px;
-    font-size: 16px;
-  }
-
-  .author-filter-icon {
-    font-size: 16px;
-  }
-
-  .author-filter-panel {
-    position: fixed;
-    top: auto;
-    right: 12px;
-    left: 12px;
-    bottom: 12px;
-    width: auto;
-    max-height: calc(100vh - 24px);
-    padding: 14px;
-    border-radius: 15px;
-    box-shadow: 0 20px 55px rgba(28, 27, 25, 0.25);
-  }
-
-  .author-filter-list {
-    max-height: calc(100vh - 185px);
-  }
-}
-
-@media (max-width: 380px) {
-  .feed-tools {
-    gap: 4px;
-  }
-
-  .feed-search-icon {
-    width: 31px;
-  }
-
-  .feed-tool-btn {
-    height: 38px;
-    padding: 0 7px;
-    font-size: 10px;
-  }
-
-  .author-filter-btn {
-    width: 38px;
-    height: 38px;
-    font-size: 15px;
-  }
-
-  .author-filter-icon {
-    font-size: 15px;
-  }
-
-  .author-filter-count {
-    min-width: 16px;
-    height: 16px;
-    font-size: 9px;
   }
 }
