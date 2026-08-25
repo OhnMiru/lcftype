@@ -113,10 +113,6 @@ function renderArticleReactionsHtml(
       id="articleReactions"
     >
 
-      <div class="article-reactions-label">
-        Реакция
-      </div>
-
       <div class="article-reactions-list">
 
         ${
@@ -780,11 +776,8 @@ async function openReader(id) {
             id="donateBtn"
             type="button"
           >
-            ⭐ Поддержать автора
+            Поддержать автора
           </button>
-          <div class="donate-box-info">
-            Автор получит вашу поддержку напрямую через CloudTips
-          </div>
         </div>
       ` : ''}
 
@@ -794,10 +787,6 @@ async function openReader(id) {
            ================================================= -->
 
       <div class="share-box chrome">
-
-        <div class="share-box-label">
-          Поделиться
-        </div>
 
         <button
           class="btn btn-primary"
