@@ -1544,6 +1544,142 @@ img{
 
 
 /* =========================================================
+   DRAFT BANNER (в редакторе)
+   ========================================================= */
+
+.draft-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  background: var(--ochre-soft);
+  border: 1px solid var(--ochre);
+  border-radius: var(--radius);
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  color: var(--ink);
+  animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.draft-banner-close {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: var(--ink-soft);
+  font-size: 18px;
+  transition: background 0.15s ease;
+  background: transparent;
+}
+
+.draft-banner-close:hover {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+
+/* =========================================================
+   DRAFT NOTIFICATION (при запуске)
+   ========================================================= */
+
+.draft-notification {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  width: calc(100% - 32px);
+  max-width: 500px;
+  padding: 16px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  opacity: 0;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.draft-notification.visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.draft-notification-content {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.draft-notification-icon {
+  font-size: 24px;
+  flex-shrink: 0;
+  line-height: 1;
+  margin-top: 2px;
+}
+
+.draft-notification-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.draft-notification-title {
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 2px;
+}
+
+.draft-notification-preview {
+  font-family: 'Source Serif 4', serif;
+  font-size: 13px;
+  color: var(--ink-soft);
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.draft-notification-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.draft-notification-btn {
+  font-size: 12px;
+  padding: 6px 14px;
+  border-radius: var(--radius);
+  font-weight: 600;
+}
+
+.draft-notification .btn-ghost {
+  color: var(--ink-soft);
+  border: 1px solid var(--line);
+  background: transparent;
+}
+
+.draft-notification .btn-ghost:hover {
+  background: var(--paper-dim);
+}
+
+
+/* =========================================================
    READER
    ========================================================= */
 
@@ -2888,6 +3024,48 @@ img{
 
   .donation-settings-actions .btn {
     width: 100%;
+  }
+
+
+  /* -------------------------------------------------------
+     DRAFT NOTIFICATION (мобильная версия)
+     ------------------------------------------------------- */
+
+  .draft-notification {
+    bottom: 16px;
+    padding: 14px;
+    width: calc(100% - 20px);
+    border-radius: 12px;
+  }
+
+  .draft-notification-content {
+    gap: 10px;
+  }
+
+  .draft-notification-icon {
+    font-size: 20px;
+  }
+
+  .draft-notification-title {
+    font-size: 13px;
+  }
+
+  .draft-notification-preview {
+    font-size: 12px;
+  }
+
+  .draft-notification-actions {
+    gap: 6px;
+  }
+
+  .draft-notification-btn {
+    font-size: 11px;
+    padding: 5px 12px;
+  }
+
+  .draft-banner {
+    font-size: 12px;
+    padding: 8px 12px;
   }
 }
 
