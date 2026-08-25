@@ -35,13 +35,63 @@ async function openReader(id) {
       'main'
     );
 
+  if (!main) {
+    console.error(
+      'openReader: элемент #main не найден'
+    );
+
+    return;
+  }
+
   main.innerHTML =
     '<div class="loading">Открываем статью…</div>';
 
-  const article =
-    await fetchArticle(id);
+
+  // =======================================================
+  // Загрузка статьи
+  // =======================================================
+
+  let article;
+
+  try {
+
+    article =
+      await fetchArticle(id);
+
+  } catch (e) {
+
+    console.error(
+      'openReader:',
+      e
+    );
+
+    main.innerHTML = `
+      <div class="empty-state">
+
+        <h2>
+          Не удалось открыть статью
+        </h2>
+
+        <p>
+          ${escapeHtml(
+            e?.message ||
+            'Произошла ошибка загрузки.'
+          )}
+        </p>
+
+      </div>
+    `;
+
+    return;
+  }
+
+
+  // =======================================================
+  // Статья не найдена
+  // =======================================================
 
   if (!article) {
+
     main.innerHTML = `
       <div class="empty-state">
 
@@ -59,19 +109,38 @@ async function openReader(id) {
     return;
   }
 
+
+  // =======================================================
+  // Тело статьи
+  // =======================================================
+
   const bodyHtml =
-    (article.blocks || [])
+    (Array.isArray(article.blocks)
+      ? article.blocks
+      : []
+    )
       .map(b => {
 
-        if (b.type === 'text') {
+        if (
+          b?.type === 'text'
+        ) {
+
           return b.html?.trim()
-            ? `<p>${sanitizeHtml(
-                b.html
-              )}</p>`
+            ? `
+              <p>
+                ${sanitizeHtml(
+                  b.html
+                )}
+              </p>
+            `
             : '';
         }
 
-        if (b.type === 'image') {
+
+        if (
+          b?.type === 'image'
+        ) {
+
           return `
             <figure>
 
@@ -98,36 +167,62 @@ async function openReader(id) {
           `;
         }
 
+
         return '';
       })
       .join('');
 
+
+  // =======================================================
+  // Ссылка для шаринга
+  // =======================================================
+
   const shareUrl =
     `https://t.me/${BOT_USERNAME}/${MINIAPP_SHORT_NAME}?startapp=${article.id}`;
+
+
+  // =======================================================
+  // Владелец статьи
+  // =======================================================
 
   const owner =
     isArticleOwner(article);
 
+
+  // =======================================================
+  // Рендер статьи
+  // =======================================================
+
   main.innerHTML = `
     <div class="reader">
+
+      <!-- =================================================
+           META
+           ================================================= -->
 
       <div class="reader-meta reader-meta-row">
 
         <span>
 
-          ${fmtDate(
-            article.created_at
+          ${escapeHtml(
+            fmtDate(
+              article.created_at
+            )
           )}
 
           ${
             article.author_name
-              ? ` · ${escapeHtml(
+              ? `
+                ·
+                ${escapeHtml(
                   article.author_name
-                )}`
+                )}
+              `
               : ''
           }
 
         </span>
+
 
         ${
           owner
@@ -137,6 +232,7 @@ async function openReader(id) {
                 <button
                   class="btn btn-secondary"
                   id="editBtn"
+                  type="button"
                 >
                   Редактировать
                 </button>
@@ -144,6 +240,7 @@ async function openReader(id) {
                 <button
                   class="btn btn-danger"
                   id="deleteBtn"
+                  type="button"
                 >
                   Удалить
                 </button>
@@ -155,6 +252,11 @@ async function openReader(id) {
 
       </div>
 
+
+      <!-- =================================================
+           TITLE
+           ================================================= -->
+
       <h1>
         ${escapeHtml(
           article.title ||
@@ -162,14 +264,28 @@ async function openReader(id) {
         )}
       </h1>
 
+
+      <!-- =================================================
+           ARTICLE BODY
+           ================================================= -->
+
       <div class="reader-body">
 
         ${
           bodyHtml ||
-          '<p class="reader-empty">Статья пока пуста.</p>'
+          `
+            <p class="reader-empty">
+              Статья пока пуста.
+            </p>
+          `
         }
 
       </div>
+
+
+      <!-- =================================================
+           SHARE
+           ================================================= -->
 
       <div class="share-box chrome">
 
@@ -180,11 +296,22 @@ async function openReader(id) {
         <button
           class="btn btn-primary"
           id="shareBtn"
+          type="button"
         >
           Копировать ссылку
         </button>
 
       </div>
+
+
+      <!-- =================================================
+           COMMENTS
+           ================================================= -->
+
+      <div
+        id="articleComments"
+        class="article-comments"
+      ></div>
 
     </div>
   `;
@@ -194,15 +321,26 @@ async function openReader(id) {
   // Копирование ссылки
   // =======================================================
 
-  document
-    .getElementById('shareBtn')
-    .onclick = async () => {
+  const shareBtn =
+    document.getElementById(
+      'shareBtn'
+    );
+
+
+  shareBtn?.addEventListener(
+    'click',
+    async () => {
 
       try {
+
+        // ---------------------------------------------------
+        // Современный Clipboard API
+        // ---------------------------------------------------
 
         if (
           navigator.clipboard?.writeText
         ) {
+
           await navigator.clipboard.writeText(
             shareUrl
           );
@@ -214,6 +352,11 @@ async function openReader(id) {
           return;
         }
 
+
+        // ---------------------------------------------------
+        // Fallback для старых WebView
+        // ---------------------------------------------------
+
         const textarea =
           document.createElement(
             'textarea'
@@ -224,6 +367,12 @@ async function openReader(id) {
 
         textarea.style.position =
           'fixed';
+
+        textarea.style.left =
+          '-9999px';
+
+        textarea.style.top =
+          '0';
 
         textarea.style.opacity =
           '0';
@@ -242,40 +391,71 @@ async function openReader(id) {
 
         textarea.remove();
 
+
         if (copied) {
+
           showToast(
             'Ссылка скопирована'
           );
+
         } else {
+
           showToast(
             'Не удалось скопировать ссылку'
           );
         }
 
       } catch (e) {
-        console.error(e);
+
+        console.error(
+          'share:',
+          e
+        );
 
         showToast(
           'Не удалось скопировать ссылку'
         );
       }
-    };
+    }
+  );
 
 
   // =======================================================
-  // Действия владельца
+  // Действия владельца статьи
   // =======================================================
 
   if (owner) {
 
-    document
-      .getElementById('editBtn')
-      .onclick =
-        () => editArticle(article);
+    const editBtn =
+      document.getElementById(
+        'editBtn'
+      );
 
-    document
-      .getElementById('deleteBtn')
-      .onclick = async () => {
+    const deleteBtn =
+      document.getElementById(
+        'deleteBtn'
+      );
+
+
+    // -----------------------------------------------------
+    // Редактирование
+    // -----------------------------------------------------
+
+    editBtn?.addEventListener(
+      'click',
+      () => {
+        editArticle(article);
+      }
+    );
+
+
+    // -----------------------------------------------------
+    // Удаление
+    // -----------------------------------------------------
+
+    deleteBtn?.addEventListener(
+      'click',
+      async () => {
 
         if (
           !confirm(
@@ -285,14 +465,12 @@ async function openReader(id) {
           return;
         }
 
-        const b =
-          document.getElementById(
-            'deleteBtn'
-          );
 
-        b.disabled = true;
-        b.textContent =
+        deleteBtn.disabled = true;
+
+        deleteBtn.textContent =
           'Удаляем…';
+
 
         try {
 
@@ -304,23 +482,95 @@ async function openReader(id) {
             }
           );
 
+
           showToast(
             'Статья удалена'
           );
+
 
           await renderFeed();
 
         } catch (e) {
 
-          b.disabled = false;
-          b.textContent =
+          console.error(
+            'delete-article:',
+            e
+          );
+
+
+          deleteBtn.disabled =
+            false;
+
+          deleteBtn.textContent =
             'Удалить';
 
+
           showToast(
-            e.message ||
+            e?.message ||
             'Не удалось удалить статью'
           );
         }
-      };
+      }
+    );
+  }
+
+
+  // =======================================================
+  // Комментарии
+  // =======================================================
+
+  /*
+   * renderComments находится в comments.js.
+   *
+   * Он:
+   *
+   * 1. Загружает комментарии статьи.
+   * 2. Строит дерево ответов.
+   * 3. Показывает форму нового комментария.
+   * 4. Показывает ответы.
+   * 5. Показывает реакции.
+   * 6. Проверяет профиль перед публикацией.
+   */
+
+  if (
+    typeof renderComments ===
+    'function'
+  ) {
+
+    await renderComments(
+      article.id
+    );
+
+  } else {
+
+    console.error(
+      'renderComments: функция не найдена. Проверьте подключение comments.js.'
+    );
+
+    const comments =
+      document.getElementById(
+        'articleComments'
+      );
+
+    if (comments) {
+
+      comments.innerHTML = `
+        <section class="comments-section">
+
+          <div class="comments-title-row">
+
+            <h2 class="comments-title">
+              Комментарии
+            </h2>
+
+          </div>
+
+          <div class="comments-error">
+            Комментарии временно недоступны.
+          </div>
+
+        </section>
+      `;
+    }
   }
 }
