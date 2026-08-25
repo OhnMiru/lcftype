@@ -1660,6 +1660,239 @@ img{
   width:100%;
 }
 
+/* =========================================================
+   ARTICLE REACTIONS
+   ========================================================= */
+
+.article-reactions{
+  margin-top:14px;
+
+  padding:16px;
+
+  background:var(--paper-dim);
+
+  border-radius:var(--radius);
+}
+
+
+/* Заголовок — в стиле "Поделиться" */
+
+.article-reactions-label{
+  font-family:'Inter',sans-serif;
+
+  font-size:11px;
+
+  letter-spacing:.06em;
+
+  text-transform:uppercase;
+
+  color:var(--indigo);
+
+  font-weight:700;
+
+  margin-bottom:11px;
+}
+
+
+/* Контейнер реакций */
+
+.article-reaction-list{
+  display:flex;
+
+  align-items:stretch;
+
+  justify-content:space-between;
+
+  gap:8px;
+
+  width:100%;
+}
+
+
+/* Одна реакция */
+
+.article-reaction{
+  flex:1 1 0;
+
+  min-width:0;
+
+  min-height:42px;
+
+  padding:7px 6px;
+
+  display:flex;
+
+  align-items:center;
+
+  justify-content:center;
+
+  gap:5px;
+
+  border:1px solid var(--line);
+
+  border-radius:8px;
+
+  background:var(--paper);
+
+  color:var(--ink);
+
+  font-family:'Inter',sans-serif;
+
+  font-size:13px;
+
+  transition:
+    background .15s ease,
+    border-color .15s ease,
+    transform .15s ease,
+    box-shadow .15s ease;
+}
+
+
+/* Emoji */
+
+.article-reaction-emoji{
+  font-size:19px;
+
+  line-height:1;
+}
+
+
+/* Счётчик */
+
+.article-reaction-count{
+  font-size:11px;
+
+  font-weight:600;
+
+  color:var(--ink-soft);
+}
+
+
+/* Наведение */
+
+.article-reaction:hover{
+  background:var(--paper);
+
+  border-color:var(--indigo);
+
+  box-shadow:
+    0 0 0 2px
+    rgba(43,76,126,.06);
+}
+
+
+/* Активная реакция */
+
+.article-reaction.active{
+  background:var(--ochre-soft);
+
+  border-color:
+    rgba(184,134,11,.45);
+
+  color:var(--ink);
+
+  box-shadow:
+    0 0 0 2px
+    rgba(184,134,11,.08);
+}
+
+
+/* Нажатие */
+
+.article-reaction:active{
+  transform:scale(.95);
+}
+
+
+/* Disabled */
+
+.article-reaction:disabled{
+  cursor:default;
+
+  opacity:.6;
+}
+
+
+/* =========================================================
+   ARTICLE REACTIONS — MOBILE
+   ========================================================= */
+
+@media (max-width:520px){
+
+  .article-reactions{
+    margin-top:12px;
+
+    padding:14px 12px;
+  }
+
+
+  .article-reactions-label{
+    margin-bottom:10px;
+  }
+
+
+  .article-reaction-list{
+    gap:6px;
+  }
+
+
+  .article-reaction{
+    min-height:40px;
+
+    padding:
+      6px 4px;
+
+    gap:3px;
+
+    border-radius:7px;
+  }
+
+
+  .article-reaction-emoji{
+    font-size:18px;
+  }
+
+
+  .article-reaction-count{
+    font-size:10px;
+  }
+}
+
+
+/* =========================================================
+   ARTICLE REACTIONS — VERY SMALL PHONES
+   ========================================================= */
+
+@media (max-width:380px){
+
+  .article-reactions{
+    padding:
+      13px 10px;
+  }
+
+
+  .article-reaction-list{
+    gap:4px;
+  }
+
+
+  .article-reaction{
+    min-height:38px;
+
+    padding:
+      5px 3px;
+  }
+
+
+  .article-reaction-emoji{
+    font-size:17px;
+  }
+
+
+  .article-reaction-count{
+    font-size:9px;
+  }
+}
 
 /* =========================================================
    PROFILE
