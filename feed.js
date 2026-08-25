@@ -187,18 +187,18 @@ function renderFeedTools() {
 
       </div>
 
-      <!-- Сортировка -->
+      <!-- Сортировка — только стрелочка -->
 
       <button
         id="sortBtn"
-        class="feed-tool-btn"
+        class="feed-tool-btn feed-sort-btn"
         type="button"
         title="${sortOrder === 'desc' ? 'Сначала новые' : 'Сначала старые'}"
       >
-        ${sortOrder === 'desc' ? '↓ Новые' : '↑ Старые'}
+        ${sortOrder === 'desc' ? '↓' : '↑'}
       </button>
 
-      <!-- Фильтр (только иконка) -->
+      <!-- Фильтр — только иконка -->
 
       <button
         id="authorFilterBtn"
