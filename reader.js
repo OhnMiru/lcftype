@@ -670,6 +670,8 @@ async function openReader(id) {
   main.innerHTML = `
     <div class="reader">
 
+  makeAuthorClickable(main);
+
       <!-- =================================================
            META
            ================================================= -->
@@ -678,22 +680,16 @@ async function openReader(id) {
 
         <span>
 
-          ${escapeHtml(
-            fmtDate(
-              article.created_at
-            )
-          )}
-
-          ${
-            article.author_name
-              ? `
-                ·
-                ${escapeHtml(
-                  article.author_name
-                )}
-              `
-              : ''
-          }
+          ${article.author_name ? `
+            · 
+            <span 
+              class="author-clickable" 
+              data-author-id="${escapeHtml(article.author_id)}" 
+              data-author-name="${escapeHtml(article.author_name)}"
+            >
+              ${escapeHtml(article.author_name)}
+            </span>
+          ` : ''}
 
         </span>
 
