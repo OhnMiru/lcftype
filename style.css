@@ -2828,3 +2828,140 @@ img{
     font-size:9.5px;
   }
 }
+
+/* =========================================================
+   AUTHOR PAGE
+   ========================================================= */
+
+.author-page {
+  padding: 12px 0 40px;
+}
+
+.author-header {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 20px 16px;
+  margin-bottom: 24px;
+  background: var(--paper-dim);
+  border-radius: 16px;
+}
+
+.author-avatar {
+  width: 64px;
+  height: 64px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 26px;
+  font-weight: 700;
+  font-family: 'Inter', sans-serif;
+}
+
+.author-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.author-name {
+  margin: 0 0 4px 0;
+  font-family: 'Fraunces', serif;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.author-stats {
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.author-stat-number {
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.author-stat-divider {
+  margin: 0 6px;
+  opacity: 0.5;
+}
+
+.author-articles {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.author-empty {
+  padding: 40px 0;
+}
+
+.author-empty h3 {
+  font-family: 'Fraunces', serif;
+  font-size: 18px;
+  margin: 0 0 6px;
+}
+
+/* Кликабельное имя автора */
+.author-clickable {
+  color: var(--indigo);
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 2px;
+  transition: color 0.15s ease;
+}
+
+.author-clickable:hover {
+  color: var(--indigo-deep);
+  text-decoration-style: solid;
+}
+
+/* =========================================================
+   AUTHOR PAGE — MOBILE
+   ========================================================= */
+
+@media (max-width: 520px) {
+  .author-header {
+    padding: 16px 12px;
+    gap: 14px;
+    border-radius: 12px;
+  }
+
+  .author-avatar {
+    width: 52px;
+    height: 52px;
+    font-size: 22px;
+  }
+
+  .author-name {
+    font-size: 19px;
+  }
+
+  .author-stats {
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 380px) {
+  .author-header {
+    flex-direction: column;
+    text-align: center;
+    gap: 10px;
+  }
+
+  .author-avatar {
+    width: 48px;
+    height: 48px;
+    font-size: 20px;
+  }
+
+  .author-name {
+    font-size: 17px;
+  }
+}
