@@ -67,48 +67,74 @@ function getSearchQuery() {
 
 
 // =========================================================
-// Фильтрация статей
+// Получить порядок сортировки
+// =========================================================
+
+function getSortOrder() {
+  return state.sortOrder || 'desc';
+}
+
+
+// =========================================================
+// Переключить сортировку
+// =========================================================
+
+function toggleSortOrder() {
+  state.sortOrder = state.sortOrder === 'desc' ? 'asc' : 'desc';
+  refreshFilteredFeed();
+  updateSortButton();
+}
+
+
+// =========================================================
+// Обновить кнопку сортировки
+// =========================================================
+
+function updateSortButton() {
+  const btn = document.getElementById('sortBtn');
+  if (!btn) return;
+
+  const isDesc = state.sortOrder === 'desc';
+  btn.innerHTML = isDesc ? '↓ Новые' : '↑ Старые';
+  btn.title = isDesc ? 'Сначала новые' : 'Сначала старые';
+}
+
+
+// =========================================================
+// Фильтрация и сортировка статей
 // =========================================================
 
 function filteredArticles() {
-  const query =
-    getSearchQuery();
+  const query = getSearchQuery();
+  const selectedAuthors = ensureAuthorFilter();
+  const sortOrder = getSortOrder();
 
-  const selectedAuthors =
-    ensureAuthorFilter();
+  const articles = Array.isArray(state?.articles) ? state.articles : [];
 
-  const articles =
-    Array.isArray(state?.articles)
-      ? state.articles
-      : [];
+  // Сначала фильтруем
+  let result = articles.filter(article => {
+    const title = String(article?.title ?? '').toLocaleLowerCase('ru-RU');
+    const author = String(article?.author_name ?? '').trim();
 
-  return articles.filter(
-    article => {
-      const title =
-        String(
-          article?.title ?? ''
-        )
-          .toLocaleLowerCase('ru-RU');
+    const matchesSearch = !query || title.includes(query);
+    const matchesAuthor = selectedAuthors.size === 0 || selectedAuthors.has(author);
 
-      const author =
-        String(
-          article?.author_name ?? ''
-        ).trim();
+    return matchesSearch && matchesAuthor;
+  });
 
-      const matchesSearch =
-        !query ||
-        title.includes(query);
+  // Затем сортируем
+  result.sort((a, b) => {
+    const dateA = new Date(a.created_at || 0);
+    const dateB = new Date(b.created_at || 0);
 
-      const matchesAuthor =
-        selectedAuthors.size === 0 ||
-        selectedAuthors.has(author);
-
-      return (
-        matchesSearch &&
-        matchesAuthor
-      );
+    if (sortOrder === 'desc') {
+      return dateB - dateA; // Новые сначала
+    } else {
+      return dateA - dateB; // Старые сначала
     }
-  );
+  });
+
+  return result;
 }
 
 
@@ -117,19 +143,11 @@ function filteredArticles() {
 // =========================================================
 
 function renderFeedTools() {
-  const authors =
-    getAuthors();
-
-  const selectedAuthors =
-    ensureAuthorFilter();
-
-  const selectedCount =
-    selectedAuthors.size;
-
-  const searchValue =
-    String(
-      state?.search ?? ''
-    );
+  const authors = getAuthors();
+  const selectedAuthors = ensureAuthorFilter();
+  const selectedCount = selectedAuthors.size;
+  const searchValue = String(state?.search ?? '');
+  const sortOrder = getSortOrder();
 
   return `
     <div class="feed-tools chrome">
@@ -169,16 +187,22 @@ function renderFeedTools() {
 
       </div>
 
+      <!-- Сортировка -->
 
-      <!-- Фильтр -->
+      <button
+        id="sortBtn"
+        class="feed-tool-btn"
+        type="button"
+        title="${sortOrder === 'desc' ? 'Сначала новые' : 'Сначала старые'}"
+      >
+        ${sortOrder === 'desc' ? '↓ Новые' : '↑ Старые'}
+      </button>
+
+      <!-- Фильтр (только иконка) -->
 
       <button
         id="authorFilterBtn"
-        class="author-filter-btn${
-          selectedCount > 0
-            ? ' has-selection'
-            : ''
-        }"
+        class="author-filter-btn${selectedCount > 0 ? ' has-selection' : ''}"
         type="button"
         aria-expanded="false"
         aria-controls="authorFilterPanel"
@@ -191,25 +215,16 @@ function renderFeedTools() {
           ☷
         </span>
 
-        <span>
-          Фильтр
-        </span>
-
-        ${
-          selectedCount > 0
-            ? `
-              <b
-                class="author-filter-count"
-                aria-label="Выбрано авторов"
-              >
-                ${selectedCount}
-              </b>
-            `
-            : ''
-        }
+        ${selectedCount > 0 ? `
+          <b
+            class="author-filter-count"
+            aria-label="Выбрано авторов"
+          >
+            ${selectedCount}
+          </b>
+        ` : ''}
 
       </button>
-
 
       <!-- Панель фильтра -->
 
@@ -236,64 +251,45 @@ function renderFeedTools() {
 
         </div>
 
+        ${authors.length > 0 ? `
+          <div class="author-filter-list">
 
-        ${
-          authors.length > 0
-            ? `
-              <div class="author-filter-list">
+            ${authors.map(author => {
+              const checked = selectedAuthors.has(author);
 
-                ${authors
-                  .map(author => {
-                    const checked =
-                      selectedAuthors.has(
-                        author
-                      );
+              return `
+                <label class="author-option">
 
-                    return `
-                      <label class="author-option">
+                  <input
+                    type="checkbox"
+                    value="${escapeHtml(author)}"
+                    ${checked ? 'checked' : ''}
+                  >
 
-                        <input
-                          type="checkbox"
-                          value="${escapeHtml(author)}"
-                          ${
-                            checked
-                              ? 'checked'
-                              : ''
-                          }
-                        >
+                  <span>
+                    ${escapeHtml(author)}
+                  </span>
 
-                        <span>
-                          ${escapeHtml(author)}
-                        </span>
+                </label>
+              `;
+            }).join('')}
 
-                      </label>
-                    `;
-                  })
-                  .join('')}
+          </div>
+        ` : `
+          <div class="author-filter-empty">
+            Авторов пока нет.
+          </div>
+        `}
 
-              </div>
-            `
-            : `
-              <div class="author-filter-empty">
-                Авторов пока нет.
-              </div>
-            `
-        }
-
-
-        ${
-          selectedCount > 0
-            ? `
-              <button
-                id="resetAuthorFilter"
-                class="author-filter-reset"
-                type="button"
-              >
-                Сбросить фильтр
-              </button>
-            `
-            : ''
-        }
+        ${selectedCount > 0 ? `
+          <button
+            id="resetAuthorFilter"
+            class="author-filter-reset"
+            type="button"
+          >
+            Сбросить фильтр
+          </button>
+        ` : ''}
 
       </div>
 
@@ -307,27 +303,17 @@ function renderFeedTools() {
 // =========================================================
 
 function updateAuthorFilterButton() {
-  const button =
-    document.getElementById(
-      'authorFilterBtn'
-    );
+  const button = document.getElementById('authorFilterBtn');
 
   if (!button) {
     return;
   }
 
-  const selectedCount =
-    ensureAuthorFilter().size;
+  const selectedCount = ensureAuthorFilter().size;
 
-  button.classList.toggle(
-    'has-selection',
-    selectedCount > 0
-  );
+  button.classList.toggle('has-selection', selectedCount > 0);
 
-  const oldCount =
-    button.querySelector(
-      '.author-filter-count'
-    );
+  const oldCount = button.querySelector('.author-filter-count');
 
   if (oldCount) {
     oldCount.remove();
@@ -354,20 +340,15 @@ function updateAuthorFilterButton() {
 // =========================================================
 
 function updateSearchClearButton() {
-  const clear =
-    document.getElementById(
-      'clearSearchBtn'
-    );
+  const clear = document.getElementById('clearSearchBtn');
 
   if (!clear) {
     return;
   }
 
-  const hasSearch =
-    getSearchQuery() !== '';
+  const hasSearch = getSearchQuery() !== '';
 
-  clear.hidden =
-    !hasSearch;
+  clear.hidden = !hasSearch;
 }
 
 
@@ -376,15 +357,8 @@ function updateSearchClearButton() {
 // =========================================================
 
 function openAuthorFilter() {
-  const panel =
-    document.getElementById(
-      'authorFilterPanel'
-    );
-
-  const button =
-    document.getElementById(
-      'authorFilterBtn'
-    );
+  const panel = document.getElementById('authorFilterPanel');
+  const button = document.getElementById('authorFilterBtn');
 
   if (!panel || !button) {
     return;
@@ -392,10 +366,7 @@ function openAuthorFilter() {
 
   panel.hidden = false;
 
-  button.setAttribute(
-    'aria-expanded',
-    'true'
-  );
+  button.setAttribute('aria-expanded', 'true');
 }
 
 
@@ -404,15 +375,8 @@ function openAuthorFilter() {
 // =========================================================
 
 function closeAuthorFilter() {
-  const panel =
-    document.getElementById(
-      'authorFilterPanel'
-    );
-
-  const button =
-    document.getElementById(
-      'authorFilterBtn'
-    );
+  const panel = document.getElementById('authorFilterPanel');
+  const button = document.getElementById('authorFilterBtn');
 
   if (!panel || !button) {
     return;
@@ -420,10 +384,7 @@ function closeAuthorFilter() {
 
   panel.hidden = true;
 
-  button.setAttribute(
-    'aria-expanded',
-    'false'
-  );
+  button.setAttribute('aria-expanded', 'false');
 }
 
 
@@ -432,10 +393,7 @@ function closeAuthorFilter() {
 // =========================================================
 
 function toggleAuthorFilter() {
-  const panel =
-    document.getElementById(
-      'authorFilterPanel'
-    );
+  const panel = document.getElementById('authorFilterPanel');
 
   if (!panel) {
     return;
@@ -454,30 +412,19 @@ function toggleAuthorFilter() {
 // =========================================================
 
 function syncAuthorFilterCheckboxes() {
-  const panel =
-    document.getElementById(
-      'authorFilterPanel'
-    );
+  const panel = document.getElementById('authorFilterPanel');
 
   if (!panel) {
     return;
   }
 
-  const selected =
-    ensureAuthorFilter();
+  const selected = ensureAuthorFilter();
 
   panel
-    .querySelectorAll(
-      'input[type="checkbox"]'
-    )
-    .forEach(
-      checkbox => {
-        checkbox.checked =
-          selected.has(
-            checkbox.value
-          );
-      }
-    );
+    .querySelectorAll('input[type="checkbox"]')
+    .forEach(checkbox => {
+      checkbox.checked = selected.has(checkbox.value);
+    });
 }
 
 
@@ -487,10 +434,9 @@ function syncAuthorFilterCheckboxes() {
 
 function refreshFilteredFeed() {
   renderFeedListOnly();
-
   updateSearchClearButton();
-
   updateAuthorFilterButton();
+  updateSortButton();
 }
 
 
@@ -499,175 +445,117 @@ function refreshFilteredFeed() {
 // =========================================================
 
 function bindFeedTools() {
-  const search =
-    document.getElementById(
-      'articleSearch'
-    );
-
-  const clear =
-    document.getElementById(
-      'clearSearchBtn'
-    );
-
-  const filter =
-    document.getElementById(
-      'authorFilterBtn'
-    );
-
-  const panel =
-    document.getElementById(
-      'authorFilterPanel'
-    );
+  const search = document.getElementById('articleSearch');
+  const clear = document.getElementById('clearSearchBtn');
+  const filter = document.getElementById('authorFilterBtn');
+  const sortBtn = document.getElementById('sortBtn');
+  const panel = document.getElementById('authorFilterPanel');
 
   ensureAuthorFilter();
-
 
   // -------------------------------------------------------
   // Поиск
   // -------------------------------------------------------
 
-  search?.addEventListener(
-    'input',
-    event => {
-      state.search =
-        event.target?.value || '';
-
-      updateSearchClearButton();
-
-      renderFeedListOnly();
-    }
-  );
-
+  search?.addEventListener('input', event => {
+    state.search = event.target?.value || '';
+    updateSearchClearButton();
+    renderFeedListOnly();
+  });
 
   // -------------------------------------------------------
   // Очистка поиска
   // -------------------------------------------------------
 
-  clear?.addEventListener(
-    'click',
-    event => {
-      event.preventDefault();
-      event.stopPropagation();
+  clear?.addEventListener('click', event => {
+    event.preventDefault();
+    event.stopPropagation();
 
-      state.search = '';
+    state.search = '';
 
-      if (search) {
-        search.value = '';
-      }
-
-      updateSearchClearButton();
-
-      renderFeedListOnly();
-
-      search?.focus();
+    if (search) {
+      search.value = '';
     }
-  );
 
+    updateSearchClearButton();
+    renderFeedListOnly();
+    search?.focus();
+  });
+
+  // -------------------------------------------------------
+  // Сортировка
+  // -------------------------------------------------------
+
+  sortBtn?.addEventListener('click', event => {
+    event.preventDefault();
+    event.stopPropagation();
+    toggleSortOrder();
+  });
 
   // -------------------------------------------------------
   // Открытие / закрытие фильтра
   // -------------------------------------------------------
 
-  filter?.addEventListener(
-    'click',
-    event => {
-      event.preventDefault();
-      event.stopPropagation();
-
-      toggleAuthorFilter();
-    }
-  );
-
+  filter?.addEventListener('click', event => {
+    event.preventDefault();
+    event.stopPropagation();
+    toggleAuthorFilter();
+  });
 
   // -------------------------------------------------------
   // Закрытие фильтра
   // -------------------------------------------------------
 
   document
-    .getElementById(
-      'closeAuthorFilter'
-    )
-    ?.addEventListener(
-      'click',
-      event => {
-        event.preventDefault();
-        event.stopPropagation();
-
-        closeAuthorFilter();
-      }
-    );
-
+    .getElementById('closeAuthorFilter')
+    ?.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      closeAuthorFilter();
+    });
 
   // -------------------------------------------------------
   // Выбор автора
   // -------------------------------------------------------
 
   panel
-    ?.querySelectorAll(
-      'input[type="checkbox"]'
-    )
-    .forEach(
-      checkbox => {
-        checkbox.addEventListener(
-          'change',
-          () => {
-            const selected =
-              ensureAuthorFilter();
+    ?.querySelectorAll('input[type="checkbox"]')
+    .forEach(checkbox => {
+      checkbox.addEventListener('change', () => {
+        const selected = ensureAuthorFilter();
 
-            if (checkbox.checked) {
-              selected.add(
-                checkbox.value
-              );
-            } else {
-              selected.delete(
-                checkbox.value
-              );
-            }
+        if (checkbox.checked) {
+          selected.add(checkbox.value);
+        } else {
+          selected.delete(checkbox.value);
+        }
 
-            /*
-             * Не вызываем renderFeed().
-             *
-             * Фильтрация происходит локально
-             * по уже загруженному state.articles.
-             */
-
-            refreshFilteredFeed();
-          }
-        );
-      }
-    );
-
+        refreshFilteredFeed();
+      });
+    });
 
   // -------------------------------------------------------
   // Сброс фильтра
   // -------------------------------------------------------
 
   document
-    .getElementById(
-      'resetAuthorFilter'
-    )
-    ?.addEventListener(
-      'click',
-      event => {
-        event.preventDefault();
-        event.stopPropagation();
+    .getElementById('resetAuthorFilter')
+    ?.addEventListener('click', event => {
+      event.preventDefault();
+      event.stopPropagation();
 
-        ensureAuthorFilter().clear();
-
-        syncAuthorFilterCheckboxes();
-
-        refreshFilteredFeed();
-      }
-    );
-
+      ensureAuthorFilter().clear();
+      syncAuthorFilterCheckboxes();
+      refreshFilteredFeed();
+    });
 
   // -------------------------------------------------------
   // Начальное состояние
   // -------------------------------------------------------
 
   updateSearchClearButton();
-
   updateAuthorFilterButton();
+  updateSortButton();
 }
 
 
@@ -676,52 +564,36 @@ function bindFeedTools() {
 // =========================================================
 
 function bindFeedOutsideClick() {
-  if (
-    bindFeedOutsideClick._bound
-  ) {
+  if (bindFeedOutsideClick._bound) {
     return;
   }
 
   bindFeedOutsideClick._bound = true;
 
-  document.addEventListener(
-    'click',
-    event => {
-      const panel =
-        document.getElementById(
-          'authorFilterPanel'
-        );
+  document.addEventListener('click', event => {
+    const panel = document.getElementById('authorFilterPanel');
+    const button = document.getElementById('authorFilterBtn');
 
-      const button =
-        document.getElementById(
-          'authorFilterBtn'
-        );
-
-      if (!panel || !button) {
-        return;
-      }
-
-      if (panel.hidden) {
-        return;
-      }
-
-      const target =
-        event.target;
-
-      if (!(target instanceof Node)) {
-        return;
-      }
-
-      if (
-        panel.contains(target) ||
-        button.contains(target)
-      ) {
-        return;
-      }
-
-      closeAuthorFilter();
+    if (!panel || !button) {
+      return;
     }
-  );
+
+    if (panel.hidden) {
+      return;
+    }
+
+    const target = event.target;
+
+    if (!(target instanceof Node)) {
+      return;
+    }
+
+    if (panel.contains(target) || button.contains(target)) {
+      return;
+    }
+
+    closeAuthorFilter();
+  });
 }
 
 
@@ -730,31 +602,11 @@ function bindFeedOutsideClick() {
 // =========================================================
 
 function renderFeedItem(article) {
-  const id =
-    String(
-      article?.id ?? ''
-    );
-
-  const title =
-    String(
-      article?.title ||
-      'Без названия'
-    );
-
-  const excerpt =
-    String(
-      article?.excerpt || ''
-    );
-
-  const author =
-    String(
-      article?.author_name || ''
-    ).trim();
-
-  const cover =
-    String(
-      article?.cover || ''
-    ).trim();
+  const id = String(article?.id ?? '');
+  const title = String(article?.title || 'Без названия');
+  const excerpt = String(article?.excerpt || '');
+  const author = String(article?.author_name || '').trim();
+  const cover = String(article?.cover || '').trim();
 
   return `
     <div
@@ -764,20 +616,15 @@ function renderFeedItem(article) {
       tabindex="0"
     >
 
-      ${
-        cover
-          ? `
-            <img
-              class="thumb"
-              src="${escapeHtml(cover)}"
-              alt=""
-              loading="lazy"
-              decoding="async"
-            >
-          `
-          : ''
-      }
-
+      ${cover ? `
+        <img
+          class="thumb"
+          src="${escapeHtml(cover)}"
+          alt=""
+          loading="lazy"
+          decoding="async"
+        >
+      ` : ''}
 
       <div class="feed-meta">
         ${escapeHtml(fmtDate(article?.created_at))}
@@ -793,21 +640,15 @@ function renderFeedItem(article) {
         ` : ''}
       </div>
 
-
       <h3>
         ${escapeHtml(title)}
       </h3>
 
-
-      ${
-        excerpt
-          ? `
-            <p>
-              ${escapeHtml(excerpt)}
-            </p>
-          `
-          : ''
-      }
+      ${excerpt ? `
+        <p>
+          ${escapeHtml(excerpt)}
+        </p>
+      ` : ''}
 
     </div>
   `;
@@ -824,8 +665,7 @@ function bindFeedItem(item) {
   }
 
   const open = () => {
-    const id =
-      item.dataset.id;
+    const id = item.dataset.id;
 
     if (!id) {
       return;
@@ -834,24 +674,14 @@ function bindFeedItem(item) {
     openReader(id);
   };
 
-  item.addEventListener(
-    'click',
-    open
-  );
+  item.addEventListener('click', open);
 
-  item.addEventListener(
-    'keydown',
-    event => {
-      if (
-        event.key === 'Enter' ||
-        event.key === ' '
-      ) {
-        event.preventDefault();
-
-        open();
-      }
+  item.addEventListener('keydown', event => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      open();
     }
-  );
+  });
 }
 
 
@@ -860,34 +690,22 @@ function bindFeedItem(item) {
 // =========================================================
 
 function renderFeedListOnly() {
-  const list =
-    document.getElementById(
-      'feedList'
-    );
+  const list = document.getElementById('feedList');
 
   if (!list) {
     return;
   }
 
-  const rows =
-    filteredArticles();
-
+  const rows = filteredArticles();
 
   // -------------------------------------------------------
   // Нет результатов
   // -------------------------------------------------------
 
   if (!rows.length) {
-    const hasArticles =
-      Array.isArray(state?.articles) &&
-      state.articles.length > 0;
-
-    const hasSearch =
-      getSearchQuery() !== '';
-
-    const hasAuthorsFilter =
-      ensureAuthorFilter().size > 0;
-
+    const hasArticles = Array.isArray(state?.articles) && state.articles.length > 0;
+    const hasSearch = getSearchQuery() !== '';
+    const hasAuthorsFilter = ensureAuthorFilter().size > 0;
 
     // -----------------------------------------------------
     // Вообще нет статей
@@ -911,31 +729,19 @@ function renderFeedListOnly() {
       return;
     }
 
-
     // -----------------------------------------------------
     // Статьи есть, но фильтр ничего не нашёл
     // -----------------------------------------------------
 
-    let description =
-      'Попробуйте изменить параметры поиска.';
+    let description = 'Попробуйте изменить параметры поиска.';
 
-
-    if (
-      hasSearch &&
-      hasAuthorsFilter
-    ) {
-      description =
-        'Попробуйте изменить запрос или выбрать других авторов.';
-
+    if (hasSearch && hasAuthorsFilter) {
+      description = 'Попробуйте изменить запрос или выбрать других авторов.';
     } else if (hasSearch) {
-      description =
-        'Попробуйте изменить запрос поиска.';
-
+      description = 'Попробуйте изменить запрос поиска.';
     } else if (hasAuthorsFilter) {
-      description =
-        'Попробуйте выбрать других авторов.';
+      description = 'Попробуйте выбрать других авторов.';
     }
-
 
     list.innerHTML = `
       <div class="empty-state feed-empty">
@@ -954,39 +760,29 @@ function renderFeedListOnly() {
     return;
   }
 
-
   // -------------------------------------------------------
   // Список статей
   // -------------------------------------------------------
 
-  list.innerHTML =
-    rows
-      .map(renderFeedItem)
-      .join('');
-
+  list.innerHTML = rows.map(renderFeedItem).join('');
 
   // -------------------------------------------------------
   // Обработчики открытия статьи
   // -------------------------------------------------------
 
-  list
-    .querySelectorAll(
-      '.feed-item'
-    )
-    .forEach(
-      bindFeedItem
-    );
+  list.querySelectorAll('.feed-item').forEach(bindFeedItem);
 
-  makeAuthorClickable(list);
-
+  if (typeof makeAuthorClickable === 'function') {
+    makeAuthorClickable(list);
+  }
 
   // -------------------------------------------------------
   // Синхронизация UI
   // -------------------------------------------------------
 
   updateSearchClearButton();
-
   updateAuthorFilterButton();
+  updateSortButton();
 }
 
 
@@ -1002,19 +798,12 @@ async function renderFeed() {
 
   setBackButton(false);
 
-  const main =
-    document.getElementById(
-      'main'
-    );
+  const main = document.getElementById('main');
 
   if (!main) {
-    console.error(
-      'renderFeed: элемент #main не найден'
-    );
-
+    console.error('renderFeed: элемент #main не найден');
     return;
   }
-
 
   // -------------------------------------------------------
   // Загрузка
@@ -1026,21 +815,10 @@ async function renderFeed() {
     </div>
   `;
 
-
   try {
-    const articles =
-      await fetchFeed();
+    const articles = await fetchFeed();
 
-    /*
-     * Защищаем state.articles от неожиданных
-     * null / undefined / не-массива.
-     */
-
-    state.articles =
-      Array.isArray(articles)
-        ? articles
-        : [];
-
+    state.articles = Array.isArray(articles) ? articles : [];
 
     // -----------------------------------------------------
     // Отрисовка панели и списка
@@ -1052,20 +830,12 @@ async function renderFeed() {
       <div id="feedList"></div>
     `;
 
-
     bindFeedTools();
-
     bindFeedOutsideClick();
-
     renderFeedListOnly();
 
-
   } catch (error) {
-    console.error(
-      'renderFeed:',
-      error
-    );
-
+    console.error('renderFeed:', error);
 
     main.innerHTML = `
       <div class="empty-state">
@@ -1075,10 +845,7 @@ async function renderFeed() {
         </h2>
 
         <p>
-          ${escapeHtml(
-            error?.message ||
-            'Произошла ошибка загрузки.'
-          )}
+          ${escapeHtml(error?.message || 'Произошла ошибка загрузки.')}
         </p>
 
         <button
@@ -1092,16 +859,10 @@ async function renderFeed() {
       </div>
     `;
 
-
     document
-      .getElementById(
-        'retryFeedBtn'
-      )
-      ?.addEventListener(
-        'click',
-        () => {
-          renderFeed();
-        }
-      );
+      .getElementById('retryFeedBtn')
+      ?.addEventListener('click', () => {
+        renderFeed();
+      });
   }
 }
