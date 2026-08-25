@@ -135,7 +135,6 @@ function showDraftNotification(draft) {
   
   notification.innerHTML = `
     <div class="draft-notification-content">
-      <span class="draft-notification-icon">📝</span>
       <div class="draft-notification-text">
         <div class="draft-notification-title">У вас есть черновик</div>
         <div class="draft-notification-preview">${escapeHtml(preview)}</div>
