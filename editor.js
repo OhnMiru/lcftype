@@ -27,6 +27,8 @@ function newDraft() {
 // Открыть редактор новой статьи
 // =========================================================
 
+let _isRestoringDraft = false; // ← флаг для предотвращения повторного показа
+
 async function openEditor() {
   try {
 
@@ -48,25 +50,32 @@ async function openEditor() {
     state.view = 'editor';
     state.currentId = null;
 
-    // Проверяем, есть ли сохраненный черновик
-    const savedDraft = loadDraftFromStorage();
-    
-    if (savedDraft && !isDraftEmpty(savedDraft)) {
-      // Спрашиваем пользователя, хочет ли он восстановить черновик
-      const restore = confirm(
-        'У вас есть несохраненный черновик. Восстановить?'
-      );
+    // Проверяем, есть ли сохраненный черновик (только если не идет восстановление)
+    if (!_isRestoringDraft) {
+      const savedDraft = loadDraftFromStorage();
       
-      if (restore) {
-        state.draft = savedDraft;
-        showToast('Черновик восстановлен');
+      if (savedDraft && !isDraftEmpty(savedDraft)) {
+        const restore = confirm(
+          'У вас есть несохраненный черновик. Восстановить?'
+        );
+        
+        if (restore) {
+          _isRestoringDraft = true; // ← устанавливаем флаг
+          state.draft = savedDraft;
+          showToast('Черновик восстановлен');
+        } else {
+          clearDraft();
+          state.draft = newDraft();
+        }
       } else {
-        // Пользователь отказался — удаляем черновик
-        clearDraft();
         state.draft = newDraft();
       }
     } else {
-      state.draft = newDraft();
+      // Если идет восстановление, сбрасываем флаг и используем уже загруженный черновик
+      _isRestoringDraft = false;
+      if (!state.draft) {
+        state.draft = newDraft();
+      }
     }
 
     setBackButton(
@@ -78,7 +87,6 @@ async function openEditor() {
               'Отменить редактирование? Черновик будет сохранен.'
             )
           ) {
-            // Сохраняем черновик перед выходом
             saveDraftToStorage(state.draft);
             renderFeed();
           }
@@ -173,10 +181,9 @@ function renderEditor() {
 
   const d = state.draft;
 
-  // Отображаем баннер, если есть сохраненный черновик
   const draftBanner = state.hasDraft && !isDraftEmpty(d) ? `
     <div class="draft-banner chrome" id="draftBanner">
-      <span>Черновик сохранен</span>
+      <span>📝 Черновик сохранен</span>
       <button class="draft-banner-close" id="clearDraftBtn">✕</button>
     </div>
   ` : '';
@@ -547,16 +554,20 @@ function renderEditor() {
 
 
   // =======================================================
-  // Баннер черновика
+  // Баннер черновика — ИСПРАВЛЕНО!
   // =======================================================
 
   document
     .getElementById('clearDraftBtn')
     ?.addEventListener(
       'click',
-      () => {
+      (e) => {
+        e.stopPropagation();
         if (confirm('Удалить сохраненный черновик?')) {
           clearDraft();
+          // Создаем новый пустой черновик
+          state.draft = newDraft();
+          // Перерендериваем редактор (баннер исчезнет)
           renderEditor();
           showToast('Черновик удален');
         }
@@ -1022,7 +1033,6 @@ function renderBlocks(
     }
   }
   
-  // Обновляем баннер черновика
   updateDraftBanner();
 }
 
@@ -1233,9 +1243,7 @@ function autoSaveDraft() {
   
   if (!d) return;
   
-  // Проверяем, есть ли содержимое
   if (isDraftEmpty(d)) {
-    // Если черновик пустой, удаляем его
     if (state.hasDraft) {
       clearDraft();
       updateDraftBanner();
@@ -1243,12 +1251,10 @@ function autoSaveDraft() {
     return;
   }
   
-  // Отменяем предыдущий таймаут
   if (autoSaveTimeout) {
     clearTimeout(autoSaveTimeout);
   }
   
-  // Сохраняем через 1 секунду после последнего изменения
   autoSaveTimeout = setTimeout(() => {
     saveDraftToStorage(d);
     updateDraftBanner();
@@ -1431,7 +1437,6 @@ async function publishDraft() {
           }
         );
 
-      // Успешно опубликовано — удаляем черновик
       clearDraft();
 
       showToast(
@@ -1460,7 +1465,6 @@ async function publishDraft() {
           }
         );
 
-      // Успешно сохранено — удаляем черновик
       clearDraft();
 
       showToast(
