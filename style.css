@@ -3302,7 +3302,7 @@ img{
 
 .author-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 18px;
   padding: 20px 16px;
   margin-bottom: 24px;
@@ -3336,31 +3336,27 @@ img{
 .author-info {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .author-name {
-  margin: 0 0 4px 0;
+  margin: 0;
   font-family: 'Fraunces', serif;
   font-size: 22px;
   font-weight: 700;
-  line-height: 1.3;
-}
-
-/* AUTHOR BIO */
-.author-bio {
-  font-family: 'Source Serif 4', serif;
-  font-size: 15px;
-  line-height: 1.6;
-  color: var(--ink-soft);
-  margin: 6px 0 12px 0;
-  white-space: pre-wrap;
-  word-wrap: break-word;
+  line-height: 1.2;
 }
 
 .author-stats {
   font-family: 'Inter', sans-serif;
   font-size: 13px;
   color: var(--ink-soft);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
 }
 
 .author-stat-number {
@@ -3369,17 +3365,31 @@ img{
 }
 
 .author-stat-divider {
-  margin: 0 6px;
-  opacity: 0.5;
+  opacity: 0.4;
+  margin: 0 2px;
+}
+
+.author-bio {
+  font-family: 'Source Serif 4', serif;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--ink);
+  margin: 2px 0 4px 0;
+  white-space: pre-wrap;
+  word-wrap: break-word;
 }
 
 .author-donate-action {
-  margin-top: 10px;
+  margin-top: 4px;
 }
 
 .author-donate-btn {
   font-size: 13px;
-  padding: 8px 16px;
+  padding: 8px 18px;
+  width: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .author-articles {
@@ -3419,9 +3429,10 @@ img{
 
 @media (max-width: 520px) {
   .author-header {
-    padding: 16px 12px;
+    padding: 16px 14px;
     gap: 14px;
-    border-radius: 12px;
+    border-radius: 14px;
+    align-items: flex-start;
   }
 
   .author-avatar {
@@ -3439,44 +3450,62 @@ img{
     font-size: 19px;
   }
 
-  .author-bio {
-    font-size: 14px;
-  }
-
   .author-stats {
     font-size: 12px;
   }
 
+  .author-bio {
+    font-size: 14px;
+  }
+
   .author-donate-btn {
     font-size: 12px;
-    padding: 6px 12px;
+    padding: 6px 14px;
   }
 }
 
 @media (max-width: 380px) {
   .author-header {
     flex-direction: column;
+    align-items: center;
     text-align: center;
-    gap: 10px;
+    gap: 12px;
+    padding: 16px;
   }
 
   .author-avatar {
-    width: 48px;
-    height: 48px;
-    font-size: 20px;
+    width: 56px;
+    height: 56px;
+    font-size: 24px;
   }
 
   .author-avatar-img {
-    width: 48px;
-    height: 48px;
+    width: 56px;
+    height: 56px;
   }
 
   .author-name {
-    font-size: 17px;
+    font-size: 18px;
+  }
+
+  .author-stats {
+    justify-content: center;
+    font-size: 12px;
   }
 
   .author-bio {
-    font-size: 13px;
+    font-size: 14px;
+    text-align: left;
+  }
+
+  .author-donate-action {
+    display: flex;
+    justify-content: center;
+  }
+
+  .author-donate-btn {
+    font-size: 12px;
+    padding: 6px 14px;
   }
 }
 
