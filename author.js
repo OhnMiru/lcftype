@@ -106,15 +106,6 @@ function renderAuthorPage(profile, articles) {
             <h1 class="author-name">
               ${escapeHtml(profile.username)}
             </h1>
-            ${hasDonations ? `
-              <button
-                class="btn btn-primary author-donate-btn"
-                id="authorDonateBtn"
-                type="button"
-              >
-                Поддержать
-              </button>
-            ` : ''}
           </div>
 
           <div class="author-stats">
@@ -129,8 +120,22 @@ function renderAuthorPage(profile, articles) {
           </div>
 
           ${bio ? `
-            <div class="author-bio">
-              ${escapeHtml(bio)}
+            <div class="author-bio-wrapper">
+              <div class="author-bio">
+                ${escapeHtml(bio)}
+              </div>
+            </div>
+          ` : ''}
+
+          ${hasDonations ? `
+            <div class="author-donate-wrapper">
+              <button
+                class="btn btn-primary author-donate-btn"
+                id="authorDonateBtn"
+                type="button"
+              >
+                Поддержать
+              </button>
             </div>
           ` : ''}
 
