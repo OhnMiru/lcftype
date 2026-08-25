@@ -22,6 +22,9 @@ if (tg) {
 const tgUser =
   tg?.initDataUnsafe?.user || null;
 
+// Ключ для хранения черновика в localStorage
+const DRAFT_STORAGE_KEY = 'lcftype_draft';
+
 const state = {
   view: 'feed',
   articles: [],
@@ -31,7 +34,8 @@ const state = {
   search: '',
   authorFilter: new Set(),
   pendingImageInsertIndex: null,
-  sortOrder: 'desc' // 'desc' — новые сначала, 'asc' — старые сначала
+  sortOrder: 'desc', // 'desc' — новые сначала, 'asc' — старые сначала
+  hasDraft: false // ← добавляем флаг наличия черновика
 };
 
 let activeBlockEl = null;
@@ -194,4 +198,98 @@ function setBackButton(
       e
     );
   }
+}
+
+
+// =========================================================
+// Черновики
+// =========================================================
+
+// Сохранить черновик в localStorage
+function saveDraftToStorage(draft) {
+  try {
+    if (!draft) {
+      localStorage.removeItem(DRAFT_STORAGE_KEY);
+      state.hasDraft = false;
+      return;
+    }
+
+    // Сохраняем только текст, без изображений (они сохраняются отдельно)
+    const draftToSave = {
+      id: draft.id || null,
+      title: draft.title || '',
+      cover: draft.cover || null,
+      blocks: draft.blocks || [],
+      savedAt: new Date().toISOString()
+    };
+
+    localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draftToSave));
+    state.hasDraft = true;
+  } catch (e) {
+    console.warn('saveDraftToStorage error:', e);
+  }
+}
+
+// Загрузить черновик из localStorage
+function loadDraftFromStorage() {
+  try {
+    const saved = localStorage.getItem(DRAFT_STORAGE_KEY);
+    if (!saved) {
+      state.hasDraft = false;
+      return null;
+    }
+
+    const draft = JSON.parse(saved);
+    
+    // Проверяем, не слишком ли старый черновик (например, старше 7 дней)
+    const savedAt = new Date(draft.savedAt);
+    const now = new Date();
+    const daysDiff = (now - savedAt) / (1000 * 60 * 60 * 24);
+    
+    if (daysDiff > 7) {
+      // Слишком старый черновик — удаляем
+      localStorage.removeItem(DRAFT_STORAGE_KEY);
+      state.hasDraft = false;
+      return null;
+    }
+
+    state.hasDraft = true;
+    return draft;
+  } catch (e) {
+    console.warn('loadDraftFromStorage error:', e);
+    localStorage.removeItem(DRAFT_STORAGE_KEY);
+    state.hasDraft = false;
+    return null;
+  }
+}
+
+// Очистить черновик
+function clearDraft() {
+  localStorage.removeItem(DRAFT_STORAGE_KEY);
+  state.hasDraft = false;
+  state.draft = null;
+}
+
+// Проверить, есть ли черновик
+function hasSavedDraft() {
+  return state.hasDraft;
+}
+
+// Проверить, есть ли у черновика содержимое
+function isDraftEmpty(draft) {
+  if (!draft) return true;
+  
+  const hasTitle = draft.title && draft.title.trim().length > 0;
+  const hasCover = draft.cover && draft.cover.trim().length > 0;
+  const hasContent = draft.blocks && draft.blocks.some(b => {
+    if (b.type === 'text' && b.html && b.html.replace(/<[^>]+>/g, '').trim()) {
+      return true;
+    }
+    if (b.type === 'image' && b.src) {
+      return true;
+    }
+    return false;
+  });
+  
+  return !(hasTitle || hasCover || hasContent);
 }
