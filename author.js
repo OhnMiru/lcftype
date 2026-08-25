@@ -80,6 +80,7 @@ function renderAuthorPage(profile, articles) {
 
   const avatarUrl = profile.avatar || null;
   const avatarLetter = profile.username?.charAt(0)?.toUpperCase() || '?';
+  const bio = profile.bio || null;
 
   // Проверяем, есть ли у автора донаты
   const donationLink = profile.donation_link || null;
@@ -104,6 +105,12 @@ function renderAuthorPage(profile, articles) {
           <h1 class="author-name">
             ${escapeHtml(profile.username)}
           </h1>
+
+          ${bio ? `
+            <div class="author-bio">
+              ${escapeHtml(bio)}
+            </div>
+          ` : ''}
 
           <div class="author-stats">
 
