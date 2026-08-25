@@ -47,16 +47,43 @@ async function openEditor() {
 
     state.view = 'editor';
     state.currentId = null;
-    state.draft = newDraft();
+
+    // Проверяем, есть ли сохраненный черновик
+    const savedDraft = loadDraftFromStorage();
+    
+    if (savedDraft && !isDraftEmpty(savedDraft)) {
+      // Спрашиваем пользователя, хочет ли он восстановить черновик
+      const restore = confirm(
+        'У вас есть несохраненный черновик. Восстановить?'
+      );
+      
+      if (restore) {
+        state.draft = savedDraft;
+        showToast('Черновик восстановлен');
+      } else {
+        // Пользователь отказался — удаляем черновик
+        clearDraft();
+        state.draft = newDraft();
+      }
+    } else {
+      state.draft = newDraft();
+    }
 
     setBackButton(
       true,
       () => {
-        if (
-          confirm(
-            'Отменить редактирование? Черновик будет потерян.'
-          )
-        ) {
+        if (state.hasDraft && !isDraftEmpty(state.draft)) {
+          if (
+            confirm(
+              'Отменить редактирование? Черновик будет сохранен.'
+            )
+          ) {
+            // Сохраняем черновик перед выходом
+            saveDraftToStorage(state.draft);
+            renderFeed();
+          }
+        } else {
+          clearDraft();
           renderFeed();
         }
       }
@@ -114,11 +141,17 @@ function editArticle(article) {
   setBackButton(
     true,
     () => {
-      if (
-        confirm(
-          'Отменить редактирование? Изменения будут потеряны.'
-        )
-      ) {
+      if (state.hasDraft && !isDraftEmpty(state.draft)) {
+        if (
+          confirm(
+            'Отменить редактирование? Изменения будут сохранены в черновике.'
+          )
+        ) {
+          saveDraftToStorage(state.draft);
+          openReader(article.id);
+        }
+      } else {
+        clearDraft();
         openReader(article.id);
       }
     }
@@ -140,7 +173,17 @@ function renderEditor() {
 
   const d = state.draft;
 
+  // Отображаем баннер, если есть сохраненный черновик
+  const draftBanner = state.hasDraft && !isDraftEmpty(d) ? `
+    <div class="draft-banner chrome" id="draftBanner">
+      <span>📝 Черновик сохранен</span>
+      <button class="draft-banner-close" id="clearDraftBtn">✕</button>
+    </div>
+  ` : '';
+
   main.innerHTML = `
+
+    ${draftBanner}
 
     <input
       class="editor-title-input"
@@ -292,7 +335,6 @@ function renderEditor() {
     ></div>
   `;
 
-
   // =======================================================
   // Заголовок
   // =======================================================
@@ -302,6 +344,7 @@ function renderEditor() {
     .oninput = e => {
       d.title =
         e.target.value;
+      autoSaveDraft();
     };
 
 
@@ -380,6 +423,8 @@ function renderEditor() {
         showToast(
           'Обложка убрана'
         );
+        
+        autoSaveDraft();
       }
     );
 
@@ -409,6 +454,7 @@ function renderEditor() {
           );
 
         renderEditor();
+        autoSaveDraft();
 
       } catch (err) {
 
@@ -476,6 +522,8 @@ function renderEditor() {
         renderBlocks({
           focusIndex: idx
         });
+        
+        autoSaveDraft();
 
       } catch (err) {
 
@@ -496,6 +544,24 @@ function renderEditor() {
     .getElementById('publishBtn')
     .onclick =
       publishDraft;
+
+
+  // =======================================================
+  // Баннер черновика
+  // =======================================================
+
+  document
+    .getElementById('clearDraftBtn')
+    ?.addEventListener(
+      'click',
+      () => {
+        if (confirm('Удалить сохраненный черновик?')) {
+          clearDraft();
+          renderEditor();
+          showToast('Черновик удален');
+        }
+      }
+    );
 
 
   // =======================================================
@@ -526,6 +592,8 @@ function insertBlockAfter(
         ? index + 1
         : null
   });
+  
+  autoSaveDraft();
 }
 
 
@@ -802,6 +870,8 @@ function renderBlocks(
               e.target.innerHTML
             );
         }
+        
+        autoSaveDraft();
       };
 
       el.onkeyup = () => {
@@ -836,6 +906,8 @@ function renderBlocks(
           d.blocks[i].caption =
             e.target.value;
         }
+        
+        autoSaveDraft();
       };
     });
 
@@ -878,6 +950,8 @@ function renderBlocks(
               d.blocks.length - 1
             )
         });
+        
+        autoSaveDraft();
       };
     });
 
@@ -947,6 +1021,9 @@ function renderBlocks(
       }
     }
   }
+  
+  // Обновляем баннер черновика
+  updateDraftBanner();
 }
 
 
@@ -1146,6 +1223,56 @@ function compressImageFile(
 
 
 // =========================================================
+// Автосохранение черновика
+// =========================================================
+
+let autoSaveTimeout = null;
+
+function autoSaveDraft() {
+  const d = state.draft;
+  
+  if (!d) return;
+  
+  // Проверяем, есть ли содержимое
+  if (isDraftEmpty(d)) {
+    // Если черновик пустой, удаляем его
+    if (state.hasDraft) {
+      clearDraft();
+      updateDraftBanner();
+    }
+    return;
+  }
+  
+  // Отменяем предыдущий таймаут
+  if (autoSaveTimeout) {
+    clearTimeout(autoSaveTimeout);
+  }
+  
+  // Сохраняем через 1 секунду после последнего изменения
+  autoSaveTimeout = setTimeout(() => {
+    saveDraftToStorage(d);
+    updateDraftBanner();
+  }, 1000);
+}
+
+
+// =========================================================
+// Обновить баннер черновика
+// =========================================================
+
+function updateDraftBanner() {
+  const banner = document.getElementById('draftBanner');
+  if (!banner) return;
+  
+  if (state.hasDraft && !isDraftEmpty(state.draft)) {
+    banner.style.display = 'flex';
+  } else {
+    banner.style.display = 'none';
+  }
+}
+
+
+// =========================================================
 // Публикация / сохранение статьи
 // =========================================================
 
@@ -1304,6 +1431,9 @@ async function publishDraft() {
           }
         );
 
+      // Успешно опубликовано — удаляем черновик
+      clearDraft();
+
       showToast(
         'Опубликовано'
       );
@@ -1329,6 +1459,9 @@ async function publishDraft() {
             }
           }
         );
+
+      // Успешно сохранено — удаляем черновик
+      clearDraft();
 
       showToast(
         'Изменения сохранены'
