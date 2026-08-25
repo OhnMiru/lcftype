@@ -220,6 +220,12 @@ function renderComment(
       ? comment.children
       : [];
 
+  const authorName =
+    comment.author_name ||
+    'Пользователь';
+
+  const avatar = comment.author_avatar || null;
+  const avatarLetter = authorName.charAt(0).toUpperCase();
 
   return `
     <div
@@ -239,11 +245,18 @@ function renderComment(
 
         <div class="comment-head">
 
+          <div class="comment-author-avatar">
+            ${avatar ? `
+              <img src="${escapeHtml(avatar)}" alt="" class="comment-avatar-img">
+            ` : `
+              <span class="comment-avatar-letter">
+                ${escapeHtml(avatarLetter)}
+              </span>
+            `}
+          </div>
+
           <div class="comment-author">
-            ${escapeHtml(
-              comment.author_name ||
-              'Пользователь'
-            )}
+            ${escapeHtml(authorName)}
           </div>
 
           <time class="comment-date">
