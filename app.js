@@ -24,7 +24,6 @@ document
   ?.addEventListener(
     'click',
     () => {
-      // Проверяем, есть ли черновик перед созданием новой статьи
       const savedDraft = loadDraftFromStorage();
       if (savedDraft && !isDraftEmpty(savedDraft)) {
         if (confirm('У вас есть несохраненный черновик. Продолжить работу над ним?')) {
@@ -72,7 +71,6 @@ document
 
       await renderFeed();
       
-      // После загрузки ленты проверяем наличие черновика
       checkDraftOnStartup();
     }
 
@@ -99,7 +97,6 @@ function checkDraftOnStartup() {
     const savedDraft = loadDraftFromStorage();
     
     if (savedDraft && !isDraftEmpty(savedDraft)) {
-      // Показываем уведомление о черновике
       showDraftNotification(savedDraft);
     }
   } catch (e) {
@@ -113,11 +110,9 @@ function checkDraftOnStartup() {
 // =========================================================
 
 function showDraftNotification(draft) {
-  // Создаем уведомление
   const notification = document.createElement('div');
   notification.className = 'draft-notification chrome';
   
-  // Получаем первый текст для превью
   let preview = '';
   if (draft.title && draft.title.trim()) {
     preview = draft.title.trim();
@@ -148,18 +143,15 @@ function showDraftNotification(draft) {
   
   document.body.appendChild(notification);
   
-  // Анимация появления
   requestAnimationFrame(() => {
     notification.classList.add('visible');
   });
   
-  // Восстановление черновика
   document.getElementById('draftRestoreBtn').addEventListener('click', () => {
     notification.remove();
     openEditor();
   });
   
-  // Удаление черновика
   document.getElementById('draftDiscardBtn').addEventListener('click', () => {
     if (confirm('Удалить черновик безвозвратно?')) {
       clearDraft();
@@ -168,7 +160,6 @@ function showDraftNotification(draft) {
     }
   });
   
-  // Закрытие по клику вне
   notification.addEventListener('click', (e) => {
     if (e.target === notification) {
       notification.remove();
