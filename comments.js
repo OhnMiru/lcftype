@@ -17,6 +17,7 @@ const COMMENT_REACTIONS = {
 // =========================================================
 
 async function fetchComments(articleId) {
+
   const r =
     await callTelegramApi(
       'get-article-comments',
@@ -36,6 +37,7 @@ async function fetchComments(articleId) {
 // =========================================================
 
 function formatCommentDate(value) {
+
   if (!value) {
     return '';
   }
@@ -68,6 +70,7 @@ function formatCommentDate(value) {
 // =========================================================
 
 function renderCommentText(text) {
+
   return escapeHtml(
     String(text || '')
   ).replace(
@@ -89,6 +92,7 @@ function buildCommentTree(comments) {
   const roots = [];
 
   comments.forEach(comment => {
+
     map.set(
       comment.id,
       {
@@ -96,7 +100,9 @@ function buildCommentTree(comments) {
         children: []
       }
     );
+
   });
+
 
   comments.forEach(comment => {
 
@@ -107,19 +113,25 @@ function buildCommentTree(comments) {
       return;
     }
 
+
     if (
       comment.parent_id &&
       map.has(comment.parent_id)
     ) {
+
       map
         .get(comment.parent_id)
         .children
         .push(item);
 
     } else {
+
       roots.push(item);
+
     }
+
   });
+
 
   return roots;
 }
@@ -139,8 +151,10 @@ function renderCommentReaction(
       comment?.reactions?.[type] || 0
     );
 
+
   const active =
     comment?.my_reaction === type;
+
 
   return `
     <button
@@ -154,9 +168,7 @@ function renderCommentReaction(
       data-comment-id="${escapeHtml(
         comment.id
       )}"
-      aria-label="${
-        type
-      }"
+      aria-label="${type}"
     >
 
       <span class="comment-reaction-emoji">
@@ -200,12 +212,14 @@ function renderComment(
       )
       .join('');
 
+
   const children =
     Array.isArray(
       comment.children
     )
       ? comment.children
       : [];
+
 
   return `
     <div
@@ -256,12 +270,13 @@ function renderComment(
             ${reactions}
           </div>
 
+
           <button
             class="comment-reply"
             type="button"
-            data-comment-reply="${
-              escapeHtml(comment.id)
-            }"
+            data-comment-reply="${escapeHtml(
+              comment.id
+            )}"
           >
             Ответить
           </button>
@@ -271,9 +286,9 @@ function renderComment(
 
         <div
           class="comment-reply-form"
-          data-reply-form="${
-            escapeHtml(comment.id)
-          }"
+          data-reply-form="${escapeHtml(
+            comment.id
+          )}"
           hidden
         >
 
@@ -284,6 +299,7 @@ function renderComment(
             placeholder="Ваш ответ…"
           ></textarea>
 
+
           <div class="comment-form-actions">
 
             <button
@@ -293,12 +309,13 @@ function renderComment(
               Отмена
             </button>
 
+
             <button
               class="btn btn-primary comment-send-reply"
               type="button"
-              data-parent-id="${
-                escapeHtml(comment.id)
-              }"
+              data-parent-id="${escapeHtml(
+                comment.id
+              )}"
             >
               Ответить
             </button>
@@ -314,6 +331,7 @@ function renderComment(
         children.length
           ? `
             <div class="comment-children">
+
               ${children
                 .map(
                   child =>
@@ -323,6 +341,7 @@ function renderComment(
                     )
                 )
                 .join('')}
+
             </div>
           `
           : ''
@@ -346,15 +365,18 @@ async function renderComments(
       'articleComments'
     );
 
+
   if (!container) {
     return;
   }
+
 
   container.innerHTML = `
     <div class="comments-loading">
       Загружаем комментарии…
     </div>
   `;
+
 
   try {
 
@@ -363,10 +385,12 @@ async function renderComments(
         articleId
       );
 
+
     const tree =
       buildCommentTree(
         comments
       );
+
 
     container.innerHTML = `
       <section class="comments-section">
@@ -394,11 +418,13 @@ async function renderComments(
             placeholder="Написать комментарий…"
           ></textarea>
 
+
           <div class="comment-form-bottom">
 
             <span class="comment-limit">
               До 2000 символов
             </span>
+
 
             <button
               id="sendCommentBtn"
@@ -438,9 +464,11 @@ async function renderComments(
       </section>
     `;
 
+
     bindComments(
       articleId
     );
+
 
   } catch (e) {
 
@@ -448,6 +476,7 @@ async function renderComments(
       'renderComments:',
       e
     );
+
 
     container.innerHTML = `
       <section class="comments-section">
@@ -460,12 +489,14 @@ async function renderComments(
 
         </div>
 
+
         <div class="comments-error">
           Не удалось загрузить комментарии.
         </div>
 
       </section>
     `;
+
   }
 }
 
@@ -484,7 +515,9 @@ async function submitComment(
     String(content || '')
       .trim();
 
+
   if (!text) {
+
     showToast(
       'Напишите комментарий'
     );
@@ -492,7 +525,9 @@ async function submitComment(
     return false;
   }
 
+
   if (text.length > 2000) {
+
     showToast(
       'Максимум 2000 символов'
     );
@@ -508,6 +543,7 @@ async function submitComment(
   const profile =
     await ensureProfile(true);
 
+
   if (!profile) {
     return false;
   }
@@ -522,7 +558,123 @@ async function submitComment(
     }
   );
 
+
   return true;
+}
+
+
+// =========================================================
+// Обновить отображение реакций
+// =========================================================
+//
+// ВАЖНО:
+// Здесь мы не вызываем renderComments().
+// Обновляются только кнопки реакций конкретного комментария.
+// =========================================================
+
+function updateCommentReactions(
+  commentId,
+  reactions
+) {
+
+  if (
+    !commentId ||
+    !reactions
+  ) {
+    return;
+  }
+
+
+  const commentElement =
+    document.querySelector(
+      `.comment-thread[data-comment-id="${CSS.escape(
+        String(commentId)
+      )}"]`
+    );
+
+
+  if (!commentElement) {
+    return;
+  }
+
+
+  const reactionButtons =
+    commentElement.querySelectorAll(
+      '[data-comment-reaction]'
+    );
+
+
+  reactionButtons.forEach(
+    reactionButton => {
+
+      const type =
+        reactionButton.dataset.commentReaction;
+
+
+      if (!type) {
+        return;
+      }
+
+
+      const count =
+        Number(
+          reactions.counts?.[type] || 0
+        );
+
+
+      const isActive =
+        reactions.my_reaction === type;
+
+
+      // ---------------------------------------------------
+      // Активная реакция
+      // ---------------------------------------------------
+
+      reactionButton.classList.toggle(
+        'active',
+        isActive
+      );
+
+
+      // ---------------------------------------------------
+      // Счётчик
+      // ---------------------------------------------------
+
+      let countElement =
+        reactionButton.querySelector(
+          '.comment-reaction-count'
+        );
+
+
+      if (count > 0) {
+
+        if (!countElement) {
+
+          countElement =
+            document.createElement(
+              'span'
+            );
+
+          countElement.className =
+            'comment-reaction-count';
+
+          reactionButton.appendChild(
+            countElement
+          );
+        }
+
+
+        countElement.textContent =
+          String(count);
+
+      } else {
+
+        countElement?.remove();
+
+      }
+
+    }
+  );
 }
 
 
@@ -538,6 +690,7 @@ function bindComments(
     document.getElementById(
       'sendCommentBtn'
     );
+
 
   const input =
     document.getElementById(
@@ -556,9 +709,12 @@ function bindComments(
       const text =
         input?.value || '';
 
+
       send.disabled = true;
+
       send.textContent =
         'Публикуем…';
+
 
       try {
 
@@ -568,31 +724,45 @@ function bindComments(
             text
           );
 
+
         if (!ok) {
           return;
         }
+
 
         showToast(
           'Комментарий опубликован'
         );
 
+
         await renderComments(
           articleId
         );
 
+
       } catch (e) {
+
+        console.error(
+          'submit comment:',
+          e
+        );
+
 
         showToast(
           e.message ||
           'Не удалось добавить комментарий'
         );
 
+
       } finally {
 
         send.disabled = false;
+
         send.textContent =
           'Комментировать';
+
       }
+
     }
   );
 
@@ -614,17 +784,23 @@ function bindComments(
           const id =
             button.dataset.commentReply;
 
+
           const form =
             document.querySelector(
-              `[data-reply-form="${CSS.escape(id)}"]`
+              `[data-reply-form="${CSS.escape(
+                id
+              )}"]`
             );
+
 
           if (!form) {
             return;
           }
 
+
           form.hidden =
             !form.hidden;
+
 
           if (!form.hidden) {
 
@@ -633,9 +809,12 @@ function bindComments(
                 'textarea'
               )
               ?.focus();
+
           }
+
         }
       );
+
     });
 
 
@@ -658,11 +837,17 @@ function bindComments(
               '.comment-reply-form'
             );
 
+
           if (form) {
-            form.hidden = true;
+
+            form.hidden =
+              true;
+
           }
+
         }
       );
+
     });
 
 
@@ -683,23 +868,29 @@ function bindComments(
           const parentId =
             button.dataset.parentId;
 
+
           const form =
             button.closest(
               '.comment-reply-form'
             );
+
 
           const input =
             form?.querySelector(
               'textarea'
             );
 
+
           if (!input) {
             return;
           }
 
+
           button.disabled = true;
+
           button.textContent =
             'Публикуем…';
+
 
           try {
 
@@ -710,211 +901,170 @@ function bindComments(
                 parentId
               );
 
+
             if (!ok) {
               return;
             }
+
 
             showToast(
               'Ответ опубликован'
             );
 
+
             await renderComments(
               articleId
             );
 
+
           } catch (e) {
+
+            console.error(
+              'submit reply:',
+              e
+            );
+
 
             showToast(
               e.message ||
               'Не удалось добавить ответ'
             );
 
+
           } finally {
 
             button.disabled = false;
+
             button.textContent =
               'Ответить';
+
           }
+
         }
       );
+
     });
 
 
-// -------------------------------------------------------
-// Реакции
-// -------------------------------------------------------
+  // -------------------------------------------------------
+  // Реакции
+  // -------------------------------------------------------
 
-document
-  .querySelectorAll(
-    '[data-comment-reaction]'
-  )
-  .forEach(button => {
+  document
+    .querySelectorAll(
+      '[data-comment-reaction]'
+    )
+    .forEach(button => {
 
-    button.addEventListener(
-      'click',
-      async () => {
+      button.addEventListener(
+        'click',
+        async () => {
 
-        const commentId =
-          button.dataset.commentId;
-
-        const reactionType =
-          button.dataset.commentReaction;
-
-        if (
-          !commentId ||
-          !reactionType
-        ) {
-          return;
-        }
-
-        // Не даём нажать повторно,
-        // пока запрос ещё выполняется
-        button.disabled = true;
-
-        try {
-
-          const result =
-            await callTelegramApi(
-              'react-comment',
-              {
-                commentId,
-                reactionType
-              }
-            );
-
-          /*
-           * Backend возвращает:
-           *
-           * {
-           *   reactions: {
-           *     counts: {...},
-           *     total: ...,
-           *     my_reaction: ...
-           *   }
-           * }
-           */
-
-          const reactions =
-            result?.reactions;
-
-          if (!reactions) {
-            throw new Error(
-              'Сервер не вернул данные реакции'
-            );
-          }
+          const commentId =
+            button.dataset.commentId;
 
 
-          // -------------------------------------------------
-          // Обновляем только кнопки реакций
-          // -------------------------------------------------
+          const reactionType =
+            button.dataset.commentReaction;
 
-          const commentElement =
-            document.querySelector(
-              `.comment-thread[data-comment-id="${CSS.escape(commentId)}"]`
-            );
 
-          if (!commentElement) {
+          if (
+            !commentId ||
+            !reactionType
+          ) {
             return;
           }
 
 
-          const reactionButtons =
-            commentElement.querySelectorAll(
-              '[data-comment-reaction]'
-            );
+          // -------------------------------------------------
+          // Блокируем только нажатую кнопку
+          // -------------------------------------------------
+
+          button.disabled = true;
 
 
-          reactionButtons.forEach(
-            reactionButton => {
+          try {
 
-              const type =
-                reactionButton.dataset.commentReaction;
-
-              if (!type) {
-                return;
-              }
-
-
-              const count =
-                Number(
-                  reactions.counts?.[type] || 0
-                );
-
-
-              const isActive =
-                reactions.my_reaction === type;
-
-
-              // ---------------------------------------------
-              // active
-              // ---------------------------------------------
-
-              reactionButton.classList.toggle(
-                'active',
-                isActive
+            const result =
+              await callTelegramApi(
+                'react-comment',
+                {
+                  commentId,
+                  reactionType
+                }
               );
 
 
-              // ---------------------------------------------
-              // Счётчик
-              // ---------------------------------------------
+            /*
+             * Edge Function возвращает:
+             *
+             * {
+             *   reactions: {
+             *     counts: {
+             *       like: 1,
+             *       love: 0,
+             *       laugh: 0,
+             *       wow: 0,
+             *       sad: 0
+             *     },
+             *
+             *     total: 1,
+             *
+             *     my_reaction: "like"
+             *   }
+             * }
+             */
 
-              let countElement =
-                reactionButton.querySelector(
-                  '.comment-reaction-count'
-                );
+
+            const reactions =
+              result?.reactions;
 
 
-              if (count > 0) {
+            if (!reactions) {
 
-                if (!countElement) {
-
-                  countElement =
-                    document.createElement(
-                      'span'
-                    );
-
-                  countElement.className =
-                    'comment-reaction-count';
-
-                  reactionButton.appendChild(
-                    countElement
-                  );
-                }
-
-                countElement.textContent =
-                  String(count);
-
-              } else {
-
-                countElement?.remove();
-              }
+              throw new Error(
+                'Сервер не вернул данные реакции'
+              );
 
             }
-          );
 
 
-        } catch (e) {
+            // -------------------------------------------------
+            // ВАЖНО:
+            // НЕ вызываем renderComments().
+            //
+            // Обновляем только реакции текущего комментария.
+            // -------------------------------------------------
 
-          console.error(
-            'comment reaction:',
-            e
-          );
+            updateCommentReactions(
+              commentId,
+              reactions
+            );
 
-          showToast(
-            e.message ||
-            'Не удалось поставить реакцию'
-          );
 
-        } finally {
+          } catch (e) {
 
-          button.disabled = false;
+            console.error(
+              'comment reaction:',
+              e
+            );
+
+
+            showToast(
+              e.message ||
+              'Не удалось поставить реакцию'
+            );
+
+
+          } finally {
+
+            button.disabled = false;
+
+          }
 
         }
+      );
 
-      }
-    );
-
-  });
+    });
 
 }
