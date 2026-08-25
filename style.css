@@ -1899,6 +1899,7 @@ img{
   border-radius:18px;
 
   background:var(--paper-dim);
+  border: 1px solid var(--line);
 }
 
 
@@ -2000,12 +2001,19 @@ img{
 }
 
 .avatar-dialog .profile-dialog-actions {
+  display: flex;
   flex-wrap: wrap;
+  gap: 8px;
   justify-content: center;
+  align-items: center;
 }
 
 .avatar-dialog .profile-dialog-actions .btn {
-  min-width: 80px;
+  min-width: 110px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
 }
 
 #avatarRemoveBtn {
@@ -2157,6 +2165,7 @@ img{
   margin-top: 16px;
   padding: 20px 22px;
   background: var(--paper-dim);
+  border: 1px solid var(--line);
   border-radius: 16px;
   text-align: left;
 }
@@ -2240,6 +2249,219 @@ img{
 .donation-settings-help a:hover {
   color: var(--indigo-deep);
   text-decoration: underline;
+}
+
+
+/* =========================================================
+   PROFILE TABS
+   ========================================================= */
+
+.profile-tabs {
+  margin-top: 20px;
+}
+
+.profile-tabs-nav {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: var(--paper-dim);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  margin-bottom: 16px;
+}
+
+.profile-tab-btn {
+  flex: 1;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  background: transparent;
+  transition: all 0.15s ease;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.profile-tab-btn:hover {
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.profile-tab-btn.active {
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 0 2px 8px rgba(28, 27, 25, 0.08);
+  border: 1px solid var(--line);
+}
+
+.profile-tab-content {
+  display: none;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+
+/* =========================================================
+   PROFILE STATS
+   ========================================================= */
+
+.profile-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.profile-stat-card {
+  padding: 16px 12px;
+  background: var(--paper-dim);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  text-align: center;
+}
+
+.profile-stat-number {
+  font-family: 'Fraunces', serif;
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--ink);
+  line-height: 1.2;
+}
+
+.profile-stat-label {
+  font-family: 'Inter', sans-serif;
+  font-size: 11px;
+  color: var(--ink-soft);
+  margin-top: 4px;
+}
+
+.profile-stats-detail {
+  padding: 12px 16px;
+  background: var(--paper-dim);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.profile-stats-detail-item {
+  display: flex;
+  justify-content: space-between;
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  color: var(--ink-soft);
+  padding: 4px 0;
+}
+
+.profile-stats-detail-item span:last-child {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+
+/* =========================================================
+   PROFILE ARTICLES LIST
+   ========================================================= */
+
+.profile-articles-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.profile-article-item {
+  padding: 14px 16px;
+  background: var(--paper-dim);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.profile-article-item:hover {
+  background: var(--line);
+}
+
+.profile-article-meta {
+  font-family: 'Inter', sans-serif;
+  font-size: 11px;
+  color: var(--ink-soft);
+  margin-bottom: 4px;
+}
+
+.profile-article-title {
+  font-family: 'Fraunces', serif;
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 4px 0;
+  line-height: 1.3;
+}
+
+.profile-article-excerpt {
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  color: var(--ink-soft);
+  margin: 0;
+  line-height: 1.4;
+}
+
+
+/* =========================================================
+   PROFILE COMMENTS LIST
+   ========================================================= */
+
+.profile-comments-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.profile-comment-item {
+  padding: 14px 16px;
+  background: var(--paper-dim);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.profile-comment-meta {
+  font-family: 'Inter', sans-serif;
+  font-size: 11px;
+  color: var(--ink-soft);
+  margin-bottom: 6px;
+}
+
+.profile-comment-article {
+  color: var(--indigo);
+}
+
+.profile-comment-content {
+  font-family: 'Source Serif 4', serif;
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+
+/* =========================================================
+   PROFILE EMPTY STATE
+   ========================================================= */
+
+.profile-empty-state {
+  padding: 30px 16px;
+  text-align: center;
+  color: var(--ink-soft);
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.profile-empty-state .btn {
+  margin-top: 12px;
 }
 
 
@@ -3459,213 +3681,6 @@ img{
     justify-content: center;
   }
 }
-
-/* =========================================================
-   PROFILE TABS
-   ========================================================= */
-
-.profile-tabs {
-  margin-top: 20px;
-}
-
-.profile-tabs-nav {
-  display: flex;
-  gap: 4px;
-  padding: 4px;
-  background: var(--paper-dim);
-  border-radius: 12px;
-  margin-bottom: 16px;
-}
-
-.profile-tab-btn {
-  flex: 1;
-  padding: 10px 12px;
-  border-radius: 8px;
-  font-family: 'Inter', sans-serif;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--ink-soft);
-  background: transparent;
-  transition: all 0.15s ease;
-  text-align: center;
-  white-space: nowrap;
-}
-
-.profile-tab-btn:hover {
-  color: var(--ink);
-  background: rgba(255, 255, 255, 0.3);
-}
-
-.profile-tab-btn.active {
-  background: var(--paper);
-  color: var(--ink);
-  box-shadow: 0 2px 8px rgba(28, 27, 25, 0.08);
-}
-
-.profile-tab-content {
-  display: none;
-  animation: fadeIn 0.2s ease;
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-
-/* =========================================================
-   PROFILE STATS
-   ========================================================= */
-
-.profile-stats-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
-  margin-bottom: 16px;
-}
-
-.profile-stat-card {
-  padding: 16px 12px;
-  background: var(--paper-dim);
-  border-radius: 10px;
-  text-align: center;
-}
-
-.profile-stat-number {
-  font-family: 'Fraunces', serif;
-  font-size: 28px;
-  font-weight: 700;
-  color: var(--ink);
-  line-height: 1.2;
-}
-
-.profile-stat-label {
-  font-family: 'Inter', sans-serif;
-  font-size: 11px;
-  color: var(--ink-soft);
-  margin-top: 4px;
-}
-
-.profile-stats-detail {
-  padding: 12px 16px;
-  background: var(--paper-dim);
-  border-radius: 10px;
-}
-
-.profile-stats-detail-item {
-  display: flex;
-  justify-content: space-between;
-  font-family: 'Inter', sans-serif;
-  font-size: 13px;
-  color: var(--ink-soft);
-  padding: 4px 0;
-}
-
-.profile-stats-detail-item span:last-child {
-  color: var(--ink);
-  font-weight: 600;
-}
-
-
-/* =========================================================
-   PROFILE ARTICLES LIST
-   ========================================================= */
-
-.profile-articles-list {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.profile-article-item {
-  padding: 14px 16px;
-  background: var(--paper-dim);
-  border-radius: 8px;
-  cursor: pointer;
-  transition: background 0.15s ease;
-}
-
-.profile-article-item:hover {
-  background: var(--line);
-}
-
-.profile-article-meta {
-  font-family: 'Inter', sans-serif;
-  font-size: 11px;
-  color: var(--ink-soft);
-  margin-bottom: 4px;
-}
-
-.profile-article-title {
-  font-family: 'Fraunces', serif;
-  font-size: 16px;
-  font-weight: 600;
-  margin: 0 0 4px 0;
-  line-height: 1.3;
-}
-
-.profile-article-excerpt {
-  font-family: 'Inter', sans-serif;
-  font-size: 13px;
-  color: var(--ink-soft);
-  margin: 0;
-  line-height: 1.4;
-}
-
-
-/* =========================================================
-   PROFILE COMMENTS LIST
-   ========================================================= */
-
-.profile-comments-list {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.profile-comment-item {
-  padding: 14px 16px;
-  background: var(--paper-dim);
-  border-radius: 8px;
-}
-
-.profile-comment-meta {
-  font-family: 'Inter', sans-serif;
-  font-size: 11px;
-  color: var(--ink-soft);
-  margin-bottom: 6px;
-}
-
-.profile-comment-article {
-  color: var(--indigo);
-}
-
-.profile-comment-content {
-  font-family: 'Source Serif 4', serif;
-  font-size: 14px;
-  line-height: 1.5;
-  margin: 0;
-  overflow-wrap: anywhere;
-}
-
-
-/* =========================================================
-   PROFILE EMPTY STATE
-   ========================================================= */
-
-.profile-empty-state {
-  padding: 30px 16px;
-  text-align: center;
-  color: var(--ink-soft);
-  font-family: 'Inter', sans-serif;
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.profile-empty-state .btn {
-  margin-top: 12px;
-}
-
 
 /* =========================================================
    PROFILE — MOBILE (исправлено)
