@@ -95,7 +95,7 @@ function updateSortButton() {
   if (!btn) return;
 
   const isDesc = state.sortOrder === 'desc';
-  btn.innerHTML = isDesc ? '↓ Новые' : '↑ Старые';
+  btn.innerHTML = isDesc ? '↓' : '↑';
   btn.title = isDesc ? 'Сначала новые' : 'Сначала старые';
 }
 
