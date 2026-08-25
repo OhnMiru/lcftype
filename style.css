@@ -1688,6 +1688,33 @@ img{
   width:100%;
 }
 
+
+/* =========================================================
+   DONATE BOX (на странице статьи)
+   ========================================================= */
+
+.donate-box {
+  margin-top: 14px;
+  padding: 16px;
+  background: var(--paper-dim);
+  border-radius: var(--radius);
+  text-align: center;
+}
+
+.donate-btn {
+  width: 100%;
+  font-size: 15px;
+  padding: 12px;
+}
+
+.donate-box-info {
+  margin-top: 8px;
+  font-family: 'Inter', sans-serif;
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+
+
 /* =========================================================
    ARTICLE REACTIONS
    ========================================================= */
@@ -1998,6 +2025,100 @@ img{
 
 .profile-edit-btn{
   min-width:180px;
+}
+
+
+/* =========================================================
+   DONATION SETTINGS (в профиле)
+   ========================================================= */
+
+.donation-settings-card {
+  margin-top: 16px;
+  padding: 20px 22px;
+  background: var(--paper-dim);
+  border-radius: 16px;
+  text-align: left;
+}
+
+.donation-settings-title {
+  font-family: 'Fraunces', serif;
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0 0 8px 0;
+}
+
+.donation-settings-desc {
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  color: var(--ink-soft);
+  margin-bottom: 12px;
+  line-height: 1.5;
+}
+
+.donation-settings-field {
+  margin-bottom: 12px;
+}
+
+.donation-settings-input {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.donation-settings-input:focus {
+  border-color: var(--indigo);
+}
+
+.donation-settings-input::placeholder {
+  color: var(--ink-soft);
+  opacity: 0.6;
+}
+
+.donation-settings-actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.donation-settings-status {
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  margin-bottom: 10px;
+}
+
+.donation-settings-status.enabled {
+  background: rgba(43, 76, 126, 0.1);
+  color: var(--indigo);
+}
+
+.donation-settings-status.disabled {
+  background: rgba(162, 59, 46, 0.08);
+  color: var(--danger);
+}
+
+.donation-settings-help {
+  font-family: 'Inter', sans-serif;
+  font-size: 12px;
+}
+
+.donation-settings-help a {
+  color: var(--indigo);
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.donation-settings-help a:hover {
+  color: var(--indigo-deep);
+  text-decoration: underline;
 }
 
 
@@ -2368,6 +2489,23 @@ img{
 
   .reader-body p{
     font-size:17px;
+  }
+
+
+  /* -------------------------------------------------------
+     DONATION SETTINGS
+     ------------------------------------------------------- */
+
+  .donation-settings-card {
+    padding: 16px;
+  }
+
+  .donation-settings-actions {
+    flex-direction: column;
+  }
+
+  .donation-settings-actions .btn {
+    width: 100%;
   }
 }
 
