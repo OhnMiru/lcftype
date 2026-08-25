@@ -94,6 +94,69 @@ async function fetchMyComments() {
 
 
 // =========================================================
+// Получить настройки донатов автора
+// =========================================================
+
+async function getDonationSettings(userId) {
+  try {
+    const { data, error } = await db
+      .from('donation_settings')
+      .select('*')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (error) throw error;
+    return data || { donation_link: null, is_enabled: false };
+
+  } catch (e) {
+    console.error('getDonationSettings error:', e);
+    return { donation_link: null, is_enabled: false };
+  }
+}
+
+
+// =========================================================
+// Сохранить настройки донатов
+// =========================================================
+
+async function saveDonationSettings(userId, settings) {
+  const { data, error } = await db
+    .from('donation_settings')
+    .upsert({
+      user_id: userId,
+      donation_link: settings.donation_link || null,
+      is_enabled: settings.is_enabled || false,
+      updated_at: new Date().toISOString()
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+
+// =========================================================
+// Проверить, может ли автор принимать донаты
+// =========================================================
+
+async function canAcceptDonations(userId) {
+  const settings = await getDonationSettings(userId);
+  return settings.is_enabled && settings.donation_link;
+}
+
+
+// =========================================================
+// Получить ссылку на донаты автора
+// =========================================================
+
+async function getDonationLink(userId) {
+  const settings = await getDonationSettings(userId);
+  return settings.is_enabled ? settings.donation_link : null;
+}
+
+
+// =========================================================
 // Диалог создания / изменения ника
 // =========================================================
 
@@ -385,16 +448,19 @@ async function openProfile() {
       return;
     }
 
-    // Загружаем статистику, статьи и комментарии параллельно
-    const [stats, articles, comments] = await Promise.all([
+    // Загружаем статистику, статьи, комментарии и настройки донатов
+    const [stats, articles, comments, donationSettings] = await Promise.all([
       fetchProfileStats(),
       fetchMyArticles(),
-      fetchMyComments()
+      fetchMyComments(),
+      getDonationSettings(p.telegram_id)
     ]);
 
-    console.log('Profile data:', { stats, articles, comments });
+    console.log('Profile data:', { stats, articles, comments, donationSettings });
 
     const first = p.username.trim().charAt(0).toUpperCase();
+    const donationLink = donationSettings?.donation_link || '';
+    const isDonationEnabled = donationSettings?.is_enabled || false;
 
     main.innerHTML = `
       <div class="profile-page">
@@ -426,18 +492,71 @@ async function openProfile() {
 
         </div>
 
+        <!-- Настройки донатов -->
+        <div class="profile-card donation-settings-card chrome">
+          <h3 class="donation-settings-title">⭐ Донаты</h3>
+
+          <div class="donation-settings-desc">
+            Вставьте ссылку на вашу страницу в CloudTips, чтобы читатели могли вас поддержать.
+          </div>
+
+          <div class="donation-settings-field">
+            <input
+              type="url"
+              id="donationLinkInput"
+              class="donation-settings-input"
+              placeholder="https://pay.cloudtips.ru/p/..."
+              value="${escapeHtml(donationLink)}"
+            >
+          </div>
+
+          <div class="donation-settings-actions">
+            <button
+              class="btn btn-primary"
+              id="saveDonationLinkBtn"
+            >
+              Сохранить
+            </button>
+
+            ${donationLink ? `
+              <button
+                class="btn btn-secondary"
+                id="removeDonationLinkBtn"
+              >
+                Убрать
+              </button>
+            ` : ''}
+          </div>
+
+          ${donationLink ? `
+            <div class="donation-settings-status enabled">
+              ✅ Донаты включены
+            </div>
+          ` : `
+            <div class="donation-settings-status disabled">
+              ❌ Донаты отключены
+            </div>
+          `}
+
+          <div class="donation-settings-help">
+            <a href="https://cloudtips.ru/" target="_blank" rel="noopener">
+              Как создать ссылку в CloudTips →
+            </a>
+          </div>
+        </div>
+
         <!-- Вкладки -->
         <div class="profile-tabs">
 
           <div class="profile-tabs-nav">
             <button class="profile-tab-btn active" data-tab="stats">
-              Статистика
+              📊 Статистика
             </button>
             <button class="profile-tab-btn" data-tab="articles">
-              Статьи (${articles.length})
+              📝 Статьи (${articles.length})
             </button>
             <button class="profile-tab-btn" data-tab="comments">
-              Комментарии (${comments.length})
+              💬 Комментарии (${comments.length})
             </button>
           </div>
 
@@ -460,6 +579,51 @@ async function openProfile() {
         openProfile();
       }
     };
+
+    // Сохранить ссылку на донаты
+    const saveDonationBtn = document.getElementById('saveDonationLinkBtn');
+    const donationInput = document.getElementById('donationLinkInput');
+
+    saveDonationBtn?.addEventListener('click', async () => {
+      const link = donationInput.value.trim();
+
+      // Валидация ссылки
+      if (link && !link.startsWith('https://pay.cloudtips.ru/')) {
+        showToast('Ссылка должна начинаться с https://pay.cloudtips.ru/');
+        return;
+      }
+
+      try {
+        await saveDonationSettings(p.telegram_id, {
+          donation_link: link || null,
+          is_enabled: !!link
+        });
+
+        showToast(link ? 'Ссылка сохранена! Донаты включены ✅' : 'Донаты отключены');
+        openProfile(); // Обновляем страницу
+
+      } catch (e) {
+        console.error('saveDonation error:', e);
+        showToast(e.message || 'Не удалось сохранить настройки');
+      }
+    });
+
+    // Убрать ссылку на донаты
+    document.getElementById('removeDonationLinkBtn')?.addEventListener('click', async () => {
+      try {
+        await saveDonationSettings(p.telegram_id, {
+          donation_link: null,
+          is_enabled: false
+        });
+
+        showToast('Донаты отключены');
+        openProfile();
+
+      } catch (e) {
+        console.error('removeDonation error:', e);
+        showToast(e.message || 'Не удалось отключить донаты');
+      }
+    });
 
     // Переключение вкладок
     document.querySelectorAll('.profile-tab-btn').forEach(btn => {
