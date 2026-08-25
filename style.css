@@ -3338,7 +3338,15 @@ img{
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
+}
+
+.author-name-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
 }
 
 .author-name {
@@ -3347,6 +3355,15 @@ img{
   font-size: 22px;
   font-weight: 700;
   line-height: 1.2;
+  flex: 1;
+  min-width: 0;
+}
+
+.author-donate-btn {
+  font-size: 13px;
+  padding: 6px 14px;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .author-stats {
@@ -3374,22 +3391,11 @@ img{
   font-size: 15px;
   line-height: 1.6;
   color: var(--ink);
-  margin: 2px 0 4px 0;
+  margin-top: 2px;
   white-space: pre-wrap;
   word-wrap: break-word;
-}
-
-.author-donate-action {
-  margin-top: 4px;
-}
-
-.author-donate-btn {
-  font-size: 13px;
-  padding: 8px 18px;
-  width: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+  text-align: left;
+  width: 100%;
 }
 
 .author-articles {
@@ -3446,8 +3452,18 @@ img{
     height: 52px;
   }
 
+  .author-name-row {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
   .author-name {
     font-size: 19px;
+  }
+
+  .author-donate-btn {
+    font-size: 12px;
+    padding: 5px 12px;
   }
 
   .author-stats {
@@ -3456,11 +3472,6 @@ img{
 
   .author-bio {
     font-size: 14px;
-  }
-
-  .author-donate-btn {
-    font-size: 12px;
-    padding: 6px 14px;
   }
 }
 
@@ -3484,8 +3495,20 @@ img{
     height: 56px;
   }
 
+  .author-name-row {
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+
   .author-name {
     font-size: 18px;
+    text-align: center;
+  }
+
+  .author-donate-btn {
+    font-size: 12px;
+    padding: 5px 14px;
   }
 
   .author-stats {
@@ -3496,16 +3519,6 @@ img{
   .author-bio {
     font-size: 14px;
     text-align: left;
-  }
-
-  .author-donate-action {
-    display: flex;
-    justify-content: center;
-  }
-
-  .author-donate-btn {
-    font-size: 12px;
-    padding: 6px 14px;
   }
 }
 
