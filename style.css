@@ -4293,6 +4293,67 @@ img{
 
 
 /* =========================================================
+   FEEDBACK CARD
+   ========================================================= */
+
+.feedback-card {
+  margin-top: 16px;
+  padding: 20px 22px;
+  background: var(--paper-dim);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  text-align: center;
+}
+
+.feedback-title {
+  font-family: 'Fraunces', serif;
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0 0 8px 0;
+}
+
+.feedback-desc {
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  color: var(--ink-soft);
+  margin-bottom: 12px;
+  line-height: 1.5;
+}
+
+.feedback-btn {
+  width: 100%;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 10px 14px;
+  border-radius: var(--radius);
+}
+
+.feedback-hint {
+  font-family: 'Inter', sans-serif;
+  font-size: 11px;
+  color: var(--ink-soft);
+  margin-top: 8px;
+}
+
+
+/* =========================================================
+   FEEDBACK DIALOG
+   ========================================================= */
+
+.feedback-dialog .profile-dialog-text {
+  text-align: left;
+}
+
+.feedback-dialog .profile-bio-input {
+  min-height: 120px;
+}
+
+.feedback-dialog .profile-dialog-actions {
+  margin-top: 4px;
+}
+
+
+/* =========================================================
    SUBSCRIBERS — MOBILE
    ========================================================= */
 
