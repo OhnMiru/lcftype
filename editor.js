@@ -312,7 +312,7 @@ function renderEditor() {
     ></div>
 
     <!-- ===================================================
-         ПЛАВАЮЩАЯ ПАНЕЛЬ ИРОВАНИЯ
+         ПЛАВАЮЩАЯ ПАНЕЛЬ ФОРМАТИРОВАНИЯ
          =================================================== -->
 
     <div id="floatingToolbar" class="floating-toolbar">
@@ -364,7 +364,7 @@ function renderEditor() {
 
 
   // =======================================================
-  // Плавающая панель ирования
+  // Плавающая панель форматирования
   // =======================================================
 
   document
@@ -1278,7 +1278,7 @@ function updateDraftBanner() {
 
 
 // =========================================================
-// ИРОВАНИЕ ТЕКСТА
+// ФОРМАТИРОВАНИЕ ТЕКСТА
 // =========================================================
 
 const CUSTOM_TAGS = {
@@ -1294,29 +1294,91 @@ const NATIVE_COMMANDS = new Set([
   'strikeThrough'
 ]);
 
+// Состояние активного форматирования для печати
+let pendingFormat = null;
+
 function applyFormatCommand(cmd) {
   if (!activeBlockEl) {
     showToast('Нажмите на текст, чтобы начать редактирование');
     return;
   }
 
+  // Даем фокус блоку
+  activeBlockEl.focus();
+
   const selection = window.getSelection();
 
-  // Если нет выделения — показываем подсказку
-  if (!selection || selection.isCollapsed) {
-    showToast('Выделите текст, чтобы применить ирование');
+  // Если есть выделение — применяем форматирование к выделению
+  if (selection && !selection.isCollapsed && activeBlockEl.contains(selection.anchorNode)) {
+    if (cmd === 'removeFormat') {
+      removeAllFormatting(activeBlockEl, selection);
+    } else if (NATIVE_COMMANDS.has(cmd)) {
+      document.execCommand(cmd, false, null);
+    } else if (CUSTOM_TAGS[cmd]) {
+      toggleCustomTag(cmd, selection);
+    }
+
+    activeBlockEl.dispatchEvent(new Event('input'));
+    updateFloatingToolbarButtons();
     return;
   }
 
-  // Проверяем, что выделение внутри активного блока
-  if (!activeBlockEl.contains(selection.anchorNode)) {
-    showToast('Выделите текст внутри абзаца');
-    return;
-  }
-
+  // Нет выделения — включаем режим печати с форматированием
   if (cmd === 'removeFormat') {
-    removeAllFormatting(activeBlockEl, selection);
-  } else if (NATIVE_COMMANDS.has(cmd)) {
+    // Обычный текст — сбрасываем pending формат
+    pendingFormat = null;
+    showToast('Режим форматирования отключен');
+    updateFloatingToolbarButtons();
+    return;
+  }
+
+  // Переключаем pending формат
+  if (pendingFormat === cmd) {
+    pendingFormat = null;
+    showToast('Режим форматирования отключен');
+  } else {
+    pendingFormat = cmd;
+    const labels = {
+      bold: 'Жирный',
+      italic: 'Курсив',
+      underline: 'Подчёркнутый',
+      strikeThrough: 'Зачёркнутый',
+      mono: 'Моноширинный',
+      blockquote: 'Цитата',
+      spoiler: 'Скрытый'
+    };
+    showToast(`Режим: ${labels[cmd] || cmd}`);
+  }
+
+  updateFloatingToolbarButtons();
+}
+
+// Функция для применения pending формата при вводе текста
+function applyPendingFormat(inputEvent) {
+  if (!pendingFormat || !activeBlockEl) {
+    return;
+  }
+
+  const selection = window.getSelection();
+  if (!selection || selection.isCollapsed) {
+    return;
+  }
+
+  const range = selection.getRangeAt(0);
+  if (!activeBlockEl.contains(range.commonAncestorContainer)) {
+    return;
+  }
+
+  // Проверяем, что выделение — это только что введенный текст
+  // (не выделение мышкой)
+  const text = range.toString();
+  if (!text || text.length > 50) {
+    return;
+  }
+
+  // Применяем форматирование к введенному тексту
+  const cmd = pendingFormat;
+  if (NATIVE_COMMANDS.has(cmd)) {
     document.execCommand(cmd, false, null);
   } else if (CUSTOM_TAGS[cmd]) {
     toggleCustomTag(cmd, selection);
@@ -1325,6 +1387,74 @@ function applyFormatCommand(cmd) {
   activeBlockEl.dispatchEvent(new Event('input'));
   updateFloatingToolbarButtons();
 }
+
+// Перехватываем ввод текста для применения pending формата
+document.addEventListener('input', (e) => {
+  const blockText = e.target.closest('.block-text');
+  if (blockText && pendingFormat) {
+    applyPendingFormat(e);
+  }
+});
+
+// Обработка двойного Enter для отключения кастомных тегов
+let enterPressCount = 0;
+let enterPressTimer = null;
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    const blockText = e.target.closest('.block-text');
+    if (!blockText) return;
+
+    enterPressCount++;
+
+    if (enterPressTimer) {
+      clearTimeout(enterPressTimer);
+      enterPressTimer = null;
+    }
+
+    // Двойной Enter
+    if (enterPressCount >= 2) {
+      enterPressCount = 0;
+      e.preventDefault();
+
+      // Отключаем кастомные теги (mono, blockquote, spoiler)
+      const selection = window.getSelection();
+      if (selection && selection.rangeCount) {
+        const range = selection.getRangeAt(0);
+        const container = range.commonAncestorContainer;
+
+        // Проверяем, находимся ли мы внутри кастомного тега
+        let hasCustomTag = false;
+        Object.entries(CUSTOM_TAGS).forEach(([cmd, { tag, className }]) => {
+          const el = findAncestorTag(container, tag, className);
+          if (el) {
+            hasCustomTag = true;
+            unwrapElement(el);
+          }
+        });
+
+        if (hasCustomTag) {
+          showToast('Форматирование снято (моно/цитата/спойлер)');
+          // Если pending формат был одним из кастомных, сбрасываем его
+          if (pendingFormat && CUSTOM_TAGS[pendingFormat]) {
+            pendingFormat = null;
+          }
+          updateFloatingToolbarButtons();
+        }
+      }
+
+      // Вставляем обычный перенос строки
+      document.execCommand('insertLineBreak', false, null);
+      return;
+    }
+
+    // Одиночный Enter — сбрасываем счетчик через 300ms
+    enterPressTimer = setTimeout(() => {
+      enterPressCount = 0;
+      enterPressTimer = null;
+    }, 300);
+  }
+});
 
 // ---------------------------------------------------------
 // Обернуть/снять кастомный тег (code / spoiler / blockquote)
@@ -1399,10 +1529,9 @@ function unwrapElement(el) {
   parent.removeChild(el);
 }
 
-// =========================================================
-// ИСПРАВЛЕННАЯ версия: полный сброс форматирования
-// (замените старую функцию removeAllFormatting на эту)
-// =========================================================
+// ---------------------------------------------------------
+// Полный сброс форматирования (только в пределах выделения)
+// ---------------------------------------------------------
 
 function removeAllFormatting(blockEl, selection) {
   if (!selection || selection.rangeCount === 0) {
@@ -1421,14 +1550,10 @@ function removeAllFormatting(blockEl, selection) {
     return;
   }
 
-  // Удаляем выделённый контент.
-  // Точка вставки может остаться "внутри" тега форматирования —
-  // это нормально, мы разрежем его ниже.
+  // Удаляем выделенный контент
   range.deleteContents();
 
-  // Поднимаем точку вставки до уровня blockEl, разрезая по пути
-  // все теги форматирования (b, i, u, code, span, blockquote и т.д.),
-  // чтобы новый текст не оказался их потомком.
+  // Поднимаем точку вставки до уровня blockEl
   const point = splitAncestorsUpTo(
     range.startContainer,
     range.startOffset,
@@ -1446,7 +1571,7 @@ function removeAllFormatting(blockEl, selection) {
     point.container.appendChild(textNode);
   }
 
-  // Убираем опустевшие теги форматирования, оставшиеся после разреза
+  // Убираем опустевшие теги форматирования
   cleanupEmptyInlineTags(blockEl);
 
   // Ставим курсор после вставленного текста
@@ -1466,11 +1591,6 @@ function removeAllFormatting(blockEl, selection) {
 
   updateFloatingToolbarButtons();
 }
-
-// ---------------------------------------------------------
-// Поднимает точку (container, offset) до уровня `boundary`,
-// разрезая по пути все элементы-предки на "до" и "после"
-// ---------------------------------------------------------
 
 function splitAncestorsUpTo(container, offset, boundary) {
   let node = container;
@@ -1493,7 +1613,6 @@ function splitAncestorsUpTo(container, offset, boundary) {
       node = parent;
 
     } else {
-      // Разрезаем элемент: всё что после offset — в клон-"хвост"
       const clone = node.cloneNode(false);
 
       while (node.childNodes[off]) {
@@ -1513,10 +1632,6 @@ function splitAncestorsUpTo(container, offset, boundary) {
   return { container: node, offset: off };
 }
 
-// ---------------------------------------------------------
-// Убирает опустевшие теги форматирования после разреза
-// ---------------------------------------------------------
-
 function cleanupEmptyInlineTags(blockEl) {
   const tags = [
     'B', 'STRONG', 'I', 'EM', 'U', 'S', 'STRIKE',
@@ -1530,18 +1645,16 @@ function cleanupEmptyInlineTags(blockEl) {
   });
 }
 
+
 // =========================================================
 // ПЛАВАЮЩАЯ ПАНЕЛЬ ФОРМАТИРОВАНИЯ
 // =========================================================
 
-// Инициализация плавающей панели
 function initFloatingToolbar() {
-  // Обновляем состояние кнопок при изменении выделения
   document.addEventListener('selectionchange', () => {
     updateFloatingToolbarButtons();
   });
 
-  // При клике на блок текста обновляем кнопки
   document.addEventListener('click', (e) => {
     const blockText = e.target.closest('.block-text');
     if (blockText) {
@@ -1549,13 +1662,11 @@ function initFloatingToolbar() {
     }
   });
 
-  // При отпускании клавиши обновляем кнопки
   document.addEventListener('keyup', () => {
     setTimeout(updateFloatingToolbarButtons, 10);
   });
 }
 
-// Обновить активные кнопки в плавающей панели
 function updateFloatingToolbarButtons() {
   const nativeCommands = ['bold', 'italic', 'underline', 'strikeThrough'];
 
@@ -1567,11 +1678,12 @@ function updateFloatingToolbarButtons() {
         try {
           isActive = document.queryCommandState(cmd);
         } catch (e) {}
+        // Также подсвечиваем, если это pending формат
+        isActive = isActive || (pendingFormat === cmd);
         btn.classList.toggle('active', isActive);
       });
   });
 
-  // Для кастомных тегов
   const selection = window.getSelection();
 
   Object.entries(CUSTOM_TAGS).forEach(([cmd, { tag, className }]) => {
@@ -1581,6 +1693,9 @@ function updateFloatingToolbarButtons() {
       const range = selection.getRangeAt(0);
       isActive = !!findAncestorTag(range.commonAncestorContainer, tag, className);
     }
+
+    // Также подсвечиваем, если это pending формат
+    isActive = isActive || (pendingFormat === cmd);
 
     document
       .querySelectorAll(`#floatingToolbar [data-cmd="${cmd}"]`)
