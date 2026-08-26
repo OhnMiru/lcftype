@@ -1399,9 +1399,10 @@ function unwrapElement(el) {
   parent.removeChild(el);
 }
 
-// ---------------------------------------------------------
-// Полный сброс форматирования (только в пределах выделения)
-// ---------------------------------------------------------
+// =========================================================
+// ИСПРАВЛЕННАЯ версия: полный сброс форматирования
+// (замените старую функцию removeAllFormatting на эту)
+// =========================================================
 
 function removeAllFormatting(blockEl, selection) {
   if (!selection || selection.rangeCount === 0) {
@@ -1409,59 +1410,124 @@ function removeAllFormatting(blockEl, selection) {
   }
 
   const range = selection.getRangeAt(0);
-  
-  // Проверяем, что выделение находится внутри activeBlockEl
+
   if (!blockEl.contains(range.commonAncestorContainer)) {
     return;
   }
 
-  // Получаем выделенный текст
   const selectedText = range.toString();
-  
+
   if (!selectedText.trim()) {
     return;
   }
 
-  // Удаляем выделение из DOM
+  // Удаляем выделённый контент.
+  // Точка вставки может остаться "внутри" тега форматирования —
+  // это нормально, мы разрежем его ниже.
   range.deleteContents();
-  
-  // Создаем текстовый узел с чистым текстом
-  const textNode = document.createTextNode(selectedText);
-  
-  // Вставляем его обратно
-  range.insertNode(textNode);
 
-  // Снимаем выделение
-  selection.removeAllRanges();
+  // Поднимаем точку вставки до уровня blockEl, разрезая по пути
+  // все теги форматирования (b, i, u, code, span, blockquote и т.д.),
+  // чтобы новый текст не оказался их потомком.
+  const point = splitAncestorsUpTo(
+    range.startContainer,
+    range.startOffset,
+    blockEl
+  );
+
+  const textNode = document.createTextNode(selectedText);
+
+  if (point.container.childNodes[point.offset]) {
+    point.container.insertBefore(
+      textNode,
+      point.container.childNodes[point.offset]
+    );
+  } else {
+    point.container.appendChild(textNode);
+  }
+
+  // Убираем опустевшие теги форматирования, оставшиеся после разреза
+  cleanupEmptyInlineTags(blockEl);
 
   // Ставим курсор после вставленного текста
   const newRange = document.createRange();
-  
-  // Если есть следующий узел, ставим курсор перед ним
-  if (textNode.nextSibling) {
-    newRange.setStartBefore(textNode.nextSibling);
-    newRange.collapse(true);
-  } else {
-    // Иначе ставим в конец блока
-    newRange.selectNodeContents(blockEl);
-    newRange.collapse(false);
-  }
-  
+  newRange.setStartAfter(textNode);
+  newRange.collapse(true);
+  selection.removeAllRanges();
   selection.addRange(newRange);
 
-  // Сохраняем изменения в state.draft напрямую
+  // Сохраняем изменения в state.draft
   const blockIndex = parseInt(blockEl.dataset.i);
   if (!isNaN(blockIndex) && state.draft.blocks[blockIndex]) {
-    // Получаем чистый HTML блока без лишних тегов
     const cleanHtml = sanitizeHtml(blockEl.innerHTML);
     state.draft.blocks[blockIndex].html = cleanHtml;
-    
-    // Сохраняем черновик
     autoSaveDraft();
   }
 
-  // Обновляем кнопки
   updateFloatingToolbarButtons();
+}
+
+// ---------------------------------------------------------
+// Поднимает точку (container, offset) до уровня `boundary`,
+// разрезая по пути все элементы-предки на "до" и "после"
+// ---------------------------------------------------------
+
+function splitAncestorsUpTo(container, offset, boundary) {
+  let node = container;
+  let off = offset;
+
+  while (node !== boundary) {
+    const parent = node.parentNode;
+
+    if (!parent) {
+      break;
+    }
+
+    if (node.nodeType === Node.TEXT_NODE) {
+      if (off > 0 && off < node.nodeValue.length) {
+        node.splitText(off);
+      }
+
+      const idx = Array.prototype.indexOf.call(parent.childNodes, node);
+      off = off === 0 ? idx : idx + 1;
+      node = parent;
+
+    } else {
+      // Разрезаем элемент: всё что после offset — в клон-"хвост"
+      const clone = node.cloneNode(false);
+
+      while (node.childNodes[off]) {
+        clone.appendChild(node.childNodes[off]);
+      }
+
+      if (clone.childNodes.length) {
+        parent.insertBefore(clone, node.nextSibling);
+      }
+
+      const idx = Array.prototype.indexOf.call(parent.childNodes, node);
+      off = idx + 1;
+      node = parent;
+    }
+  }
+
+  return { container: node, offset: off };
+}
+
+// ---------------------------------------------------------
+// Убирает опустевшие теги форматирования после разреза
+// ---------------------------------------------------------
+
+function cleanupEmptyInlineTags(blockEl) {
+  const tags = [
+    'B', 'STRONG', 'I', 'EM', 'U', 'S', 'STRIKE',
+    'CODE', 'SPAN', 'BLOCKQUOTE'
+  ];
+
+  blockEl.querySelectorAll(tags.join(',')).forEach(el => {
+    if (!el.textContent.trim() && !el.querySelector('img')) {
+      el.remove();
+    }
+  });
 }
 
 // =========================================================
