@@ -421,7 +421,7 @@ function renderEditor() {
 
 
   // =======================================================
-  // Панель форматирования (обычная)
+  // Панель форматирования — ИСПРАВЛЕНО ДЛЯ МОБИЛЬНЫХ
   // =======================================================
 
   document
@@ -430,26 +430,23 @@ function renderEditor() {
     )
     .forEach(btn => {
 
+      // Для десктопа — mousedown
       btn.addEventListener(
         'mousedown',
         e => {
-
           e.preventDefault();
-
-          if (!activeBlockEl) {
-            return;
-          }
-
-          document.execCommand(
-            btn.dataset.cmd,
-            false,
-            null
-          );
-
-          activeBlockEl.dispatchEvent(
-            new Event('input')
-          );
+          applyFormatting(btn.dataset.cmd);
         }
+      );
+
+      // Для мобильных — touchstart
+      btn.addEventListener(
+        'touchstart',
+        e => {
+          e.preventDefault();
+          applyFormatting(btn.dataset.cmd);
+        },
+        { passive: false }
       );
     });
 
@@ -649,6 +646,40 @@ function renderEditor() {
   // =======================================================
 
   initCustomToolbar();
+}
+
+
+// =========================================================
+// Применить форматирование — вынесено в отдельную функцию
+// =========================================================
+
+function applyFormatting(cmd) {
+  if (!activeBlockEl) {
+    showToast('Нажмите на текст, чтобы начать редактирование');
+    return;
+  }
+
+  // Проверяем, есть ли выделение
+  const selection = window.getSelection();
+  
+  // Если нет выделения, создаем его в текущем блоке
+  if (!selection || selection.isCollapsed) {
+    // Устанавливаем курсор в конец блока
+    const range = document.createRange();
+    range.selectNodeContents(activeBlockEl);
+    range.collapse(false);
+    selection.removeAllRanges();
+    selection.addRange(range);
+  }
+
+  // Применяем команду
+  document.execCommand(cmd, false, null);
+
+  // Обновляем содержимое блока
+  activeBlockEl.dispatchEvent(new Event('input'));
+
+  // Если есть кастомная плашка — обновляем ее
+  updateToolbarButtons();
 }
 
 
@@ -1426,13 +1457,9 @@ function applyCommandToSelection(cmd) {
   
   if (selection.isCollapsed) return;
   
-  const range = selection.getRangeAt(0);
-  
   document.execCommand(cmd, false, null);
   
-  selection.removeAllRanges();
-  selection.addRange(range);
-  
+  // Обновляем кнопки
   updateToolbarButtons();
 }
 
@@ -1455,50 +1482,39 @@ function closeToolbarDropdown() {
   }
 }
 
-// Инициализация кастомной плашки
+// Инициализация кастомной плашки — ИСПРАВЛЕНО ДЛЯ МОБИЛЬНЫХ
 function initCustomToolbar() {
   const toolbar = document.getElementById('customToolbar');
   if (!toolbar) return;
   
+  // Функция для обработки команд
+  function handleToolbarCommand(cmd) {
+    if (cmd === 'selectAll') {
+      document.execCommand('selectAll', false, null);
+      updateToolbarButtons();
+      return;
+    }
+    
+    if (cmd === 'cut' || cmd === 'copy' || cmd === 'paste') {
+      document.execCommand(cmd, false, null);
+      return;
+    }
+    
+    applyCommandToSelection(cmd);
+  }
+  
   // Привязываем события к кнопкам плашки
   document.querySelectorAll('#customToolbar [data-cmd]').forEach(btn => {
+    // Для десктопа
     btn.addEventListener('mousedown', (e) => {
       e.preventDefault();
-      
-      const cmd = btn.dataset.cmd;
-      
-      if (cmd === 'selectAll') {
-        document.execCommand('selectAll', false, null);
-        updateToolbarButtons();
-        return;
-      }
-      
-      if (cmd === 'cut' || cmd === 'copy' || cmd === 'paste') {
-        document.execCommand(cmd, false, null);
-        return;
-      }
-      
-      applyCommandToSelection(cmd);
+      handleToolbarCommand(btn.dataset.cmd);
     });
     
-    // Для мобильных — touch события
+    // Для мобильных
     btn.addEventListener('touchstart', (e) => {
       e.preventDefault();
-      
-      const cmd = btn.dataset.cmd;
-      
-      if (cmd === 'selectAll') {
-        document.execCommand('selectAll', false, null);
-        updateToolbarButtons();
-        return;
-      }
-      
-      if (cmd === 'cut' || cmd === 'copy' || cmd === 'paste') {
-        document.execCommand(cmd, false, null);
-        return;
-      }
-      
-      applyCommandToSelection(cmd);
+      handleToolbarCommand(btn.dataset.cmd);
     }, { passive: false });
   });
   
