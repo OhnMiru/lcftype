@@ -30,13 +30,33 @@ async function saveProfile(username, avatar = null, bio = null) {
 
 
 // =========================================================
-// Проверить профиль
+// Проверить профиль (создать, если нет)
 // =========================================================
 
 async function ensureProfile(ask = true) {
+  // Сначала пробуем получить профиль
   const p = await getProfile();
   if (p) return p;
-  return ask ? openUsernameDialog(null) : null;
+  
+  // Если профиля нет и ask = false — возвращаем null
+  if (!ask) return null;
+  
+  // Если профиля нет — открываем диалог создания ника
+  const newUsername = await openUsernameDialog(null);
+  
+  // Если пользователь отменил или не ввёл ник — возвращаем null
+  if (!newUsername) return null;
+  
+  // !!! ВАЖНО: Реально сохраняем профиль на сервер !!!
+  try {
+    const savedProfile = await saveProfile(newUsername, null, null);
+    showToast('Профиль создан ✅');
+    return savedProfile;
+  } catch (e) {
+    console.error('ensureProfile save error:', e);
+    showToast(e.message || 'Не удалось создать профиль');
+    return null;
+  }
 }
 
 
@@ -261,12 +281,10 @@ function openAvatarDialog(currentAvatar) {
     const preview = overlay.querySelector('.avatar-preview-container');
     let newAvatarDataUrl = null;
 
-    // Выбрать фото
     chooseBtn.addEventListener('click', () => {
       fileInput.click();
     });
 
-    // Обработка выбора файла
     fileInput.addEventListener('change', async (e) => {
       const file = e.target.files[0];
       if (!file) return;
@@ -296,25 +314,21 @@ function openAvatarDialog(currentAvatar) {
       }
     });
 
-    // Сохранить
     saveBtn.addEventListener('click', () => {
       resolve(newAvatarDataUrl);
       overlay.remove();
     });
 
-    // Удалить
     removeBtn?.addEventListener('click', () => {
       resolve(null);
       overlay.remove();
     });
 
-    // Отмена
     cancelBtn.addEventListener('click', () => {
       resolve('cancel');
       overlay.remove();
     });
 
-    // Закрытие по клику вне
     overlay.addEventListener('click', (e) => {
       if (e.target === overlay) {
         resolve('cancel');
@@ -386,7 +400,6 @@ function openBioDialog(currentBio) {
     const cancel = overlay.querySelector('#bioCancelBtn');
     const counter = overlay.querySelector('#bioCounter');
 
-    // Счетчик символов
     input.addEventListener('input', () => {
       counter.textContent = input.value.length;
     });
@@ -421,7 +434,6 @@ function openBioDialog(currentBio) {
       }
     };
 
-    // Закрытие по клику вне
     overlay.addEventListener('click', (e) => {
       if (e.target === overlay) {
         resolve('cancel');
@@ -434,7 +446,7 @@ function openBioDialog(currentBio) {
 
 
 // =========================================================
-// Диалог создания / изменения ника
+// Диалог создания / изменения ника (без тоста внутри!)
 // =========================================================
 
 function openUsernameDialog(currentUsername) {
@@ -519,9 +531,10 @@ function openUsernameDialog(currentUsername) {
       save.textContent = 'Сохраняем…';
 
       try {
+        // !!! ВАЖНО: Диалог возвращает только ник, НЕ сохраняет сам !!!
+        // Тост "Ник сохранён" убран — его показывает вызывающий код
         resolve(username);
         overlay.remove();
-        showToast('Ник сохранён');
       } catch (e) {
         showToast(e.message || 'Не удалось сохранить ник');
         save.disabled = false;
@@ -716,7 +729,9 @@ async function openProfile() {
       `;
 
       document.getElementById('createProfileBtn').onclick = async () => {
-        if (await ensureProfile(true)) {
+        // Используем исправленный ensureProfile — он теперь реально сохраняет!
+        const profile = await ensureProfile(true);
+        if (profile) {
           openProfile();
         }
       };
@@ -1035,3 +1050,11 @@ async function openProfile() {
     document.getElementById('retryProfileBtn')?.addEventListener('click', openProfile);
   }
 }
+
+
+// =========================================================
+// Экспорт для использования в других модулях
+// =========================================================
+
+window.ensureProfile = ensureProfile;
+window.openProfile = openProfile;
