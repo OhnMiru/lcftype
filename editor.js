@@ -583,6 +583,34 @@ function renderEditor() {
 
 
 // =========================================================
+// Сохранить текущее содержимое блоков в state
+// =========================================================
+
+function saveBlocksContent() {
+  const host = document.getElementById('blocksHost');
+  if (!host) return;
+
+  const d = state.draft;
+
+  // Сохраняем содержимое текстовых блоков
+  host.querySelectorAll('.block-text').forEach(el => {
+    const i = parseInt(el.dataset.i);
+    if (!isNaN(i) && d.blocks[i]?.type === 'text') {
+      d.blocks[i].html = sanitizeHtml(el.innerHTML);
+    }
+  });
+
+  // Сохраняем подписи изображений
+  host.querySelectorAll('.block-caption').forEach(el => {
+    const i = parseInt(el.dataset.i);
+    if (!isNaN(i) && d.blocks[i]?.type === 'image') {
+      d.blocks[i].caption = el.value;
+    }
+  });
+}
+
+
+// =========================================================
 // Добавить блок после указанного
 // =========================================================
 
@@ -590,6 +618,9 @@ function insertBlockAfter(
   index,
   block
 ) {
+  // Сначала сохраняем текущее содержимое
+  saveBlocksContent();
+
   state.draft.blocks.splice(
     index + 1,
     0,
@@ -691,7 +722,7 @@ function createBlockAddControls(
 
 
 // =========================================================
-// Рендер блоков
+// Рендер блоков (исправленная версия)
 // =========================================================
 
 function renderBlocks(
@@ -707,6 +738,11 @@ function renderBlocks(
   }
 
   const d = state.draft;
+
+  // =======================================================
+  // ВАЖНО: Сохраняем содержимое ДО перерисовки
+  // =======================================================
+  saveBlocksContent();
 
   const old =
     activeBlockEl;
@@ -1278,7 +1314,7 @@ function updateDraftBanner() {
 
 
 // =========================================================
-// ФОРМАТИРОВАНИЕ ТЕКСТА (исправленная версия)
+// ФОРМАТИРОВАНИЕ ТЕКСТА
 // =========================================================
 
 const CUSTOM_TAGS = {
@@ -1350,9 +1386,6 @@ function applyFormatCommand(cmd) {
   }
 
   if (NATIVE_COMMANDS.has(cmd)) {
-    // Браузер сам запомнит стиль для следующих введённых
-    // символов — это штатное поведение execCommand
-    // при "схлопнутом" выделении.
     document.execCommand(cmd, false, null);
     updateFloatingToolbarButtons();
     return;
@@ -1792,6 +1825,9 @@ function updateFloatingToolbarButtons() {
 // =========================================================
 
 async function publishDraft() {
+  // Сначала сохраняем текущее содержимое
+  saveBlocksContent();
+
   const d = state.draft;
 
   const hasContent =
