@@ -391,7 +391,7 @@ function renderEditor() {
         </button>
         
         <button data-cmd="mono">
-          <span class="dropdown-icon">`code`</span>
+          <span class="dropdown-icon">&#96;code&#96;</span>
           Моно
         </button>
         
