@@ -1297,6 +1297,9 @@ const NATIVE_COMMANDS = new Set([
 // Состояние активного форматирования для печати
 let pendingFormat = null;
 
+// Флаг, чтобы не применять pending формат к уже отформатированному тексту
+let isApplyingFormat = false;
+
 function applyFormatCommand(cmd) {
   if (!activeBlockEl) {
     showToast('Нажмите на текст, чтобы начать редактирование');
@@ -1325,29 +1328,16 @@ function applyFormatCommand(cmd) {
 
   // Нет выделения — включаем режим печати с форматированием
   if (cmd === 'removeFormat') {
-    // Обычный текст — сбрасываем pending формат
     pendingFormat = null;
-    showToast('Режим форматирования отключен');
     updateFloatingToolbarButtons();
     return;
   }
 
-  // Переключаем pending формат
+  // Переключаем pending формат (без тостов)
   if (pendingFormat === cmd) {
     pendingFormat = null;
-    showToast('Режим форматирования отключен');
   } else {
     pendingFormat = cmd;
-    const labels = {
-      bold: 'Жирный',
-      italic: 'Курсив',
-      underline: 'Подчёркнутый',
-      strikeThrough: 'Зачёркнутый',
-      mono: 'Моноширинный',
-      blockquote: 'Цитата',
-      spoiler: 'Скрытый'
-    };
-    showToast(`Режим: ${labels[cmd] || cmd}`);
   }
 
   updateFloatingToolbarButtons();
@@ -1355,7 +1345,7 @@ function applyFormatCommand(cmd) {
 
 // Функция для применения pending формата при вводе текста
 function applyPendingFormat(inputEvent) {
-  if (!pendingFormat || !activeBlockEl) {
+  if (!pendingFormat || !activeBlockEl || isApplyingFormat) {
     return;
   }
 
@@ -1369,19 +1359,45 @@ function applyPendingFormat(inputEvent) {
     return;
   }
 
-  // Проверяем, что выделение — это только что введенный текст
-  // (не выделение мышкой)
+  // Получаем текст, который только что ввели
   const text = range.toString();
+  
+  // Проверяем, что это действительно новый текст (не выделение мышкой)
+  // и что он не слишком длинный (чтобы не применять формат к вставленному тексту)
   if (!text || text.length > 50) {
     return;
   }
 
-  // Применяем форматирование к введенному тексту
+  // Проверяем, не находится ли текст уже внутри нужного тега
   const cmd = pendingFormat;
+  let alreadyFormatted = false;
+  
   if (NATIVE_COMMANDS.has(cmd)) {
-    document.execCommand(cmd, false, null);
+    try {
+      alreadyFormatted = document.queryCommandState(cmd);
+    } catch (e) {}
   } else if (CUSTOM_TAGS[cmd]) {
-    toggleCustomTag(cmd, selection);
+    const { tag, className } = CUSTOM_TAGS[cmd];
+    const el = findAncestorTag(range.commonAncestorContainer, tag, className);
+    alreadyFormatted = !!el;
+  }
+
+  // Если текст уже отформатирован нужным стилем, не применяем повторно
+  if (alreadyFormatted) {
+    return;
+  }
+
+  // Применяем форматирование к введенному тексту
+  isApplyingFormat = true;
+  
+  try {
+    if (NATIVE_COMMANDS.has(cmd)) {
+      document.execCommand(cmd, false, null);
+    } else if (CUSTOM_TAGS[cmd]) {
+      toggleCustomTag(cmd, selection);
+    }
+  } finally {
+    isApplyingFormat = false;
   }
 
   activeBlockEl.dispatchEvent(new Event('input'));
@@ -1392,7 +1408,10 @@ function applyPendingFormat(inputEvent) {
 document.addEventListener('input', (e) => {
   const blockText = e.target.closest('.block-text');
   if (blockText && pendingFormat) {
-    applyPendingFormat(e);
+    // Используем setTimeout, чтобы дать браузеру вставить текст
+    setTimeout(() => {
+      applyPendingFormat(e);
+    }, 10);
   }
 });
 
@@ -1434,7 +1453,6 @@ document.addEventListener('keydown', (e) => {
         });
 
         if (hasCustomTag) {
-          showToast('Форматирование снято (моно/цитата/спойлер)');
           // Если pending формат был одним из кастомных, сбрасываем его
           if (pendingFormat && CUSTOM_TAGS[pendingFormat]) {
             pendingFormat = null;
