@@ -21,6 +21,7 @@
   
   --indigo-deep:color-mix(in srgb, var(--indigo) 80%, var(--ink));
   --indigo-alpha-06:color-mix(in srgb, var(--indigo) 6%, transparent);
+  --indigo-alpha-08:color-mix(in srgb, var(--indigo) 8%, transparent);
   --indigo-alpha-09:color-mix(in srgb, var(--indigo) 9%, transparent);
   --indigo-alpha-10:color-mix(in srgb, var(--indigo) 10%, transparent);
   
@@ -1769,85 +1770,279 @@ img{
 
 
 /* =========================================================
-   ARTICLE REACTIONS — MOBILE
+   CUSTOM TOOLBAR — в стиле Telegram
    ========================================================= */
 
-@media (max-width:520px){
+.custom-toolbar {
+  position: absolute;
+  z-index: 100;
+  display: none;
+  align-items: center;
+  gap: 2px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 6px 10px;
+  box-shadow: 0 4px 24px var(--shadow-dark);
+  pointer-events: auto;
+  animation: toolbarPop 0.15s ease;
+  font-family: 'Inter', sans-serif;
+}
 
-  .article-reactions{
-    margin-top: 10px;
-    padding: 12px 12px;
+@keyframes toolbarPop {
+  from {
+    opacity: 0;
+    transform: scale(0.92) translateY(4px);
   }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
 
-  .article-reactions-list{
-    gap:6px;
-  }
+/* Стрелка (треугольник) */
+.custom-toolbar::after {
+  content: '';
+  position: absolute;
+  bottom: -7px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 7px solid transparent;
+  border-right: 7px solid transparent;
+  border-top: 7px solid var(--paper);
+  filter: drop-shadow(0 1px 2px var(--shadow-light));
+}
 
-  .article-reaction{
-    min-height: 36px;
-    padding: 5px 4px;
-    gap:3px;
-    border-radius:7px;
-  }
+.custom-toolbar button {
+  min-width: 34px;
+  height: 34px;
+  border-radius: 6px;
+  font-family: 'Fraunces', serif;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  background: transparent;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
+  white-space: nowrap;
+}
 
-  .article-reaction-emoji{
-    font-size: 17px;
-  }
+.custom-toolbar button:hover {
+  background: var(--paper-dim);
+  color: var(--ink);
+}
 
-  .article-reaction-count{
-    font-size:10px;
-  }
+.custom-toolbar button.active {
+  background: var(--indigo);
+  color: #fff;
+}
+
+.custom-toolbar button[data-cmd="underline"] {
+  text-decoration: underline;
+}
+
+.custom-toolbar button[data-cmd="italic"] {
+  font-style: italic;
+}
+
+.custom-toolbar button[data-cmd="bold"] {
+  font-weight: 700;
+}
+
+.custom-toolbar button[data-cmd="strikeThrough"] {
+  text-decoration: line-through;
+}
+
+.custom-toolbar button[data-cmd="mono"] {
+  font-family: 'Courier New', monospace;
+}
+
+.custom-toolbar button[data-cmd="spoiler"] {
+  background: var(--ink);
+  color: var(--paper);
+  border-radius: 4px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+.custom-toolbar button[data-cmd="spoiler"].active {
+  background: var(--indigo);
+  color: #fff;
+}
+
+.custom-toolbar button[data-cmd="blockquote"] {
+  font-size: 18px;
+  font-weight: 400;
+  font-family: 'Georgia', serif;
+}
+
+/* Разделитель */
+.toolbar-divider {
+  width: 1px;
+  height: 24px;
+  background: var(--line);
+  margin: 0 4px;
+}
+
+/* Кнопка "Ещё" */
+.toolbar-more-btn {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -1px;
+  min-width: 28px !important;
+  padding: 0 4px !important;
 }
 
 
 /* =========================================================
-   ARTICLE REACTIONS — VERY SMALL PHONES
+   TOOLBAR DROPDOWN (выпадающее меню)
    ========================================================= */
 
-@media (max-width:380px){
+.toolbar-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 200px;
+  padding: 6px 0;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px var(--shadow-dark);
+  animation: dropdownPop 0.15s ease;
+  z-index: 101;
+}
 
-  .article-reactions{
-    padding: 10px 10px;
+@keyframes dropdownPop {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(-4px);
   }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
 
-  .article-reactions-list{
-    gap:4px;
-  }
+.toolbar-dropdown button {
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--ink);
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  justify-content: flex-start;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
 
-  .article-reaction{
-    min-height: 34px;
-    padding: 4px 3px;
-  }
+.toolbar-dropdown button:hover {
+  background: var(--paper-dim);
+}
 
-  .article-reaction-emoji{
-    font-size: 16px;
-  }
+.toolbar-dropdown button .dropdown-icon {
+  width: 24px;
+  text-align: center;
+  font-size: 15px;
+  flex-shrink: 0;
+}
 
-  .article-reaction-count{
-    font-size:9px;
-  }
+.toolbar-dropdown .dropdown-divider {
+  height: 1px;
+  margin: 4px 12px;
+  background: var(--line);
+}
+
+.toolbar-dropdown .dropdown-danger {
+  color: var(--danger);
+}
+
+.toolbar-dropdown .dropdown-danger:hover {
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
 }
 
 
 /* =========================================================
-   DONATE & SHARE — MOBILE
+   CUSTOM TOOLBAR — MOBILE
    ========================================================= */
 
 @media (max-width: 520px) {
-  .donate-box {
-    margin-top: 8px;
-    padding: 10px 14px;
+  .custom-toolbar {
+    position: fixed !important;
+    bottom: 20px !important;
+    left: 50% !important;
+    transform: translateX(-50%) !important;
+    top: auto !important;
+    width: calc(100% - 32px) !important;
+    max-width: 420px !important;
+    padding: 8px 12px !important;
+    border-radius: 14px !important;
+    box-shadow: 0 4px 24px var(--shadow-dark) !important;
   }
-
-  .share-box {
-    margin-top: 8px;
-    padding: 10px 14px;
+  
+  .custom-toolbar::after {
+    display: none;
   }
+  
+  .custom-toolbar button {
+    min-width: 38px;
+    height: 38px;
+    font-size: 16px;
+  }
+  
+  .toolbar-more-btn {
+    min-width: 32px !important;
+    font-size: 20px !important;
+  }
+  
+  .toolbar-dropdown {
+    position: fixed;
+    bottom: 70px;
+    right: 16px;
+    left: 16px;
+    width: auto;
+    max-width: 400px;
+    margin: 0 auto;
+    border-radius: 14px;
+  }
+  
+  .toolbar-dropdown button {
+    min-height: 42px;
+    font-size: 14px;
+    padding: 8px 16px;
+  }
+}
 
-  .donate-btn,
-  .share-box .btn {
-    font-size: 12px;
-    padding: 8px 12px;
+/* =========================================================
+   CUSTOM TOOLBAR — VERY SMALL
+   ========================================================= */
+
+@media (max-width: 380px) {
+  .custom-toolbar {
+    padding: 6px 8px !important;
+    gap: 1px !important;
+  }
+  
+  .custom-toolbar button {
+    min-width: 34px;
+    height: 34px;
+    font-size: 14px;
+  }
+  
+  .toolbar-more-btn {
+    min-width: 28px !important;
+    font-size: 18px !important;
   }
 }
 
