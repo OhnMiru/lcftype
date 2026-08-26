@@ -218,7 +218,7 @@ function renderAuthorPage(profile, articles, isSubscribed = false, isOwnProfile 
           await callTelegramApi('subscribe', { authorId });
           subscribeBtn.textContent = '✓ Подписан';
           subscribeBtn.className = 'btn btn-secondary author-subscribe-btn';
-          showToast('Вы подписались на автора! 🔔');
+          showToast('Вы подписались на автора!');
         }
       } catch (e) {
         console.error('subscription error:', e);
