@@ -149,7 +149,7 @@ function renderAuthorPage(profile, articles, isSubscribed = false, isOwnProfile 
                 id="subscribeBtn"
                 type="button"
               >
-                ${isSubscribed ? '✓ Подписан' : '➕ Подписаться'}
+                ${isSubscribed ? 'Подписан' : 'Подписаться'}
               </button>
             ` : ''}
             ${hasDonations ? `
