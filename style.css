@@ -6,6 +6,9 @@
    ========================================================= */
 
 :root{
+  /* Явно говорим браузеру, что мы поддерживаем тёмную тему */
+  color-scheme: light dark;
+  
   /* Основные цвета — от Telegram */
   --paper:var(--tg-theme-bg-color, #FAF9F5);
   --paper-dim:var(--tg-theme-secondary-bg-color, #F1EFE8);
@@ -1081,12 +1084,14 @@ img{
   background:transparent;
   padding:18px 0 12px;
   color:var(--ink);
+  -webkit-text-fill-color:var(--ink);
   word-break:break-word;
 }
 
 .editor-title-input::placeholder{
   color:var(--ink-soft);
   opacity:0.5;
+  -webkit-text-fill-color:var(--ink-soft);
 }
 
 
@@ -1210,6 +1215,7 @@ img{
   font-size:17px;
   line-height:1.7;
   color:var(--ink);
+  -webkit-text-fill-color:var(--ink);
   outline:none;
   padding:2px 0;
   word-break:break-word;
@@ -1218,6 +1224,7 @@ img{
 .block-text:empty:before{
   content:attr(data-placeholder);
   color:var(--ink-soft);
+  -webkit-text-fill-color:var(--ink-soft);
   opacity:0.5;
 }
 
@@ -1259,33 +1266,13 @@ img{
   font-family:'Inter',sans-serif;
   font-size:12.5px;
   color:var(--ink-soft);
+  -webkit-text-fill-color:var(--ink-soft);
   border:none;
   outline:none;
   background:transparent;
   margin-top:6px;
   font-style:italic;
   padding:0;
-}
-
-.block-remove{
-  position:absolute;
-  top:8px;
-  right:8px;
-  z-index:2;
-  width:28px;
-  height:28px;
-  border-radius:50%;
-  background:color-mix(in srgb, var(--ink) 55%, transparent);
-  color:#fff;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  font-size:14px;
-  transition:opacity .15s ease;
-}
-
-.block-remove:hover{
-  opacity:0.8;
 }
 
 
@@ -1313,6 +1300,7 @@ img{
   border-radius:6px;
   background:transparent;
   color:var(--ink-soft);
+  -webkit-text-fill-color:var(--ink-soft);
   font-family:'Inter',sans-serif;
   font-size:11px;
   font-weight:600;
@@ -1328,6 +1316,7 @@ img{
 .block-add-btn:hover{
   background:var(--paper-dim);
   color:var(--indigo);
+  -webkit-text-fill-color:var(--indigo);
   border-color:var(--indigo);
 }
 
@@ -1760,6 +1749,7 @@ img{
   font-size: 14px;
   font-weight: 500;
   color: var(--ink-soft);
+  -webkit-text-fill-color: var(--ink-soft);
   background: transparent;
   border: none;
   transition: all 0.15s ease;
@@ -1772,11 +1762,13 @@ img{
 .floating-toolbar button:hover {
   background: var(--paper-dim);
   color: var(--ink);
+  -webkit-text-fill-color: var(--ink);
 }
 
 .floating-toolbar button.active {
   background: var(--indigo);
   color: #fff;
+  -webkit-text-fill-color: #fff;
 }
 
 .floating-toolbar button:active {
@@ -1828,6 +1820,7 @@ img{
 .floating-toolbar button[data-cmd="spoiler"].active {
   background: var(--ink);
   color: var(--paper);
+  -webkit-text-fill-color: var(--paper);
 }
 
 .floating-toolbar .toolbar-divider {
@@ -1842,11 +1835,13 @@ img{
   font-weight: 700;
   font-size: 14px;
   color: var(--ink-soft);
+  -webkit-text-fill-color: var(--ink-soft);
   border: 1px solid transparent;
 }
 
 .floating-toolbar .remove-format-btn:hover {
   color: var(--danger);
+  -webkit-text-fill-color: var(--danger);
   border-color: var(--danger);
   background: color-mix(in srgb, var(--danger) 6%, transparent);
 }
@@ -2166,6 +2161,7 @@ img{
   border-radius: 10px;
   background: var(--paper);
   color: var(--ink);
+  -webkit-text-fill-color: var(--ink);
   font-family: 'Source Serif 4', serif;
   font-size: 15px;
   line-height: 1.6;
@@ -2181,6 +2177,7 @@ img{
 
 .profile-bio-input::placeholder {
   color: var(--ink-soft);
+  -webkit-text-fill-color: var(--ink-soft);
   opacity: 0.6;
 }
 
@@ -2233,6 +2230,7 @@ img{
   border-radius: 8px;
   background: var(--paper);
   color: var(--ink);
+  -webkit-text-fill-color: var(--ink);
   font-family: 'Inter', sans-serif;
   font-size: 14px;
   outline: none;
@@ -2245,6 +2243,7 @@ img{
 
 .donation-settings-input::placeholder {
   color: var(--ink-soft);
+  -webkit-text-fill-color: var(--ink-soft);
   opacity: 0.6;
 }
 
@@ -2552,6 +2551,7 @@ img{
   border-radius:10px;
   background:var(--paper);
   color:var(--ink);
+  -webkit-text-fill-color:var(--ink);
   font:inherit;
   font-size:16px;
   outline:none;
@@ -3027,6 +3027,7 @@ img{
   outline:none;
   background:var(--paper);
   color:var(--ink);
+  -webkit-text-fill-color:var(--ink);
   font-family:'Source Serif 4',serif;
   font-size:16px;
   line-height:1.5;
@@ -3042,6 +3043,7 @@ img{
 
 .comment-input::placeholder{
   color:var(--ink-soft);
+  -webkit-text-fill-color:var(--ink-soft);
   opacity:.65;
 }
 
