@@ -49,7 +49,22 @@ async function openAuthor(authorId, authorName) {
     const profile = result.profile;
     const articles = Array.isArray(result.articles) ? result.articles : [];
 
-    renderAuthorPage(profile, articles);
+    // Проверяем, подписан ли текущий пользователь на автора
+    let isSubscribed = false;
+    const isOwnProfile = tgUser && Number(tgUser.id) === Number(profile.telegram_id);
+
+    if (tgUser && !isOwnProfile) {
+      try {
+        const subResult = await callTelegramApi('is-subscribed', {
+          authorId: Number(profile.telegram_id)
+        });
+        isSubscribed = subResult.isSubscribed || false;
+      } catch (e) {
+        console.warn('check subscription error:', e);
+      }
+    }
+
+    renderAuthorPage(profile, articles, isSubscribed, isOwnProfile);
 
   } catch (error) {
     console.error('openAuthor:', error);
@@ -73,7 +88,7 @@ async function openAuthor(authorId, authorName) {
 // Рендер страницы автора
 // =========================================================
 
-function renderAuthorPage(profile, articles) {
+function renderAuthorPage(profile, articles, isSubscribed = false, isOwnProfile = false) {
   const main = document.getElementById('main');
 
   if (!main) return;
@@ -106,6 +121,15 @@ function renderAuthorPage(profile, articles) {
             <h1 class="author-name">
               ${escapeHtml(profile.username)}
             </h1>
+            ${!isOwnProfile ? `
+              <button
+                class="btn ${isSubscribed ? 'btn-secondary' : 'btn-primary'} author-subscribe-btn"
+                id="subscribeBtn"
+                type="button"
+              >
+                ${isSubscribed ? '✓ Подписан' : '➕ Подписаться'}
+              </button>
+            ` : ''}
           </div>
 
           <div class="author-stats">
@@ -128,7 +152,7 @@ function renderAuthorPage(profile, articles) {
           ` : ''}
 
           ${hasDonations ? `
-            <div class="author-donate-wrapper">
+            <div class="author-actions-row">
               <button
                 class="btn btn-primary author-donate-btn"
                 id="authorDonateBtn"
@@ -171,7 +195,42 @@ function renderAuthorPage(profile, articles) {
       window.open(donationLink, '_blank');
     });
   }
+
+  // Кнопка подписки
+  const subscribeBtn = document.getElementById('subscribeBtn');
+  if (subscribeBtn) {
+    subscribeBtn.addEventListener('click', async () => {
+      const authorId = profile.telegram_id;
+      const isCurrentlySubscribed = subscribeBtn.textContent.includes('Подписан');
+
+      subscribeBtn.disabled = true;
+      const originalText = subscribeBtn.textContent;
+
+      try {
+        if (isCurrentlySubscribed) {
+          // Отписаться
+          await callTelegramApi('unsubscribe', { authorId });
+          subscribeBtn.textContent = '➕ Подписаться';
+          subscribeBtn.className = 'btn btn-primary author-subscribe-btn';
+          showToast('Вы отписались от автора');
+        } else {
+          // Подписаться
+          await callTelegramApi('subscribe', { authorId });
+          subscribeBtn.textContent = '✓ Подписан';
+          subscribeBtn.className = 'btn btn-secondary author-subscribe-btn';
+          showToast('Вы подписались на автора! 🔔');
+        }
+      } catch (e) {
+        console.error('subscription error:', e);
+        showToast(e.message || 'Не удалось изменить подписку');
+        subscribeBtn.textContent = originalText;
+      } finally {
+        subscribeBtn.disabled = false;
+      }
+    });
+  }
 }
+
 
 // =========================================================
 // Карточка статьи на странице автора
