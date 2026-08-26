@@ -405,9 +405,6 @@ function renderEditor() {
   // =======================================================
   // Панель форматирования (верхняя, всегда видимая)
   // =======================================================
-  // Кнопки нижней плашки (#customToolbar) НЕ трогаем здесь —
-  // они привязываются один раз в initCustomToolbar(), чтобы
-  // не вешать по два обработчика на одну и ту же кнопку.
 
   document
     .querySelectorAll(
@@ -415,7 +412,9 @@ function renderEditor() {
     )
     .forEach(btn => {
 
-      const handler = (e) => {
+      // Используем только click, чтобы избежать двойных срабатываний
+      // на touch-устройствах (mousedown + touchstart)
+      btn.addEventListener('click', (e) => {
         e.preventDefault();
 
         if (!activeBlockEl) {
@@ -424,13 +423,7 @@ function renderEditor() {
         }
 
         applyFormatCommand(btn.dataset.cmd);
-      };
-
-      // Для десктопа
-      btn.addEventListener('mousedown', handler);
-
-      // Для мобильных
-      btn.addEventListener('touchstart', handler, { passive: false });
+      });
     });
 
 
@@ -1330,9 +1323,6 @@ function updateDraftBanner() {
 // =========================================================
 // ФОРМАТИРОВАНИЕ ТЕКСТА
 // =========================================================
-// Единая точка входа для команд форматирования — вызывается
-// и из верхней панели #toolbar, и из нижней плашки
-// #customToolbar, поэтому обработчик существует только тут.
 
 const CUSTOM_TAGS = {
   mono: { tag: 'CODE', className: null },
@@ -1355,14 +1345,11 @@ function applyFormatCommand(cmd) {
 
   const selection = window.getSelection();
 
-  // Если нет выделения — ставим курсор в конец блока,
-  // чтобы execCommand было к чему применяться
+  // Если нет выделения — ничего не делаем,
+  // просто показываем подсказку, что нужно выделить текст
   if (!selection || selection.isCollapsed) {
-    const range = document.createRange();
-    range.selectNodeContents(activeBlockEl);
-    range.collapse(false);
-    selection.removeAllRanges();
-    selection.addRange(range);
+    showToast('Выделите текст, чтобы применить форматирование');
+    return;
   }
 
   if (cmd === 'removeFormat') {
@@ -1451,27 +1438,82 @@ function unwrapElement(el) {
 }
 
 // ---------------------------------------------------------
-// Полный сброс форматирования (нативного и кастомного)
+// Полный сброс форматирования (только в пределах выделения)
 // ---------------------------------------------------------
 
 function removeAllFormatting(blockEl, selection) {
-  document.execCommand('removeFormat', false, null);
-
   if (!selection || selection.rangeCount === 0) {
     return;
   }
 
-  // execCommand('removeFormat') не трогает наши кастомные теги
-  // (CODE, SPAN.tg-spoiler, BLOCKQUOTE) — снимаем их вручную
-  ['CODE', 'SPAN', 'BLOCKQUOTE'].forEach(tagName => {
-    blockEl
-      .querySelectorAll(
-        tagName === 'SPAN'
-          ? 'span.tg-spoiler'
-          : tagName.toLowerCase()
-      )
-      .forEach(unwrapElement);
-  });
+  const range = selection.getRangeAt(0);
+  const fragment = range.extractContents();
+
+  // Создаем временный контейнер для анализа
+  const temp = document.createElement('div');
+  temp.appendChild(fragment);
+
+  // Рекурсивно удаляем все кастомные теги внутри временного контейнера
+  function unwrapAllCustomTags(node) {
+    const children = [...node.childNodes];
+    children.forEach(child => {
+      if (child.nodeType === 1) {
+        const tagName = child.tagName;
+        // Проверяем, является ли тег кастомным
+        const isCustom = (
+          tagName === 'CODE' ||
+          tagName === 'BLOCKQUOTE' ||
+          (tagName === 'SPAN' && child.classList.contains('tg-spoiler'))
+        );
+
+        if (isCustom) {
+          // Разворачиваем тег (переносим детей наружу)
+          while (child.firstChild) {
+            node.insertBefore(child.firstChild, child);
+          }
+          node.removeChild(child);
+        } else {
+          // Рекурсивно обрабатываем детей
+          unwrapAllCustomTags(child);
+        }
+      }
+    });
+  }
+
+  unwrapAllCustomTags(temp);
+
+  // Получаем очищенное содержимое
+  const cleanContent = temp.innerHTML;
+
+  // Вставляем очищенное содержимое обратно в диапазон
+  const newRange = document.createRange();
+  newRange.selectNodeContents(blockEl);
+  newRange.deleteContents();
+
+  const newFragment = newRange.createContextualFragment(cleanContent);
+  newRange.insertNode(newFragment);
+
+  // Убираем лишние пробелы
+  const text = blockEl.textContent;
+  if (!text.trim()) {
+    blockEl.innerHTML = '';
+  }
+
+  // Сбрасываем выделение
+  selection.removeAllRanges();
+
+  // Применяем removeFormat ко всему блоку для очистки нативных стилей
+  // Но только если есть что очищать
+  if (blockEl.textContent.trim()) {
+    // Сохраняем позицию курсора
+    const range2 = document.createRange();
+    range2.selectNodeContents(blockEl);
+    range2.collapse(false);
+    selection.addRange(range2);
+    
+    // Применяем removeFormat только к нативному форматированию
+    document.execCommand('removeFormat', false, null);
+  }
 }
 
 
@@ -1573,9 +1615,10 @@ function initCustomToolbar() {
   const toolbar = document.getElementById('customToolbar');
   if (!toolbar) return;
 
-  // Привязываем события к кнопкам плашки (только один раз за рендер)
+  // Привязываем события к кнопкам плашки
+  // Используем только click для избежания двойных срабатываний
   document.querySelectorAll('#customToolbar [data-cmd]').forEach(btn => {
-    const handler = (e) => {
+    btn.addEventListener('click', (e) => {
       e.preventDefault();
 
       if (!activeBlockEl) {
@@ -1583,10 +1626,7 @@ function initCustomToolbar() {
       }
 
       applyFormatCommand(btn.dataset.cmd);
-    };
-
-    btn.addEventListener('mousedown', handler);
-    btn.addEventListener('touchstart', handler, { passive: false });
+    });
   });
 
   // Скрываем плашку при прокрутке, обновляем позицию
