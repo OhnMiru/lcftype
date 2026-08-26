@@ -834,6 +834,13 @@ async function renderFeed() {
     bindFeedOutsideClick();
     renderFeedListOnly();
 
+    // =====================================================
+    // Обновляем видимость кнопки "Черновики"
+    // =====================================================
+    if (typeof updateDraftsButtonVisibility === 'function') {
+      updateDraftsButtonVisibility();
+    }
+
   } catch (error) {
     console.error('renderFeed:', error);
 
@@ -866,3 +873,10 @@ async function renderFeed() {
       });
   }
 }
+
+
+// =========================================================
+// Экспорт для навигации
+// =========================================================
+
+window.renderFeed = renderFeed;
