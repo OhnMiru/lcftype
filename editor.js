@@ -1415,82 +1415,61 @@ function removeAllFormatting(blockEl, selection) {
     return;
   }
 
-  // Получаем содержимое выделения
-  const fragment = range.extractContents();
+  // Сохраняем текст выделения (извлекаем его из DOM)
+  const selectedFragment = range.extractContents();
   
   // Создаем временный контейнер
   const temp = document.createElement('div');
-  temp.appendChild(fragment);
+  temp.appendChild(selectedFragment);
 
-  // Функция для очистки форматирования
-  function cleanNode(node) {
+  // Рекурсивно удаляем все теги форматирования, оставляя только текст
+  function stripFormatting(node) {
     const children = [...node.childNodes];
     
     children.forEach(child => {
       if (child.nodeType === 1) {
-        const tagName = child.tagName;
-        
-        // Проверяем, является ли тег кастомным
-        const isCustom = (
-          tagName === 'CODE' ||
-          tagName === 'BLOCKQUOTE' ||
-          (tagName === 'SPAN' && child.classList.contains('tg-spoiler'))
-        );
-
-        // Проверяем, является ли тег нативным форматированием
-        const isNativeFormat = (
-          tagName === 'B' ||
-          tagName === 'STRONG' ||
-          tagName === 'I' ||
-          tagName === 'EM' ||
-          tagName === 'U' ||
-          tagName === 'S' ||
-          tagName === 'STRIKE'
-        );
-
-        if (isCustom || isNativeFormat) {
-          // Разворачиваем тег
-          while (child.firstChild) {
-            node.insertBefore(child.firstChild, child);
-          }
-          node.removeChild(child);
-        } else {
-          // Рекурсивно обрабатываем вложенные элементы
-          cleanNode(child);
+        // Это элемент — удаляем его теги, но сохраняем содержимое
+        const parent = child.parentNode;
+        while (child.firstChild) {
+          parent.insertBefore(child.firstChild, child);
+        }
+        parent.removeChild(child);
+        // Рекурсивно обрабатываем родителя, так как там могли появиться новые узлы
+        if (parent.nodeType === 1) {
+          stripFormatting(parent);
         }
       }
+      // Текстовые узлы (nodeType === 3) оставляем как есть
     });
   }
 
-  // Очищаем временный контейнер
-  cleanNode(temp);
+  // Очищаем временный контейнер от всех тегов
+  stripFormatting(temp);
 
-  // Получаем очищенный HTML
-  let cleanHtml = temp.innerHTML;
+  // Получаем очищенный текст
+  const cleanText = temp.textContent;
 
-  // Удаляем пустые теги
-  cleanHtml = cleanHtml.replace(/<([^>]+)><\/\1>/g, '');
+  // Создаем текстовый узел с очищенным текстом
+  const textNode = document.createTextNode(cleanText);
+  
+  // Вставляем его обратно в то же место
+  range.insertNode(textNode);
 
-  // Вставляем очищенное содержимое обратно
-  const newRange = document.createRange();
-  newRange.selectNodeContents(blockEl);
-  newRange.deleteContents();
-
-  if (cleanHtml.trim()) {
-    const newFragment = newRange.createContextualFragment(cleanHtml);
-    newRange.insertNode(newFragment);
+  // Если текст был вставлен, и в блоке не осталось другого текста,
+  // но при этом есть пустые теги — удаляем их
+  if (blockEl.textContent.trim() === '') {
+    blockEl.innerHTML = '';
   }
 
   // Сбрасываем выделение
   selection.removeAllRanges();
 
   // Ставим курсор в конец блока
-  const finalRange = document.createRange();
-  finalRange.selectNodeContents(blockEl);
-  finalRange.collapse(false);
-  selection.addRange(finalRange);
+  const newRange = document.createRange();
+  newRange.selectNodeContents(blockEl);
+  newRange.collapse(false);
+  selection.addRange(newRange);
 }
-
 
 // =========================================================
 // ПЛАВАЮЩАЯ ПАНЕЛЬ ФОРМАТИРОВАНИЯ
