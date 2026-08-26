@@ -312,7 +312,7 @@ function renderEditor() {
     if (!f) return;
 
     try {
-      d.cover = await compressImageFile(f, 1600, 0.74);
+      d.cover = await compressImageFile(f, 1600, 0.6);
       renderEditor();
       autoSaveDraft();
     } catch (err) {
@@ -734,7 +734,7 @@ function placeCaretAtEnd(el) {
 // Сжатие изображения
 // =========================================================
 
-function compressImageFile(file, maxW = 1200, quality = 0.82) {
+function compressImageFile(file, maxW = 1200, quality = 0.7) {
   return new Promise((resolve, reject) => {
     const r = new FileReader();
 
