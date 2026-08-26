@@ -3695,15 +3695,6 @@ img{
   min-width: 0;
 }
 
-/* Кнопка подписки */
-.author-subscribe-btn {
-  font-size: 12px;
-  padding: 5px 14px;
-  flex-shrink: 0;
-  white-space: nowrap;
-  min-width: 110px;
-}
-
 .author-stats {
   font-family: 'Inter', sans-serif;
   font-size: 13px;
@@ -3743,9 +3734,21 @@ img{
 
 .author-actions-row {
   margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
   display: flex;
-  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   flex-wrap: wrap;
+}
+
+.author-subscribe-btn {
+  font-size: 12px;
+  padding: 5px 14px;
+  flex-shrink: 0;
+  white-space: nowrap;
+  min-width: 110px;
 }
 
 .author-donate-btn {
@@ -3809,19 +3812,8 @@ img{
     height: 52px;
   }
 
-  .author-name-row {
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-
   .author-name {
     font-size: 19px;
-  }
-
-  .author-subscribe-btn {
-    font-size: 11px;
-    padding: 4px 12px;
-    min-width: 90px;
   }
 
   .author-stats {
@@ -3832,13 +3824,24 @@ img{
     font-size: 14px;
   }
 
+  .author-actions-row {
+    margin-top: 8px;
+    padding-top: 8px;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .author-subscribe-btn {
+    font-size: 11px;
+    padding: 4px 12px;
+    min-width: 90px;
+    width: 100%;
+  }
+
   .author-donate-btn {
     font-size: 12px;
     padding: 5px 14px;
-  }
-
-  .author-actions-row {
-    margin-top: 8px;
+    width: 100%;
   }
 }
 
@@ -3863,19 +3866,9 @@ img{
     height: 56px;
   }
 
-  .author-name-row {
-    flex-direction: column;
-    align-items: center;
-    gap: 6px;
-  }
-
   .author-name {
     font-size: 18px;
     text-align: center;
-  }
-
-  .author-subscribe-btn {
-    width: 100%;
   }
 
   .author-stats {
@@ -3889,7 +3882,10 @@ img{
   }
 
   .author-actions-row {
-    justify-content: center;
+    margin-top: 8px;
+    padding-top: 8px;
+    flex-direction: column;
+    align-items: stretch;
   }
 }
 
