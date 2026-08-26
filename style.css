@@ -1195,70 +1195,6 @@ img{
 
 
 /* =========================================================
-   TOOLBAR
-   ========================================================= */
-
-.toolbar{
-  position:sticky;
-  top:57px;
-  z-index:9;
-  display:flex;
-  gap:4px;
-  background:var(--paper-dim);
-  border-radius:var(--radius);
-  padding:6px;
-  margin-bottom:16px;
-}
-
-.toolbar button{
-  width:34px;
-  height:34px;
-  border-radius:4px;
-  font-family:'Fraunces',serif;
-  font-size:15px;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  color:var(--ink);
-}
-
-.toolbar button.active,
-.toolbar button:hover{
-  background:color-mix(in srgb, var(--indigo) 15%, var(--paper-dim));
-}
-
-.toolbar button[data-cmd="underline"]{
-  text-decoration:underline;
-}
-
-.toolbar button[data-cmd="italic"]{
-  font-style:italic;
-}
-
-.toolbar button[data-cmd="bold"]{
-  font-weight:700;
-}
-
-.toolbar button[data-cmd="strikeThrough"]{
-  text-decoration:line-through;
-}
-
-.toolbar button[data-cmd="mono"]{
-  font-family:'Courier New',monospace;
-  font-size:13px;
-}
-
-.toolbar button[data-cmd="blockquote"]{
-  font-family:'Georgia',serif;
-  font-size:18px;
-}
-
-.toolbar button[data-cmd="spoiler"]{
-  font-size:13px;
-}
-
-
-/* =========================================================
    BLOCKS
    ========================================================= */
 
@@ -1788,281 +1724,208 @@ img{
 
 
 /* =========================================================
-   CUSTOM TOOLBAR — в стиле Telegram
+   ПЛАВАЮЩАЯ ПАНЕЛЬ ФОРМАТИРОВАНИЯ (над клавиатурой)
    ========================================================= */
 
-.custom-toolbar {
-  position: absolute;
+.floating-toolbar {
+  position: sticky;
+  bottom: 0;
   z-index: 100;
-  display: none;
+  display: flex;
   align-items: center;
   gap: 2px;
+  padding: 8px 12px;
+  margin-top: 16px;
   background: var(--paper);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 6px 10px;
-  box-shadow: 0 4px 24px var(--shadow-dark);
-  pointer-events: auto;
-  animation: toolbarPop 0.15s ease;
-  font-family: 'Inter', sans-serif;
+  border-top: 1px solid var(--line);
+  border-radius: 12px 12px 0 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  flex-wrap: nowrap;
 }
 
-@keyframes toolbarPop {
-  from {
-    opacity: 0;
-    transform: scale(0.92) translateY(4px);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
+.floating-toolbar::-webkit-scrollbar {
+  display: none;
 }
 
-/* Стрелка (треугольник) */
-.custom-toolbar::after {
-  content: '';
-  position: absolute;
-  bottom: -7px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 0;
-  height: 0;
-  border-left: 7px solid transparent;
-  border-right: 7px solid transparent;
-  border-top: 7px solid var(--paper);
-  filter: drop-shadow(0 1px 2px var(--shadow-light));
-}
-
-.custom-toolbar button {
-  min-width: 34px;
-  height: 34px;
+.floating-toolbar button {
+  flex: 0 0 auto;
+  min-width: 36px;
+  height: 36px;
+  padding: 0 6px;
   border-radius: 6px;
-  font-family: 'Fraunces', serif;
+  font-family: 'Inter', sans-serif;
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--ink-soft);
   background: transparent;
+  border: none;
   transition: all 0.15s ease;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0 6px;
   white-space: nowrap;
 }
 
-.custom-toolbar button:hover {
+.floating-toolbar button:hover {
   background: var(--paper-dim);
   color: var(--ink);
 }
 
-.custom-toolbar button.active {
+.floating-toolbar button.active {
   background: var(--indigo);
   color: #fff;
 }
 
-.custom-toolbar button[data-cmd="underline"] {
-  text-decoration: underline;
+.floating-toolbar button:active {
+  transform: scale(0.92);
 }
 
-.custom-toolbar button[data-cmd="italic"] {
-  font-style: italic;
-}
-
-.custom-toolbar button[data-cmd="bold"] {
+.floating-toolbar button[data-cmd="bold"] {
   font-weight: 700;
+  font-size: 15px;
 }
 
-.custom-toolbar button[data-cmd="strikeThrough"] {
+.floating-toolbar button[data-cmd="italic"] {
+  font-style: italic;
+  font-size: 15px;
+}
+
+.floating-toolbar button[data-cmd="underline"] {
+  text-decoration: underline;
+  font-size: 15px;
+}
+
+.floating-toolbar button[data-cmd="strikeThrough"] {
   text-decoration: line-through;
+  font-size: 15px;
 }
 
-.custom-toolbar button[data-cmd="mono"] {
+.floating-toolbar button[data-cmd="mono"] {
   font-family: 'Courier New', monospace;
-}
-
-.custom-toolbar button[data-cmd="spoiler"] {
-  background: var(--ink);
-  color: var(--paper);
-  border-radius: 4px;
-  padding: 0 8px;
   font-size: 12px;
+  font-weight: 400;
 }
 
-.custom-toolbar button[data-cmd="spoiler"].active {
-  background: var(--indigo);
-  color: #fff;
+.floating-toolbar button[data-cmd="mono"] code {
+  font-family: inherit;
+  background: none;
+  padding: 0;
 }
 
-.custom-toolbar button[data-cmd="blockquote"] {
+.floating-toolbar button[data-cmd="blockquote"] {
   font-size: 18px;
   font-weight: 400;
   font-family: 'Georgia', serif;
 }
 
-/* Разделитель */
-.toolbar-divider {
+.floating-toolbar button[data-cmd="spoiler"] {
+  font-size: 14px;
+}
+
+.floating-toolbar button[data-cmd="spoiler"].active {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.floating-toolbar .toolbar-divider {
+  flex: 0 0 auto;
   width: 1px;
   height: 24px;
   background: var(--line);
   margin: 0 4px;
 }
 
-/* Кнопка "Ещё" */
-.toolbar-more-btn {
-  font-size: 18px;
+.floating-toolbar .remove-format-btn {
   font-weight: 700;
-  letter-spacing: -1px;
-  min-width: 28px !important;
-  padding: 0 4px !important;
+  font-size: 14px;
+  color: var(--ink-soft);
+  border: 1px solid transparent;
 }
 
-
-/* =========================================================
-   TOOLBAR DROPDOWN (выпадающее меню)
-   ========================================================= */
-
-.toolbar-dropdown {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  min-width: 200px;
-  padding: 6px 0;
-  background: var(--paper);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  box-shadow: 0 8px 32px var(--shadow-dark);
-  animation: dropdownPop 0.15s ease;
-  z-index: 101;
-}
-
-@keyframes dropdownPop {
-  from {
-    opacity: 0;
-    transform: scale(0.96) translateY(-4px);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
-}
-
-.toolbar-dropdown button {
-  width: 100%;
-  min-height: 36px;
-  padding: 6px 14px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-family: 'Inter', sans-serif;
-  font-size: 13px;
-  font-weight: 400;
-  color: var(--ink);
-  background: transparent;
-  border: none;
-  border-radius: 0;
-  justify-content: flex-start;
-  cursor: pointer;
-  transition: background 0.15s ease;
-}
-
-.toolbar-dropdown button:hover {
-  background: var(--paper-dim);
-}
-
-.toolbar-dropdown button .dropdown-icon {
-  width: 24px;
-  text-align: center;
-  font-size: 15px;
-  flex-shrink: 0;
-}
-
-.toolbar-dropdown .dropdown-divider {
-  height: 1px;
-  margin: 4px 12px;
-  background: var(--line);
-}
-
-.toolbar-dropdown .dropdown-danger {
+.floating-toolbar .remove-format-btn:hover {
   color: var(--danger);
+  border-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 6%, transparent);
 }
 
-.toolbar-dropdown .dropdown-danger:hover {
-  background: color-mix(in srgb, var(--danger) 8%, transparent);
+.floating-toolbar .remove-format-btn:active {
+  transform: scale(0.92);
 }
 
 
 /* =========================================================
-   CUSTOM TOOLBAR — MOBILE
+   ПЛАВАЮЩАЯ ПАНЕЛЬ — MOBILE
    ========================================================= */
 
 @media (max-width: 520px) {
-  .custom-toolbar {
-    position: fixed !important;
-    bottom: 20px !important;
-    left: 50% !important;
-    transform: translateX(-50%) !important;
-    top: auto !important;
-    width: calc(100% - 32px) !important;
-    max-width: 420px !important;
-    padding: 8px 12px !important;
-    border-radius: 14px !important;
-    box-shadow: 0 4px 24px var(--shadow-dark) !important;
+  .floating-toolbar {
+    padding: 6px 8px;
+    gap: 1px;
+    border-radius: 10px 10px 0 0;
+    margin-top: 12px;
   }
-  
-  .custom-toolbar::after {
-    display: none;
+
+  .floating-toolbar button {
+    min-width: 32px;
+    height: 32px;
+    font-size: 13px;
+    padding: 0 4px;
   }
-  
-  .custom-toolbar button {
-    min-width: 38px;
-    height: 38px;
+
+  .floating-toolbar button[data-cmd="bold"],
+  .floating-toolbar button[data-cmd="italic"],
+  .floating-toolbar button[data-cmd="underline"],
+  .floating-toolbar button[data-cmd="strikeThrough"] {
+    font-size: 14px;
+  }
+
+  .floating-toolbar button[data-cmd="mono"] {
+    font-size: 10px;
+  }
+
+  .floating-toolbar button[data-cmd="blockquote"] {
     font-size: 16px;
   }
-  
-  .toolbar-more-btn {
-    min-width: 32px !important;
-    font-size: 20px !important;
+
+  .floating-toolbar .toolbar-divider {
+    height: 20px;
+    margin: 0 2px;
   }
-  
-  .toolbar-dropdown {
-    position: fixed;
-    bottom: 70px;
-    right: 16px;
-    left: 16px;
-    width: auto;
-    max-width: 400px;
-    margin: 0 auto;
-    border-radius: 14px;
-  }
-  
-  .toolbar-dropdown button {
-    min-height: 42px;
-    font-size: 14px;
-    padding: 8px 16px;
+
+  .floating-toolbar .remove-format-btn {
+    font-size: 12px;
   }
 }
-
-/* =========================================================
-   CUSTOM TOOLBAR — VERY SMALL
-   ========================================================= */
 
 @media (max-width: 380px) {
-  .custom-toolbar {
-    padding: 6px 8px !important;
-    gap: 1px !important;
+  .floating-toolbar {
+    padding: 4px 6px;
+    gap: 0;
   }
-  
-  .custom-toolbar button {
-    min-width: 34px;
-    height: 34px;
-    font-size: 14px;
+
+  .floating-toolbar button {
+    min-width: 28px;
+    height: 28px;
+    font-size: 11px;
+    padding: 0 3px;
   }
-  
-  .toolbar-more-btn {
-    min-width: 28px !important;
-    font-size: 18px !important;
+
+  .floating-toolbar button[data-cmd="bold"],
+  .floating-toolbar button[data-cmd="italic"],
+  .floating-toolbar button[data-cmd="underline"],
+  .floating-toolbar button[data-cmd="strikeThrough"] {
+    font-size: 12px;
+  }
+
+  .floating-toolbar .toolbar-divider {
+    height: 16px;
+    margin: 0 1px;
   }
 }
+
 
 /* =========================================================
    PROFILE
@@ -3872,9 +3735,6 @@ img{
 /* =========================================================
    ИНЛАЙН-ФОРМАТИРОВАНИЕ — code / blockquote / spoiler
    ========================================================= */
-/* Раньше эти теги вставлялись редактором (mono/blockquote/
-   spoiler), но никак не стилизовались ни в самом редакторе
-   (.block-text), ни при чтении статьи (.reader-body). */
 
 .block-text code,
 .reader-body code{
