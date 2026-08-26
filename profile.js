@@ -118,6 +118,42 @@ async function fetchMyComments() {
 
 
 // =========================================================
+// Получить подписчиков
+// =========================================================
+
+async function fetchSubscribers() {
+  try {
+    const r = await callTelegramApi('get-subscribers');
+    return {
+      count: r.count || 0,
+      subscribers: Array.isArray(r.subscribers) ? r.subscribers : []
+    };
+  } catch (e) {
+    console.error('fetchSubscribers error:', e);
+    return { count: 0, subscribers: [] };
+  }
+}
+
+
+// =========================================================
+// Получить список авторов, на которых подписан пользователь
+// =========================================================
+
+async function fetchMySubscriptions() {
+  try {
+    const r = await callTelegramApi('get-my-subscriptions');
+    return {
+      count: r.count || 0,
+      authors: Array.isArray(r.authors) ? r.authors : []
+    };
+  } catch (e) {
+    console.error('fetchMySubscriptions error:', e);
+    return { count: 0, authors: [] };
+  }
+}
+
+
+// =========================================================
 // Получить настройки донатов автора
 // =========================================================
 
@@ -567,10 +603,10 @@ function getDeclension(count, one, two, five) {
 
 
 // =========================================================
-// Рендер вкладки статистики
+// Рендер вкладки статистики (с подписчиками)
 // =========================================================
 
-function renderStatsTab(stats) {
+function renderStatsTab(stats, subscribersCount) {
   return `
     <div class="profile-tab-content" id="statsTab">
 
@@ -589,6 +625,11 @@ function renderStatsTab(stats) {
         <div class="profile-stat-card">
           <div class="profile-stat-number">${stats.total_reactions_received || 0}</div>
           <div class="profile-stat-label">реакций получили</div>
+        </div>
+
+        <div class="profile-stat-card">
+          <div class="profile-stat-number">${subscribersCount || 0}</div>
+          <div class="profile-stat-label">${getDeclension(subscribersCount || 0, 'подписчик', 'подписчика', 'подписчиков')}</div>
         </div>
 
       </div>
@@ -681,6 +722,50 @@ function renderMyCommentsTab(comments) {
 
 
 // =========================================================
+// Рендер вкладки "Подписчики"
+// =========================================================
+
+function renderSubscribersTab(subscribers) {
+  if (!subscribers || !subscribers.length) {
+    return `
+      <div class="profile-tab-content" id="subscribersTab">
+        <div class="profile-empty-state">
+          <p>У вас пока нет подписчиков.</p>
+          <p class="profile-empty-hint">Публикуйте интересные статьи, и они появятся!</p>
+        </div>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="profile-tab-content" id="subscribersTab">
+      <div class="profile-subscribers-list">
+        ${subscribers.map(sub => `
+          <div class="profile-subscriber-item">
+            <div class="profile-subscriber-avatar">
+              ${sub.avatar ? `
+                <img src="${escapeHtml(sub.avatar)}" alt="" class="profile-subscriber-avatar-img">
+              ` : `
+                <span class="profile-subscriber-avatar-letter">
+                  ${escapeHtml((sub.username || '?').charAt(0).toUpperCase())}
+                </span>
+              `}
+            </div>
+            <div class="profile-subscriber-info">
+              <div class="profile-subscriber-name">${escapeHtml(sub.username || 'Пользователь')}</div>
+              <div class="profile-subscriber-since">
+                Подписан с ${fmtDate(sub.created_at)}
+              </div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
+
+// =========================================================
 // Страница профиля
 // =========================================================
 
@@ -729,7 +814,6 @@ async function openProfile() {
       `;
 
       document.getElementById('createProfileBtn').onclick = async () => {
-        // Используем исправленный ensureProfile — он теперь реально сохраняет!
         const profile = await ensureProfile(true);
         if (profile) {
           openProfile();
@@ -739,21 +823,24 @@ async function openProfile() {
       return;
     }
 
-    // Загружаем статистику, статьи, комментарии и настройки донатов
-    const [stats, articles, comments, donationSettings] = await Promise.all([
+    // Загружаем статистику, статьи, комментарии, настройки донатов и подписчиков
+    const [stats, articles, comments, donationSettings, subscribersData] = await Promise.all([
       fetchProfileStats(),
       fetchMyArticles(),
       fetchMyComments(),
-      getDonationSettings(p.telegram_id)
+      getDonationSettings(p.telegram_id),
+      fetchSubscribers()
     ]);
 
-    console.log('Profile data:', { stats, articles, comments, donationSettings });
+    console.log('Profile data:', { stats, articles, comments, donationSettings, subscribersData });
 
     const first = p.username.trim().charAt(0).toUpperCase();
     const avatar = p.avatar || null;
     const bio = p.bio || null;
     const donationLink = donationSettings?.donation_link || '';
     const isDonationEnabled = donationSettings?.is_enabled || false;
+    const subscribersCount = subscribersData.count || 0;
+    const subscribers = subscribersData.subscribers || [];
 
     main.innerHTML = `
       <div class="profile-page">
@@ -877,12 +964,16 @@ async function openProfile() {
             <button class="profile-tab-btn" data-tab="comments">
               Комментарии (${comments.length})
             </button>
+            <button class="profile-tab-btn" data-tab="subscribers">
+              Подписчики (${subscribersCount})
+            </button>
           </div>
 
           <div class="profile-tabs-content">
-            ${renderStatsTab(stats)}
+            ${renderStatsTab(stats, subscribersCount)}
             ${renderMyArticlesTab(articles)}
             ${renderMyCommentsTab(comments)}
+            ${renderSubscribersTab(subscribers)}
           </div>
 
         </div>
@@ -1005,7 +1096,8 @@ async function openProfile() {
         const targetMap = {
           'stats': 'statsTab',
           'articles': 'myArticlesTab',
-          'comments': 'myCommentsTab'
+          'comments': 'myCommentsTab',
+          'subscribers': 'subscribersTab'
         };
 
         const target = document.getElementById(targetMap[tabName]);
@@ -1058,3 +1150,5 @@ async function openProfile() {
 
 window.ensureProfile = ensureProfile;
 window.openProfile = openProfile;
+window.fetchSubscribers = fetchSubscribers;
+window.fetchMySubscriptions = fetchMySubscriptions;
