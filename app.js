@@ -24,18 +24,38 @@ document
   ?.addEventListener(
     'click',
     () => {
-      const savedDraft = loadDraftFromStorage();
-      if (savedDraft && !isDraftEmpty(savedDraft)) {
-        if (confirm('У вас есть несохраненный черновик. Продолжить работу над ним?')) {
-          openEditor();
-          return;
-        } else {
-          clearDraft();
-        }
+      // Проверяем, есть ли уже черновики
+      const drafts = getDraftsFromStorage();
+      
+      if (drafts.length > 0) {
+        // Если есть черновики — показываем список
+        renderDraftsList();
+      } else {
+        // Если черновиков нет — создаём новый
+        openEditor();
       }
-      openEditor();
     }
   );
+
+
+// =========================================================
+// Черновики (кнопка появляется только если есть черновики)
+// =========================================================
+
+// Создаём кнопку в топбаре, но скрываем её по умолчанию
+const draftsBtn = document.createElement('button');
+draftsBtn.className = 'btn btn-secondary drafts-btn';
+draftsBtn.id = 'draftsBtn';
+draftsBtn.textContent = 'Черновики';
+draftsBtn.style.display = 'none';
+draftsBtn.addEventListener('click', renderDraftsList);
+
+// Вставляем кнопку между "Новая статья" и "Профиль"
+const newArticleBtn = document.getElementById('newArticleBtn');
+const profileBtn = document.getElementById('profileBtn');
+if (newArticleBtn && profileBtn) {
+  newArticleBtn.parentNode.insertBefore(draftsBtn, profileBtn);
+}
 
 
 // =========================================================
@@ -56,57 +76,60 @@ document
 
 (async function init() {
   try {
+    // Миграция старого черновика
+    const hasMigrated = migrateOldDraft();
+    if (hasMigrated) {
+      console.log('Старый черновик перенесён в новую систему');
+    }
 
     const startParam =
       tg?.initDataUnsafe
         ?.start_param;
 
     if (startParam) {
-
-      await openReader(
-        startParam
-      );
-
+      await openReader(startParam);
     } else {
-
       await renderFeed();
-      
-      checkDraftOnStartup();
+      checkDraftsOnStartup();
     }
 
+    // Обновляем видимость кнопки "Черновики"
+    updateDraftsButtonVisibility();
+
   } catch (e) {
-
-    console.error(
-      'Init:',
-      e
-    );
-
-    showToast(
-      'Ошибка запуска приложения'
-    );
+    console.error('Init:', e);
+    showToast('Ошибка запуска приложения');
   }
 })();
 
 
 // =========================================================
-// Проверка черновика при запуске
+// Проверка черновиков при запуске
 // =========================================================
 
-function checkDraftOnStartup() {
+function checkDraftsOnStartup() {
   try {
-    const savedDraft = loadDraftFromStorage();
+    const drafts = getDraftsFromStorage();
+    const nonEmptyDrafts = drafts.filter(d => !isEmptyDraft(d));
     
-    if (savedDraft && !isDraftEmpty(savedDraft)) {
-      showDraftNotification(savedDraft);
+    if (nonEmptyDrafts.length > 0) {
+      // Если есть непустые черновики — показываем уведомление
+      if (nonEmptyDrafts.length === 1) {
+        // Один черновик — показываем уведомление как раньше
+        showDraftNotification(nonEmptyDrafts[0]);
+      } else {
+        // Несколько черновиков — показываем общее уведомление
+        showMultipleDraftsNotification(nonEmptyDrafts.length);
+      }
     }
   } catch (e) {
-    console.warn('checkDraftOnStartup error:', e);
+    console.warn('checkDraftsOnStartup error:', e);
   }
 }
 
 
 // =========================================================
-// Показать уведомление о черновике
+// Показать уведомление об одном черновике
 // =========================================================
 
 function showDraftNotification(draft) {
@@ -149,14 +172,15 @@ function showDraftNotification(draft) {
   
   document.getElementById('draftRestoreBtn').addEventListener('click', () => {
     notification.remove();
-    openEditor();
+    openEditor(draft.id);
   });
   
   document.getElementById('draftDiscardBtn').addEventListener('click', () => {
     if (confirm('Удалить черновик безвозвратно?')) {
-      clearDraft();
+      deleteDraftById(draft.id);
       notification.remove();
-      showToast('Черновик удален');
+      updateDraftsButtonVisibility();
+      showToast('Черновик удалён');
     }
   });
   
@@ -166,3 +190,65 @@ function showDraftNotification(draft) {
     }
   });
 }
+
+
+// =========================================================
+// Показать уведомление о нескольких черновиках
+// =========================================================
+
+function showMultipleDraftsNotification(count) {
+  const notification = document.createElement('div');
+  notification.className = 'draft-notification chrome';
+  
+  notification.innerHTML = `
+    <div class="draft-notification-content">
+      <div class="draft-notification-text">
+        <div class="draft-notification-title">У вас есть ${count} черновика</div>
+        <div class="draft-notification-preview">Нажмите, чтобы перейти к списку</div>
+      </div>
+    </div>
+    <div class="draft-notification-actions">
+      <button class="btn btn-secondary draft-notification-btn" id="draftsListBtn">Перейти к черновикам</button>
+    </div>
+  `;
+  
+  document.body.appendChild(notification);
+  
+  requestAnimationFrame(() => {
+    notification.classList.add('visible');
+  });
+  
+  document.getElementById('draftsListBtn').addEventListener('click', () => {
+    notification.remove();
+    renderDraftsList();
+  });
+  
+  notification.addEventListener('click', (e) => {
+    if (e.target === notification) {
+      notification.remove();
+    }
+  });
+}
+
+
+// =========================================================
+// Обновить видимость кнопки "Черновики"
+// =========================================================
+
+function updateDraftsButtonVisibility() {
+  const btn = document.getElementById('draftsBtn');
+  if (!btn) return;
+
+  const drafts = getDraftsFromStorage();
+  const hasNonEmpty = drafts.some(d => !isEmptyDraft(d));
+
+  btn.style.display = hasNonEmpty ? 'inline-flex' : 'none';
+}
+
+
+// =========================================================
+// Экспортируем функцию обновления для использования в других модулях
+// =========================================================
+
+// Сохраняем ссылку на функцию в глобальном объекте
+window.updateDraftsButtonVisibility = updateDraftsButtonVisibility;
