@@ -35,7 +35,7 @@ const state = {
   authorFilter: new Set(),
   pendingImageInsertIndex: null,
   sortOrder: 'desc', // 'desc' — новые сначала, 'asc' — старые сначала
-  hasDraft: false // ← добавляем флаг наличия черновика
+  hasDraft: false
 };
 
 let activeBlockEl = null;
@@ -108,7 +108,11 @@ const ALLOWED_TAGS = new Set([
   'U',
   'BR',
   'SPAN',
-  'DIV'
+  'DIV',
+  'CODE',           // ← добавлено для моноширинного текста
+  'BLOCKQUOTE',     // ← добавлено для цитат
+  'S',              // ← добавлено для зачёркнутого
+  'STRIKE'          // ← добавлено для зачёркнутого
 ]);
 
 
@@ -124,6 +128,29 @@ function sanitizeHtml(html) {
   (function clean(node) {
     [...node.childNodes].forEach(child => {
       if (child.nodeType === 1) {
+        // Разрешаем SPAN только если у него есть класс tg-spoiler
+        if (child.tagName === 'SPAN') {
+          const isSpoiler = child.classList.contains('tg-spoiler');
+          if (!isSpoiler) {
+            const p = child.parentNode;
+            while (child.firstChild) {
+              p.insertBefore(child.firstChild, child);
+            }
+            p.removeChild(child);
+            return;
+          }
+          // Разрешаем SPAN.tg-spoiler, но удаляем все другие атрибуты
+          [...child.attributes].forEach(
+            a => {
+              if (a.name !== 'class') {
+                child.removeAttribute(a.name);
+              }
+            }
+          );
+          clean(child);
+          return;
+        }
+
         if (!ALLOWED_TAGS.has(child.tagName)) {
           const p = child.parentNode;
 
@@ -139,8 +166,18 @@ function sanitizeHtml(html) {
           return;
         }
 
+        // Удаляем все атрибуты у разрешенных тегов, кроме class у SPAN
         [...child.attributes].forEach(
-          a => child.removeAttribute(a.name)
+          a => {
+            if (child.tagName === 'SPAN' && a.name === 'class') {
+              // Сохраняем класс только если это tg-spoiler
+              if (!child.classList.contains('tg-spoiler')) {
+                child.removeAttribute(a.name);
+              }
+            } else {
+              child.removeAttribute(a.name);
+            }
+          }
         );
 
         clean(child);
