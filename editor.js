@@ -277,69 +277,6 @@ function renderEditor() {
 
     </div>
 
-    <div
-      class="toolbar chrome"
-      id="toolbar"
-    >
-
-      <button
-        data-cmd="bold"
-        title="Жирный"
-      >
-        B
-      </button>
-
-      <button
-        data-cmd="italic"
-        title="Курсив"
-      >
-        i
-      </button>
-
-      <button
-        data-cmd="underline"
-        title="Подчёркнутый"
-      >
-        U
-      </button>
-
-      <button
-        data-cmd="strikeThrough"
-        title="Зачеркнутый"
-      >
-        <span style="text-decoration:line-through;">S</span>
-      </button>
-
-      <button
-        data-cmd="blockquote"
-        title="Цитировать"
-      >
-        ❝
-      </button>
-
-      <button
-        data-cmd="spoiler"
-        title="Скрытый"
-      >
-        ◼
-      </button>
-
-      <button
-        data-cmd="mono"
-        title="Моноширинный"
-      >
-        &#96;&nbsp;&#96;
-      </button>
-
-      <button
-        data-cmd="removeFormat"
-        title="Обычный текст"
-      >
-        T
-      </button>
-
-    </div>
-
     <div id="blocksHost"></div>
 
     <button
@@ -374,19 +311,43 @@ function renderEditor() {
       id="editorHint"
     ></div>
 
-    <!-- Кастомная плашка для выделенного текста -->
-    <div id="customToolbar" class="custom-toolbar" style="display:none;">
+    <!-- ===================================================
+         ПЛАВАЮЩАЯ ПАНЕЛЬ ФОРМАТИРОВАНИЯ
+         =================================================== -->
 
-      <button data-cmd="bold" title="Жирный">B</button>
-      <button data-cmd="italic" title="Курсив">i</button>
-      <button data-cmd="underline" title="Подчёркнутый">U</button>
-      <button data-cmd="strikeThrough" title="Зачеркнутый"><span style="text-decoration:line-through;">S</span></button>
-      <button data-cmd="blockquote" title="Цитировать">❝</button>
-      <button data-cmd="spoiler" title="Скрытый">◼</button>
-      <button data-cmd="mono" title="Моноширинный">&#96;&nbsp;&#96;</button>
-      <button data-cmd="removeFormat" title="Обычный текст">T</button>
-
+    <div id="floatingToolbar" class="floating-toolbar">
+      <button data-cmd="bold" title="Жирный">
+        <strong>B</strong>
+      </button>
+      <button data-cmd="italic" title="Курсив">
+        <em>i</em>
+      </button>
+      <button data-cmd="underline" title="Подчёркнутый">
+        <u>U</u>
+      </button>
+      <button data-cmd="strikeThrough" title="Зачеркнутый">
+        <span style="text-decoration:line-through;">S</span>
+      </button>
+      
+      <span class="toolbar-divider"></span>
+      
+      <button data-cmd="mono" title="Моноширинный">
+        <code>mono</code>
+      </button>
+      <button data-cmd="blockquote" title="Цитировать">
+        ❝
+      </button>
+      <button data-cmd="spoiler" title="Скрытый">
+        ◼
+      </button>
+      
+      <span class="toolbar-divider"></span>
+      
+      <button data-cmd="removeFormat" title="Обычный текст" class="remove-format-btn">
+        T
+      </button>
     </div>
+
   `;
 
   // =======================================================
@@ -403,17 +364,13 @@ function renderEditor() {
 
 
   // =======================================================
-  // Панель форматирования (верхняя, всегда видимая)
+  // Плавающая панель форматирования
   // =======================================================
 
   document
-    .querySelectorAll(
-      '#toolbar button'
-    )
+    .querySelectorAll('#floatingToolbar button')
     .forEach(btn => {
 
-      // Используем только click, чтобы избежать двойных срабатываний
-      // на touch-устройствах (mousedown + touchstart)
       btn.addEventListener('click', (e) => {
         e.preventDefault();
 
@@ -618,10 +575,10 @@ function renderEditor() {
   renderBlocks();
 
   // =======================================================
-  // Инициализация кастомной плашки (один раз на рендер редактора)
+  // Инициализация плавающей панели
   // =======================================================
 
-  initCustomToolbar();
+  initFloatingToolbar();
 }
 
 
@@ -1366,7 +1323,7 @@ function applyFormatCommand(cmd) {
   }
 
   activeBlockEl.dispatchEvent(new Event('input'));
-  updateToolbarButtons();
+  updateFloatingToolbarButtons();
 }
 
 // ---------------------------------------------------------
@@ -1534,72 +1491,39 @@ function removeAllFormatting(blockEl, selection) {
   selection.addRange(finalRange);
 }
 
+
 // =========================================================
-// КАСТОМНАЯ ПЛАШКА ФОРМАТИРОВАНИЯ (в стиле Telegram)
+// ПЛАВАЮЩАЯ ПАНЕЛЬ ФОРМАТИРОВАНИЯ
 // =========================================================
 
-// Показать кастомную плашку
-function showCustomToolbar() {
-  const toolbar = document.getElementById('customToolbar');
-  if (!toolbar) return;
+// Инициализация плавающей панели
+function initFloatingToolbar() {
+  // Обновляем состояние кнопок при изменении выделения
+  document.addEventListener('selectionchange', () => {
+    updateFloatingToolbarButtons();
+  });
 
-  const selection = window.getSelection();
+  // При клике на блок текста обновляем кнопки
+  document.addEventListener('click', (e) => {
+    const blockText = e.target.closest('.block-text');
+    if (blockText) {
+      setTimeout(updateFloatingToolbarButtons, 10);
+    }
+  });
 
-  if (!selection || selection.isCollapsed || !activeBlockEl) {
-    toolbar.style.display = 'none';
-    return;
-  }
-
-  const range = selection.getRangeAt(0);
-  const rect = range.getClientRects()[0];
-
-  if (!rect) {
-    toolbar.style.display = 'none';
-    return;
-  }
-
-  const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-  const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
-
-  const isMobile = window.innerWidth <= 520;
-
-  if (isMobile) {
-    toolbar.style.position = 'fixed';
-    toolbar.style.top = 'auto';
-    toolbar.style.bottom = '20px';
-    toolbar.style.left = '50%';
-    toolbar.style.transform = 'translateX(-50%)';
-    toolbar.style.width = 'calc(100% - 32px)';
-    toolbar.style.maxWidth = '400px';
-  } else {
-    toolbar.style.position = 'absolute';
-    toolbar.style.top = (rect.top + scrollTop - 55) + 'px';
-    toolbar.style.left = (rect.left + scrollLeft + rect.width/2 - 140) + 'px';
-    toolbar.style.transform = 'none';
-    toolbar.style.width = 'auto';
-    toolbar.style.maxWidth = 'none';
-  }
-
-  toolbar.style.display = 'flex';
-
-  updateToolbarButtons();
+  // При отпускании клавиши обновляем кнопки
+  document.addEventListener('keyup', () => {
+    setTimeout(updateFloatingToolbarButtons, 10);
+  });
 }
 
-// Скрыть кастомную плашку
-function hideCustomToolbar() {
-  const toolbar = document.getElementById('customToolbar');
-  if (toolbar) {
-    toolbar.style.display = 'none';
-  }
-}
-
-// Обновить активные кнопки
-function updateToolbarButtons() {
+// Обновить активные кнопки в плавающей панели
+function updateFloatingToolbarButtons() {
   const nativeCommands = ['bold', 'italic', 'underline', 'strikeThrough'];
 
   nativeCommands.forEach(cmd => {
     document
-      .querySelectorAll(`[data-cmd="${cmd}"]`)
+      .querySelectorAll(`#floatingToolbar [data-cmd="${cmd}"]`)
       .forEach(btn => {
         let isActive = false;
         try {
@@ -1609,8 +1533,7 @@ function updateToolbarButtons() {
       });
   });
 
-  // Для кастомных тегов подсвечиваем кнопку, если курсор/выделение
-  // находится внутри соответствующего тега
+  // Для кастомных тегов
   const selection = window.getSelection();
 
   Object.entries(CUSTOM_TAGS).forEach(([cmd, { tag, className }]) => {
@@ -1622,50 +1545,8 @@ function updateToolbarButtons() {
     }
 
     document
-      .querySelectorAll(`[data-cmd="${cmd}"]`)
+      .querySelectorAll(`#floatingToolbar [data-cmd="${cmd}"]`)
       .forEach(btn => btn.classList.toggle('active', isActive));
-  });
-}
-
-// Инициализация кастомной плашки
-function initCustomToolbar() {
-  const toolbar = document.getElementById('customToolbar');
-  if (!toolbar) return;
-
-  // Привязываем события к кнопкам плашки
-  // Используем только click для избежания двойных срабатываний
-  document.querySelectorAll('#customToolbar [data-cmd]').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.preventDefault();
-
-      if (!activeBlockEl) {
-        return;
-      }
-
-      applyFormatCommand(btn.dataset.cmd);
-    });
-  });
-
-  // Скрываем плашку при прокрутке, обновляем позицию
-  let scrollTimeout;
-  document.addEventListener('scroll', () => {
-    clearTimeout(scrollTimeout);
-    scrollTimeout = setTimeout(() => {
-      const selection = window.getSelection();
-      if (selection && !selection.isCollapsed && activeBlockEl) {
-        showCustomToolbar();
-      }
-    }, 100);
-  });
-
-  // Обновляем плашку при изменении выделения
-  document.addEventListener('selectionchange', () => {
-    const selection = window.getSelection();
-    if (selection && !selection.isCollapsed && activeBlockEl) {
-      showCustomToolbar();
-    } else {
-      hideCustomToolbar();
-    }
   });
 }
 
