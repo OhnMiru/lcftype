@@ -965,7 +965,7 @@ async function openProfile() {
               Комментарии (${comments.length})
             </button>
             <button class="profile-tab-btn" data-tab="subscribers">
-              Подписчики (${subscribersCount})
+              Подписки (${subscribersCount})
             </button>
           </div>
 
