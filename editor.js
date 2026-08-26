@@ -1,167 +1,125 @@
 // =========================================================
-// Летопись — редактор статей
+// Летопись — редактор статей (с поддержкой нескольких черновиков)
 // =========================================================
 
 
 // =========================================================
-// Новый черновик
+// Открыть редактор с черновиком по ID
 // =========================================================
 
-function newDraft() {
-  return {
-    id: null,
-    title: '',
-    cover: null,
-
-    blocks: [
-      {
-        type: 'text',
-        html: ''
-      }
-    ]
-  };
-}
-
-
-// =========================================================
-// Открыть редактор новой статьи
-// =========================================================
-
-let _isRestoringDraft = false;
-
-async function openEditor() {
+async function openEditor(draftId) {
   try {
-
     if (!tg?.initData) {
-      showToast(
-        'Откройте приложение внутри Telegram'
-      );
-
+      showToast('Откройте приложение внутри Telegram');
       return;
     }
 
-    const p =
-      await ensureProfile(true);
-
-    if (!p) {
-      return;
-    }
+    const p = await ensureProfile(true);
+    if (!p) return;
 
     state.view = 'editor';
     state.currentId = null;
 
-    if (!_isRestoringDraft) {
-      const savedDraft = loadDraftFromStorage();
-
-      if (savedDraft && !isDraftEmpty(savedDraft)) {
-        const restore = confirm(
-          'У вас есть несохраненный черновик. Восстановить?'
-        );
-
-        if (restore) {
-          _isRestoringDraft = true;
-          state.draft = savedDraft;
-          showToast('Черновик восстановлен');
-        } else {
-          clearDraft();
-          state.draft = newDraft();
-        }
-      } else {
-        state.draft = newDraft();
-      }
-    } else {
-      _isRestoringDraft = false;
-      if (!state.draft) {
-        state.draft = newDraft();
-      }
+    // Миграция старого черновика при первом запуске
+    const hasMigrated = migrateOldDraft();
+    if (hasMigrated) {
+      showToast('Старый черновик перенесён в список');
     }
 
-    setBackButton(
-      true,
-      () => {
-        if (state.hasDraft && !isDraftEmpty(state.draft)) {
-          if (
-            confirm(
-              'Отменить редактирование? Черновик будет сохранен.'
-            )
-          ) {
-            saveDraftToStorage(state.draft);
-            renderFeed();
-          }
-        } else {
-          clearDraft();
-          renderFeed();
-        }
+    // Если передан ID — загружаем конкретный черновик
+    if (draftId) {
+      const draft = getDraftById(draftId);
+      if (draft) {
+        state.draft = JSON.parse(JSON.stringify(draft));
+        state.activeDraftId = draft.id;
+        state.hasDraft = !isEmptyDraft(draft);
+      } else {
+        showToast('Черновик не найден');
+        renderFeed();
+        return;
       }
-    );
+    } else {
+      // Если ID не передан — создаём новый черновик
+      const newDraft = createNewDraft();
+      if (!newDraft) {
+        // Лимит достигнут — открываем список черновиков
+        renderDraftsList();
+        return;
+      }
+      state.draft = JSON.parse(JSON.stringify(newDraft));
+      state.activeDraftId = newDraft.id;
+      state.hasDraft = false;
+    }
+
+    setBackButton(true, () => {
+      // Сохраняем текущий черновик перед выходом
+      saveBlocksContent();
+      if (state.draft && !isEmptyDraft(state.draft)) {
+        saveDraft(state.draft);
+        state.hasDraft = true;
+      }
+      renderFeed();
+    });
 
     renderEditor();
 
   } catch (e) {
-
-    showToast(
-      e.message ||
-      'Не удалось открыть редактор'
-    );
+    console.error('openEditor error:', e);
+    showToast(e.message || 'Не удалось открыть редактор');
   }
 }
 
 
 // =========================================================
-// Редактирование существующей статьи
+// Редактирование существующей статьи (создаёт черновик)
 // =========================================================
 
 function editArticle(article) {
   if (!isArticleOwner(article)) {
-    showToast(
-      'Вы не являетесь автором этой статьи'
-    );
+    showToast('Вы не являетесь автором этой статьи');
+    return;
+  }
 
+  // Проверяем лимит черновиков
+  const drafts = getDraftsFromStorage();
+  if (drafts.length >= MAX_DRAFTS) {
+    showToast('Достигнут лимит черновиков (10). Удалите ненужные.');
     return;
   }
 
   state.view = 'editor';
   state.currentId = article.id;
 
-  state.draft = {
-    id: article.id,
+  // Создаём черновик из статьи
+  const draft = {
+    id: generateDraftId(),
     title: article.title || '',
     cover: article.cover || null,
-
-    blocks: JSON.parse(
-      JSON.stringify(
-        article.blocks || []
-      )
-    )
+    blocks: JSON.parse(JSON.stringify(article.blocks || [])),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    _isEdit: true,
+    _originalId: article.id
   };
 
-  if (!state.draft.blocks.length) {
-    state.draft.blocks = [
-      {
-        type: 'text',
-        html: ''
-      }
-    ];
+  if (!draft.blocks.length) {
+    draft.blocks = [{ type: 'text', html: '' }];
   }
 
-  setBackButton(
-    true,
-    () => {
-      if (state.hasDraft && !isDraftEmpty(state.draft)) {
-        if (
-          confirm(
-            'Отменить редактирование? Изменения будут сохранены в черновике.'
-          )
-        ) {
-          saveDraftToStorage(state.draft);
-          openReader(article.id);
-        }
-      } else {
-        clearDraft();
-        openReader(article.id);
-      }
+  // Сохраняем черновик
+  saveDraft(draft);
+  state.draft = JSON.parse(JSON.stringify(draft));
+  state.activeDraftId = draft.id;
+  state.hasDraft = !isEmptyDraft(draft);
+
+  setBackButton(true, () => {
+    saveBlocksContent();
+    if (state.draft && !isEmptyDraft(state.draft)) {
+      saveDraft(state.draft);
+      state.hasDraft = true;
     }
-  );
+    openReader(article.id);
+  });
 
   renderEditor();
 }
@@ -172,21 +130,55 @@ function editArticle(article) {
 // =========================================================
 
 function renderEditor() {
-  const main =
-    document.getElementById(
-      'main'
-    );
-
+  const main = document.getElementById('main');
   const d = state.draft;
 
-  const draftBanner = state.hasDraft && !isDraftEmpty(d) ? `
+  if (!d) {
+    main.innerHTML = '<div class="empty-state"><p>Черновик не найден</p></div>';
+    return;
+  }
+
+  // Проверяем, есть ли другие черновики для кнопки "К черновикам"
+  const drafts = getDraftsFromStorage();
+  const hasOtherDrafts = drafts.length > 1;
+
+  // Считаем слова
+  const wordCount = countWords(d.blocks.map(b => b.html || '').join(' '));
+  const imageCount = countImages(d.blocks);
+
+  // Баннер черновика
+  const draftBanner = state.hasDraft && !isEmptyDraft(d) ? `
     <div class="draft-banner chrome" id="draftBanner">
-      <span>Черновик сохранен</span>
-      <button class="draft-banner-close" id="clearDraftBtn">✕</button>
+      <span>Черновик сохранён</span>
+      <span class="draft-banner-stats">
+        ${wordCount > 0 ? wordCount + ' слов' : ''}
+        ${wordCount > 0 && imageCount > 0 ? ' · ' : ''}
+        ${imageCount > 0 ? imageCount + ' изображений' : ''}
+      </span>
+      <button class="draft-banner-close" id="clearDraftBtn">×</button>
     </div>
   ` : '';
 
+  // Кнопка "К черновикам" (только если есть другие черновики)
+  const draftsBtn = hasOtherDrafts ? `
+    <button class="btn btn-secondary" id="goToDraftsBtn" type="button">
+      К черновикам
+    </button>
+  ` : '';
+
+  const title = d.title || 'Без названия';
+  const shortTitle = title.length > 30 ? title.slice(0, 30) + '…' : title;
+
   main.innerHTML = `
+    <div class="editor-header">
+      <div class="editor-header-left">
+        <span class="editor-draft-title">${escapeHtml(shortTitle)}</span>
+      </div>
+      <div class="editor-header-right">
+        ${draftsBtn}
+        <span class="editor-save-status" id="saveStatus">● Сохранено</span>
+      </div>
+    </div>
 
     ${draftBanner}
 
@@ -194,379 +186,217 @@ function renderEditor() {
       class="editor-title-input"
       id="titleInput"
       placeholder="Заголовок статьи"
-      value="${escapeHtml(
-        d.title
-      )}"
+      value="${escapeHtml(d.title)}"
     >
 
-    <div
-      class="cover-editor"
-      id="coverEditor"
-    >
-
+    <div class="cover-editor" id="coverEditor">
       <div class="cover-editor-header">
-
         <div>
-
-          <div class="cover-editor-title">
-            Обложка
-          </div>
-
-          <div class="cover-editor-subtitle">
-            Она будет видна на главной, но не внутри статьи.
-          </div>
-
+          <div class="cover-editor-title">Обложка</div>
+          <div class="cover-editor-subtitle">Она будет видна на главной, но не внутри статьи.</div>
         </div>
-
-        ${
-          d.cover
-            ? `
-              <button
-                class="cover-remove-btn"
-                id="removeCoverBtn"
-                type="button"
-              >
-                Убрать
-              </button>
-            `
-            : ''
-        }
-
+        ${d.cover ? `
+          <button class="cover-remove-btn" id="removeCoverBtn" type="button">
+            Убрать
+          </button>
+        ` : ''}
       </div>
 
-      ${
-        d.cover
-          ? `
-            <div class="cover-preview">
-
-              <img
-                src="${escapeHtml(
-                  d.cover
-                )}"
-                alt=""
-              >
-
-              <button
-                class="cover-change-btn"
-                id="changeCoverBtn"
-                type="button"
-              >
-                Заменить обложку
-              </button>
-
-            </div>
-          `
-          : `
-            <button
-              class="cover-empty"
-              id="addCoverBtn"
-              type="button"
-            >
-
-              <span class="cover-empty-icon">
-                ＋
-              </span>
-
-              <span>
-                Добавить обложку
-              </span>
-
-            </button>
-          `
-      }
-
+      ${d.cover ? `
+        <div class="cover-preview">
+          <img src="${escapeHtml(d.cover)}" alt="">
+          <button class="cover-change-btn" id="changeCoverBtn" type="button">
+            Заменить обложку
+          </button>
+        </div>
+      ` : `
+        <button class="cover-empty" id="addCoverBtn" type="button">
+          <span class="cover-empty-icon">＋</span>
+          <span>Добавить обложку</span>
+        </button>
+      `}
     </div>
 
     <div id="blocksHost"></div>
 
-    <button
-      class="btn btn-primary publish-btn"
-      id="publishBtn"
-      type="button"
-    >
-      ${
-        d.id
-          ? 'Сохранить изменения'
-          : 'Опубликовать'
-      }
-    </button>
-
-    <input
-      type="file"
-      accept="image/*"
-      id="coverInput"
-      style="display:none"
-    >
-
-    <input
-      type="file"
-      accept="image/*"
-      multiple
-      id="fileInput"
-      style="display:none"
-    >
-
-    <div
-      class="hint chrome"
-      id="editorHint"
-    ></div>
-
-    <!-- ===================================================
-         ПЛАВАЮЩАЯ ПАНЕЛЬ ФОРМАТИРОВАНИЯ
-         =================================================== -->
-
-    <div id="floatingToolbar" class="floating-toolbar">
-      <button data-cmd="bold" title="Жирный">
-        <strong>B</strong>
+    <div class="editor-actions">
+      <button class="btn btn-secondary" id="saveDraftBtn" type="button">
+        Сохранить черновик
       </button>
-      <button data-cmd="italic" title="Курсив">
-        <em>i</em>
-      </button>
-      <button data-cmd="underline" title="Подчёркнутый">
-        <u>U</u>
-      </button>
-      <button data-cmd="strikeThrough" title="Зачеркнутый">
-        <span style="text-decoration:line-through;">S</span>
-      </button>
-      
-      <span class="toolbar-divider"></span>
-      
-      <button data-cmd="mono" title="Моноширинный">
-        <code>mono</code>
-      </button>
-      <button data-cmd="blockquote" title="Цитировать">
-        ❝
-      </button>
-      <button data-cmd="spoiler" title="Скрытый">
-        ◼
-      </button>
-      
-      <span class="toolbar-divider"></span>
-      
-      <button data-cmd="removeFormat" title="Обычный текст" class="remove-format-btn">
-        T
+      <button class="btn btn-primary publish-btn" id="publishBtn" type="button">
+        ${d._isEdit ? 'Сохранить изменения' : 'Опубликовать'}
       </button>
     </div>
 
+    <input type="file" accept="image/*" id="coverInput" style="display:none">
+    <input type="file" accept="image/*" multiple id="fileInput" style="display:none">
+
+    <div class="hint chrome" id="editorHint"></div>
+
+    <!-- Плавающая панель форматирования -->
+    <div id="floatingToolbar" class="floating-toolbar">
+      <button data-cmd="bold" title="Жирный"><strong>B</strong></button>
+      <button data-cmd="italic" title="Курсив"><em>i</em></button>
+      <button data-cmd="underline" title="Подчёркнутый"><u>U</u></button>
+      <button data-cmd="strikeThrough" title="Зачеркнутый">
+        <span style="text-decoration:line-through;">S</span>
+      </button>
+      <span class="toolbar-divider"></span>
+      <button data-cmd="mono" title="Моноширинный"><code>mono</code></button>
+      <button data-cmd="blockquote" title="Цитировать">❝</button>
+      <button data-cmd="spoiler" title="Скрытый">◼</button>
+      <span class="toolbar-divider"></span>
+      <button data-cmd="removeFormat" title="Обычный текст" class="remove-format-btn">T</button>
+    </div>
   `;
 
   // =======================================================
   // Заголовок
   // =======================================================
 
-  document
-    .getElementById('titleInput')
-    .oninput = e => {
-      d.title =
-        e.target.value;
-      autoSaveDraft();
-    };
+  document.getElementById('titleInput').oninput = e => {
+    d.title = e.target.value;
+    autoSaveDraft();
+    updateDraftTitle();
+  };
 
+  // =======================================================
+  // Кнопка "К черновикам"
+  // =======================================================
+
+  document.getElementById('goToDraftsBtn')?.addEventListener('click', () => {
+    saveBlocksContent();
+    if (d && !isEmptyDraft(d)) {
+      saveDraft(d);
+      state.hasDraft = true;
+    }
+    renderDraftsList();
+  });
 
   // =======================================================
   // Плавающая панель форматирования
   // =======================================================
 
-  document
-    .querySelectorAll('#floatingToolbar button')
-    .forEach(btn => {
-
-      btn.addEventListener('click', (e) => {
-        e.preventDefault();
-
-        if (!activeBlockEl) {
-          showToast('Нажмите на текст, чтобы начать редактирование');
-          return;
-        }
-
-        applyFormatCommand(btn.dataset.cmd);
-      });
+  document.querySelectorAll('#floatingToolbar button').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      if (!activeBlockEl) {
+        showToast('Нажмите на текст, чтобы начать редактирование');
+        return;
+      }
+      applyFormatCommand(btn.dataset.cmd);
     });
-
+  });
 
   // =======================================================
   // Обложка
   // =======================================================
 
-  document
-    .getElementById('addCoverBtn')
-    ?.addEventListener(
-      'click',
-      () =>
-        document
-          .getElementById(
-            'coverInput'
-          )
-          .click()
-    );
+  document.getElementById('addCoverBtn')?.addEventListener('click', () =>
+    document.getElementById('coverInput').click()
+  );
 
-  document
-    .getElementById('changeCoverBtn')
-    ?.addEventListener(
-      'click',
-      () =>
-        document
-          .getElementById(
-            'coverInput'
-          )
-          .click()
-    );
+  document.getElementById('changeCoverBtn')?.addEventListener('click', () =>
+    document.getElementById('coverInput').click()
+  );
 
-  document
-    .getElementById('removeCoverBtn')
-    ?.addEventListener(
-      'click',
-      () => {
+  document.getElementById('removeCoverBtn')?.addEventListener('click', () => {
+    d.cover = null;
+    renderEditor();
+    showToast('Обложка убрана');
+    autoSaveDraft();
+  });
 
-        d.cover = null;
+  document.getElementById('coverInput').onchange = async e => {
+    const f = e.target.files[0];
+    if (!f) return;
 
-        renderEditor();
-
-        showToast(
-          'Обложка убрана'
-        );
-
-        autoSaveDraft();
-      }
-    );
-
-
-  // =======================================================
-  // Выбор обложки
-  // =======================================================
-
-  document
-    .getElementById('coverInput')
-    .onchange = async e => {
-
-      const f =
-        e.target.files[0];
-
-      if (!f) {
-        return;
-      }
-
-      try {
-
-        d.cover =
-          await compressImageFile(
-            f,
-            1600,
-            .84
-          );
-
-        renderEditor();
-        autoSaveDraft();
-
-      } catch (err) {
-
-        showToast(
-          'Не удалось обработать обложку'
-        );
-      }
-
-      e.target.value = '';
-    };
-
+    try {
+      d.cover = await compressImageFile(f, 1600, 0.84);
+      renderEditor();
+      autoSaveDraft();
+    } catch (err) {
+      showToast('Не удалось обработать обложку');
+    }
+    e.target.value = '';
+  };
 
   // =======================================================
   // Выбор изображений для блоков
   // =======================================================
 
-  document
-    .getElementById('fileInput')
-    .onchange = async e => {
+  document.getElementById('fileInput').onchange = async e => {
+    const files = [...e.target.files || []];
 
-      const files = [
-        ...e.target.files || []
-      ];
+    if (!files.length) return;
 
-      if (!files.length) {
-        return;
-      }
+    try {
+      const idx = Number.isInteger(state.pendingImageInsertIndex)
+        ? state.pendingImageInsertIndex
+        : d.blocks.length;
 
-      try {
-
-        const idx =
-          Number.isInteger(
-            state.pendingImageInsertIndex
-          )
-            ? state.pendingImageInsertIndex
-            : d.blocks.length;
-
-        const blocks = [];
-
-        for (const f of files) {
-
-          blocks.push({
-            type: 'image',
-
-            src:
-              await compressImageFile(
-                f
-              ),
-
-            caption: '',
-
-            _pendingFile: true
-          });
-        }
-
-        d.blocks.splice(
-          idx,
-          0,
-          ...blocks
-        );
-
-        state.pendingImageInsertIndex =
-          null;
-
-        renderBlocks({
-          focusIndex: idx
+      const blocks = [];
+      for (const f of files) {
+        blocks.push({
+          type: 'image',
+          src: await compressImageFile(f),
+          caption: '',
+          _pendingFile: true
         });
-
-        autoSaveDraft();
-
-      } catch (err) {
-
-        showToast(
-          'Не удалось обработать изображение'
-        );
       }
 
-      e.target.value = '';
-    };
+      d.blocks.splice(idx, 0, ...blocks);
+      state.pendingImageInsertIndex = null;
 
+      renderBlocks({ focusIndex: idx });
+      autoSaveDraft();
+
+    } catch (err) {
+      showToast('Не удалось обработать изображение');
+    }
+
+    e.target.value = '';
+  };
+
+  // =======================================================
+  // Сохранить черновик (ручное сохранение)
+  // =======================================================
+
+  document.getElementById('saveDraftBtn').addEventListener('click', () => {
+    saveBlocksContent();
+    if (d && !isEmptyDraft(d)) {
+      saveDraft(d);
+      state.hasDraft = true;
+      showToast('Черновик сохранён');
+      updateSaveStatus('Сохранено');
+    } else {
+      showToast('Черновик пуст, сохранение не требуется');
+    }
+  });
 
   // =======================================================
   // Публикация
   // =======================================================
 
-  document
-    .getElementById('publishBtn')
-    .onclick =
-      publishDraft;
-
+  document.getElementById('publishBtn').onclick = publishDraft;
 
   // =======================================================
-  // Баннер черновика
+  // Баннер черновика — удалить
   // =======================================================
 
-  document
-    .getElementById('clearDraftBtn')
-    ?.addEventListener(
-      'click',
-      (e) => {
-        e.stopPropagation();
-        if (confirm('Удалить сохраненный черновик?')) {
-          clearDraft();
-          state.draft = newDraft();
-          renderEditor();
-          showToast('Черновик удален');
-        }
+  document.getElementById('clearDraftBtn')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (confirm('Удалить этот черновик безвозвратно?')) {
+      if (state.activeDraftId) {
+        deleteDraftById(state.activeDraftId);
       }
-    );
-
+      state.draft = null;
+      state.activeDraftId = null;
+      state.hasDraft = false;
+      renderDraftsList();
+      showToast('Черновик удалён');
+    }
+  });
 
   // =======================================================
   // Блоки
@@ -579,6 +409,41 @@ function renderEditor() {
   // =======================================================
 
   initFloatingToolbar();
+
+  updateSaveStatus('Сохранено');
+}
+
+
+// =========================================================
+// Обновить заголовок в хедере
+// =========================================================
+
+function updateDraftTitle() {
+  const titleEl = document.querySelector('.editor-draft-title');
+  if (!titleEl) return;
+
+  const d = state.draft;
+  const title = d?.title || 'Без названия';
+  titleEl.textContent = title.length > 30 ? title.slice(0, 30) + '…' : title;
+}
+
+
+// =========================================================
+// Обновить статус сохранения
+// =========================================================
+
+function updateSaveStatus(status) {
+  const el = document.getElementById('saveStatus');
+  if (!el) return;
+
+  const statusMap = {
+    'Сохранено': '● Сохранено',
+    'Сохранение…': '◉ Сохранение…',
+    'Ошибка': '✕ Ошибка'
+  };
+
+  el.textContent = statusMap[status] || status;
+  el.className = 'editor-save-status ' + status.toLowerCase().replace(/[^a-z]/g, '');
 }
 
 
@@ -591,8 +456,8 @@ function saveBlocksContent() {
   if (!host) return;
 
   const d = state.draft;
+  if (!d) return;
 
-  // Сохраняем содержимое текстовых блоков
   host.querySelectorAll('.block-text').forEach(el => {
     const i = parseInt(el.dataset.i);
     if (!isNaN(i) && d.blocks[i]?.type === 'text') {
@@ -600,7 +465,6 @@ function saveBlocksContent() {
     }
   });
 
-  // Сохраняем подписи изображений
   host.querySelectorAll('.block-caption').forEach(el => {
     const i = parseInt(el.dataset.i);
     if (!isNaN(i) && d.blocks[i]?.type === 'image') {
@@ -614,26 +478,10 @@ function saveBlocksContent() {
 // Добавить блок после указанного
 // =========================================================
 
-function insertBlockAfter(
-  index,
-  block
-) {
-  // Сначала сохраняем текущее содержимое
+function insertBlockAfter(index, block) {
   saveBlocksContent();
-
-  state.draft.blocks.splice(
-    index + 1,
-    0,
-    block
-  );
-
-  renderBlocks({
-    focusIndex:
-      block.type === 'text'
-        ? index + 1
-        : null
-  });
-
+  state.draft.blocks.splice(index + 1, 0, block);
+  renderBlocks({ focusIndex: block.type === 'text' ? index + 1 : null });
   autoSaveDraft();
 }
 
@@ -642,17 +490,9 @@ function insertBlockAfter(
 // Открыть выбор изображения
 // =========================================================
 
-function openImagePicker(
-  insertIndex
-) {
-  state.pendingImageInsertIndex =
-    insertIndex;
-
-  const input =
-    document.getElementById(
-      'fileInput'
-    );
-
+function openImagePicker(insertIndex) {
+  state.pendingImageInsertIndex = insertIndex;
+  const input = document.getElementById('fileInput');
   if (input) {
     input.value = '';
     input.click();
@@ -664,406 +504,154 @@ function openImagePicker(
 // Кнопки добавления блоков
 // =========================================================
 
-function createBlockAddControls(
-  index
-) {
-  const row =
-    document.createElement(
-      'div'
-    );
-
-  row.className =
-    'block-add-row';
+function createBlockAddControls(index) {
+  const row = document.createElement('div');
+  row.className = 'block-add-row';
 
   row.innerHTML = `
-    <button
-      class="block-add-btn"
-      type="button"
-      data-add="text"
-    >
+    <button class="block-add-btn" type="button" data-add="text">
       ＋ Текст
     </button>
-
-    <button
-      class="block-add-btn"
-      type="button"
-      data-add="image"
-    >
+    <button class="block-add-btn" type="button" data-add="image">
       ＋ Картинка
     </button>
   `;
 
-  row
-    .querySelector(
-      '[data-add="text"]'
-    )
-    .onclick = () => {
-      insertBlockAfter(
-        index,
-        {
-          type: 'text',
-          html: ''
-        }
-      );
-    };
+  row.querySelector('[data-add="text"]').onclick = () => {
+    insertBlockAfter(index, { type: 'text', html: '' });
+  };
 
-  row
-    .querySelector(
-      '[data-add="image"]'
-    )
-    .onclick = () => {
-      openImagePicker(
-        index + 1
-      );
-    };
+  row.querySelector('[data-add="image"]').onclick = () => {
+    openImagePicker(index + 1);
+  };
 
   return row;
 }
 
 
 // =========================================================
-// Рендер блоков (исправленная версия)
+// Рендер блоков
 // =========================================================
 
-function renderBlocks(
-  options = {}
-) {
-  const host =
-    document.getElementById(
-      'blocksHost'
-    );
-
-  if (!host) {
-    return;
-  }
+function renderBlocks(options = {}) {
+  const host = document.getElementById('blocksHost');
+  if (!host) return;
 
   const d = state.draft;
+  if (!d) return;
 
-  // =======================================================
-  // ВАЖНО: Сохраняем содержимое ДО перерисовки
-  // =======================================================
   saveBlocksContent();
 
-  const old =
-    activeBlockEl;
-
+  const old = activeBlockEl;
   let activeIndex = null;
   let offset = null;
 
-
-  // -------------------------------------------------------
-  // Сохраняем позицию курсора
-  // -------------------------------------------------------
-
-  if (
-    old?.isConnected &&
-    old.dataset.i !== undefined
-  ) {
-    activeIndex =
-      Number(old.dataset.i);
-
+  if (old?.isConnected && old.dataset.i !== undefined) {
+    activeIndex = Number(old.dataset.i);
     try {
-
       const s = getSelection();
-
       if (s?.rangeCount) {
-
-        const r =
-          s.getRangeAt(0);
-
-        if (
-          old.contains(
-            r.startContainer
-          )
-        ) {
-          offset =
-            getCaretOffset(
-              old,
-              r
-            );
+        const r = s.getRangeAt(0);
+        if (old.contains(r.startContainer)) {
+          offset = getCaretOffset(old, r);
         }
       }
-
     } catch (e) {}
   }
 
-
-  // -------------------------------------------------------
-  // Перерисовка
-  // -------------------------------------------------------
-
   host.innerHTML = '';
 
-  d.blocks.forEach(
-    (b, i) => {
+  d.blocks.forEach((b, i) => {
+    const block = document.createElement('div');
+    block.className = 'block';
+    block.dataset.i = i;
 
-      const block =
-        document.createElement(
-          'div'
-        );
+    if (b.type === 'text') {
+      block.innerHTML = `
+        <button class="block-remove" data-act="del" data-i="${i}" type="button">×</button>
+        <div class="block-text" contenteditable="true" data-i="${i}" data-placeholder="Текст абзаца…">
+          ${sanitizeHtml(b.html || '')}
+        </div>
+      `;
+    } else if (b.type === 'image') {
+      block.className = 'block block-image-wrap';
+      block.innerHTML = `
+        <button class="block-remove" data-act="del" data-i="${i}" type="button">×</button>
+        <img src="${escapeHtml(b.src || '')}" alt="">
+        <input class="block-caption" data-i="${i}" placeholder="Подпись (необязательно)" value="${escapeHtml(b.caption || '')}">
+      `;
+    } else {
+      return;
+    }
 
-      block.className =
-        'block';
+    host.appendChild(block);
+    host.appendChild(createBlockAddControls(i));
+  });
 
-      block.dataset.i = i;
+  // Текстовые блоки
+  host.querySelectorAll('.block-text').forEach(el => {
+    el.onfocus = () => { activeBlockEl = el; };
+    el.oninput = e => {
+      const i = +e.target.dataset.i;
+      if (d.blocks[i]?.type === 'text') {
+        d.blocks[i].html = sanitizeHtml(e.target.innerHTML);
+      }
+      autoSaveDraft();
+    };
+    el.onkeyup = () => { activeBlockEl = el; };
+    el.onmouseup = () => { activeBlockEl = el; };
+  });
 
+  // Подписи изображений
+  host.querySelectorAll('.block-caption').forEach(el => {
+    el.oninput = e => {
+      const i = +e.target.dataset.i;
+      if (d.blocks[i]?.type === 'image') {
+        d.blocks[i].caption = e.target.value;
+      }
+      autoSaveDraft();
+    };
+  });
 
-      // ---------------------------------------------------
-      // Текстовый блок
-      // ---------------------------------------------------
+  // Удаление блоков
+  host.querySelectorAll('[data-act="del"]').forEach(el => {
+    el.onclick = () => {
+      const i = +el.dataset.i;
+      if (!d.blocks[i]) return;
 
-      if (b.type === 'text') {
-
-        block.innerHTML = `
-          <button
-            class="block-remove"
-            data-act="del"
-            data-i="${i}"
-            type="button"
-          >
-            ✕
-          </button>
-
-          <div
-            class="block-text"
-            contenteditable="true"
-            data-i="${i}"
-            data-placeholder="Текст абзаца…"
-          >
-            ${sanitizeHtml(
-              b.html || ''
-            )}
-          </div>
-        `;
-
-
-      // ---------------------------------------------------
-      // Изображение
-      // ---------------------------------------------------
-
-      } else if (
-        b.type === 'image'
-      ) {
-
-        block.className =
-          'block block-image-wrap';
-
-        block.innerHTML = `
-          <button
-            class="block-remove"
-            data-act="del"
-            data-i="${i}"
-            type="button"
-          >
-            ✕
-          </button>
-
-          <img
-            src="${escapeHtml(
-              b.src || ''
-            )}"
-            alt=""
-          >
-
-          <input
-            class="block-caption"
-            data-i="${i}"
-            placeholder="Подпись (необязательно)"
-            value="${escapeHtml(
-              b.caption || ''
-            )}"
-          >
-        `;
-
-      } else {
-        return;
+      d.blocks.splice(i, 1);
+      if (!d.blocks.length) {
+        d.blocks.push({ type: 'text', html: '' });
       }
 
-      host.appendChild(block);
+      renderBlocks({
+        focusIndex: Math.min(i, d.blocks.length - 1)
+      });
+      autoSaveDraft();
+    };
+  });
 
-      host.appendChild(
-        createBlockAddControls(i)
-      );
-    }
-  );
-
-
-  // =======================================================
-  // Текстовые блоки
-  // =======================================================
-
-  host
-    .querySelectorAll(
-      '.block-text'
-    )
-    .forEach(el => {
-
-      el.onfocus = () => {
-        activeBlockEl = el;
-      };
-
-      el.oninput = e => {
-
-        const i =
-          +e.target.dataset.i;
-
-        if (
-          d.blocks[i]?.type ===
-          'text'
-        ) {
-          d.blocks[i].html =
-            sanitizeHtml(
-              e.target.innerHTML
-            );
-        }
-
-        autoSaveDraft();
-      };
-
-      el.onkeyup = () => {
-        activeBlockEl = el;
-      };
-
-      el.onmouseup = () => {
-        activeBlockEl = el;
-      };
-    });
-
-
-  // =======================================================
-  // Подписи изображений
-  // =======================================================
-
-  host
-    .querySelectorAll(
-      '.block-caption'
-    )
-    .forEach(el => {
-
-      el.oninput = e => {
-
-        const i =
-          +e.target.dataset.i;
-
-        if (
-          d.blocks[i]?.type ===
-          'image'
-        ) {
-          d.blocks[i].caption =
-            e.target.value;
-        }
-
-        autoSaveDraft();
-      };
-    });
-
-
-  // =======================================================
-  // Удаление блоков
-  // =======================================================
-
-  host
-    .querySelectorAll(
-      '[data-act="del"]'
-    )
-    .forEach(el => {
-
-      el.onclick = () => {
-
-        const i =
-          +el.dataset.i;
-
-        if (!d.blocks[i]) {
-          return;
-        }
-
-        d.blocks.splice(
-          i,
-          1
-        );
-
-        if (!d.blocks.length) {
-          d.blocks.push({
-            type: 'text',
-            html: ''
-          });
-        }
-
-        renderBlocks({
-          focusIndex:
-            Math.min(
-              i,
-              d.blocks.length - 1
-            )
-        });
-
-        autoSaveDraft();
-      };
-    });
-
-
-  // =======================================================
   // Фокус на новый блок
-  // =======================================================
-
-  if (
-    options.focusIndex !==
-      undefined &&
-    options.focusIndex !== null
-  ) {
-
-    const t =
-      host.querySelector(
-        `.block-text[data-i="${options.focusIndex}"]`
-      );
-
+  if (options.focusIndex !== undefined && options.focusIndex !== null) {
+    const t = host.querySelector(`.block-text[data-i="${options.focusIndex}"]`);
     if (t) {
-
-      requestAnimationFrame(
-        () => {
-
-          t.focus();
-
-          activeBlockEl = t;
-
-          placeCaretAtEnd(t);
-        }
-      );
+      requestAnimationFrame(() => {
+        t.focus();
+        activeBlockEl = t;
+        placeCaretAtEnd(t);
+      });
     }
-
     return;
   }
 
-
-  // =======================================================
   // Восстановление старого фокуса
-  // =======================================================
-
-  if (
-    activeIndex !== null &&
-    activeIndex < d.blocks.length
-  ) {
-
-    const t =
-      host.querySelector(
-        `.block-text[data-i="${activeIndex}"]`
-      );
-
-    if (
-      t &&
-      document.activeElement ===
-        document.body
-    ) {
-
+  if (activeIndex !== null && activeIndex < d.blocks.length) {
+    const t = host.querySelector(`.block-text[data-i="${activeIndex}"]`);
+    if (t && document.activeElement === document.body) {
       t.focus();
-
       activeBlockEl = t;
-
       if (offset !== null) {
-        setCaretOffset(
-          t,
-          offset
-        );
+        setCaretOffset(t, offset);
       }
     }
   }
@@ -1076,20 +664,10 @@ function renderBlocks(
 // Получить позицию курсора
 // =========================================================
 
-function getCaretOffset(
-  el,
-  range
-) {
-  const r =
-    range.cloneRange();
-
+function getCaretOffset(el, range) {
+  const r = range.cloneRange();
   r.selectNodeContents(el);
-
-  r.setEnd(
-    range.startContainer,
-    range.startOffset
-  );
-
+  r.setEnd(range.startContainer, range.startOffset);
   return r.toString().length;
 }
 
@@ -1098,55 +676,26 @@ function getCaretOffset(
 // Установить позицию курсора
 // =========================================================
 
-function setCaretOffset(
-  el,
-  offset
-) {
-  const s =
-    getSelection();
+function setCaretOffset(el, offset) {
+  const s = getSelection();
+  if (!s) return;
 
-  if (!s) {
-    return;
-  }
-
-  const r =
-    document.createRange();
-
+  const r = document.createRange();
   let cur = 0;
   let found = false;
 
   function walk(n) {
-
-    if (found) {
-      return;
-    }
+    if (found) return;
 
     if (n.nodeType === 3) {
-
-      const len =
-        n.nodeValue.length;
-
-      if (
-        cur + len >= offset
-      ) {
-
-        r.setStart(
-          n,
-          Math.max(
-            0,
-            offset - cur
-          )
-        );
-
+      const len = n.nodeValue.length;
+      if (cur + len >= offset) {
+        r.setStart(n, Math.max(0, offset - cur));
         r.collapse(true);
-
         found = true;
-
         return;
       }
-
       cur += len;
-
       return;
     }
 
@@ -1170,22 +719,13 @@ function setCaretOffset(
 // =========================================================
 
 function placeCaretAtEnd(el) {
-  const s =
-    getSelection();
+  const s = getSelection();
+  if (!s) return;
 
-  if (!s) {
-    return;
-  }
-
-  const r =
-    document.createRange();
-
+  const r = document.createRange();
   r.selectNodeContents(el);
-
   r.collapse(false);
-
   s.removeAllRanges();
-
   s.addRange(r);
 }
 
@@ -1194,76 +734,35 @@ function placeCaretAtEnd(el) {
 // Сжатие изображения
 // =========================================================
 
-function compressImageFile(
-  file,
-  maxW = 1200,
-  quality = .82
-) {
-  return new Promise(
-    (resolve, reject) => {
+function compressImageFile(file, maxW = 1200, quality = 0.82) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
 
-      const r =
-        new FileReader();
+    r.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        let w = img.width;
+        let h = img.height;
 
-      r.onload = e => {
+        if (w > maxW) {
+          h = Math.round(h * maxW / w);
+          w = maxW;
+        }
 
-        const img =
-          new Image();
+        const c = document.createElement('canvas');
+        c.width = w;
+        c.height = h;
+        c.getContext('2d').drawImage(img, 0, 0, w, h);
 
-        img.onload = () => {
-
-          let w = img.width;
-          let h = img.height;
-
-          if (w > maxW) {
-
-            h =
-              Math.round(
-                h * maxW / w
-              );
-
-            w = maxW;
-          }
-
-          const c =
-            document.createElement(
-              'canvas'
-            );
-
-          c.width = w;
-          c.height = h;
-
-          c
-            .getContext('2d')
-            .drawImage(
-              img,
-              0,
-              0,
-              w,
-              h
-            );
-
-          resolve(
-            c.toDataURL(
-              'image/jpeg',
-              quality
-            )
-          );
-        };
-
-        img.onerror =
-          reject;
-
-        img.src =
-          e.target.result;
+        resolve(c.toDataURL('image/jpeg', quality));
       };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
 
-      r.onerror =
-        reject;
-
-      r.readAsDataURL(file);
-    }
-  );
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
 }
 
 
@@ -1275,12 +774,14 @@ let autoSaveTimeout = null;
 
 function autoSaveDraft() {
   const d = state.draft;
-
   if (!d) return;
 
-  if (isDraftEmpty(d)) {
+  if (isEmptyDraft(d)) {
     if (state.hasDraft) {
-      clearDraft();
+      if (state.activeDraftId) {
+        deleteDraftById(state.activeDraftId);
+      }
+      state.hasDraft = false;
       updateDraftBanner();
     }
     return;
@@ -1290,9 +791,13 @@ function autoSaveDraft() {
     clearTimeout(autoSaveTimeout);
   }
 
+  updateSaveStatus('Сохранение…');
+
   autoSaveTimeout = setTimeout(() => {
-    saveDraftToStorage(d);
+    saveDraft(d);
+    state.hasDraft = true;
     updateDraftBanner();
+    updateSaveStatus('Сохранено');
   }, 1000);
 }
 
@@ -1305,7 +810,7 @@ function updateDraftBanner() {
   const banner = document.getElementById('draftBanner');
   if (!banner) return;
 
-  if (state.hasDraft && !isDraftEmpty(state.draft)) {
+  if (state.hasDraft && state.draft && !isEmptyDraft(state.draft)) {
     banner.style.display = 'flex';
   } else {
     banner.style.display = 'none';
@@ -1323,19 +828,11 @@ const CUSTOM_TAGS = {
   blockquote: { tag: 'BLOCKQUOTE', className: null }
 };
 
-const NATIVE_COMMANDS = new Set([
-  'bold',
-  'italic',
-  'underline',
-  'strikeThrough'
-]);
-
+const NATIVE_COMMANDS = new Set(['bold', 'italic', 'underline', 'strikeThrough']);
 const ZWSP = '\u200B';
 
-// Элемент кастомного тега (code/spoiler/blockquote),
-// внутри которого сейчас "печатается" пользователь
-// (когда формат включен без выделения)
 let typingWrapperEl = null;
+
 
 function applyFormatCommand(cmd) {
   if (!activeBlockEl) {
@@ -1347,15 +844,8 @@ function applyFormatCommand(cmd) {
 
   const selection = window.getSelection();
 
-  // ---------------------------------------------------
   // Есть выделение — форматируем сам выделенный текст
-  // ---------------------------------------------------
-
-  if (
-    selection &&
-    !selection.isCollapsed &&
-    activeBlockEl.contains(selection.anchorNode)
-  ) {
+  if (selection && !selection.isCollapsed && activeBlockEl.contains(selection.anchorNode)) {
     if (cmd === 'removeFormat') {
       removeAllFormatting(activeBlockEl, selection);
     } else if (NATIVE_COMMANDS.has(cmd)) {
@@ -1370,10 +860,7 @@ function applyFormatCommand(cmd) {
     return;
   }
 
-  // ---------------------------------------------------
   // Выделения нет — включаем "режим печати" с форматом
-  // ---------------------------------------------------
-
   if (!selection || !activeBlockEl.contains(selection.anchorNode)) {
     placeCaretAtEnd(activeBlockEl);
   }
@@ -1398,21 +885,14 @@ function applyFormatCommand(cmd) {
   }
 }
 
-// ---------------------------------------------------------
-// Включить/выключить "печать внутри кастомного тега"
-// ---------------------------------------------------------
 
 function toggleCustomTagTypingMode(cmd) {
   const selection = window.getSelection();
-
-  if (!selection || !selection.rangeCount) {
-    return;
-  }
+  if (!selection || !selection.rangeCount) return;
 
   const range = selection.getRangeAt(0);
   const { tag, className } = CUSTOM_TAGS[cmd];
 
-  // Если курсор уже внутри такого тега — выходим из него
   const existing = findAncestorTag(range.startContainer, tag, className);
 
   if (existing) {
@@ -1435,9 +915,6 @@ function toggleCustomTagTypingMode(cmd) {
     return;
   }
 
-  // Иначе создаём пустой тег с невидимым символом
-  // и ставим курсор внутрь него — дальше пользователь
-  // печатает прямо в этот узел
   const wrapper = document.createElement(tag);
   if (className) {
     wrapper.className = className;
@@ -1455,19 +932,12 @@ function toggleCustomTagTypingMode(cmd) {
   selection.addRange(newRange);
 
   typingWrapperEl = wrapper;
-
   activeBlockEl.dispatchEvent(new Event('input'));
 }
 
-// ---------------------------------------------------------
-// Завершить "режим печати" в кастомном теге:
-// убрать служебный символ, удалить тег если он пустой
-// ---------------------------------------------------------
 
 function exitTypingWrapper() {
-  if (!typingWrapperEl) {
-    return;
-  }
+  if (!typingWrapperEl) return;
 
   cleanZeroWidthSpaces(typingWrapperEl);
 
@@ -1477,6 +947,7 @@ function exitTypingWrapper() {
 
   typingWrapperEl = null;
 }
+
 
 function cleanZeroWidthSpaces(el) {
   const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
@@ -1489,24 +960,17 @@ function cleanZeroWidthSpaces(el) {
   }
 }
 
-// Если курсор ушёл за пределы typingWrapperEl (стрелками,
-// кликом, сменой блока и т.д.) — завершаем режим печати
+
 function checkTypingWrapperExit() {
-  if (!typingWrapperEl) {
-    return;
-  }
+  if (!typingWrapperEl) return;
 
   const selection = window.getSelection();
-
-  const stillInside =
-    selection &&
+  const stillInside = selection &&
     selection.rangeCount &&
     typingWrapperEl.isConnected &&
     typingWrapperEl.contains(selection.getRangeAt(0).startContainer);
 
-  if (stillInside) {
-    return;
-  }
+  if (stillInside) return;
 
   const changedBlock = activeBlockEl;
   exitTypingWrapper();
@@ -1516,7 +980,8 @@ function checkTypingWrapperExit() {
   }
 }
 
-// Обработка двойного Enter для отключения кастомных тегов
+
+// Обработка двойного Enter
 let enterPressCount = 0;
 let enterPressTimer = null;
 
@@ -1569,24 +1034,14 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
-// ---------------------------------------------------------
-// Обернуть/снять кастомный тег (code / spoiler / blockquote)
-// — для случая, когда есть выделение
-// ---------------------------------------------------------
 
 function toggleCustomTag(cmd, selection) {
-  if (!selection || selection.isCollapsed) {
-    return;
-  }
+  if (!selection || selection.isCollapsed) return;
 
   const { tag, className } = CUSTOM_TAGS[cmd];
   const range = selection.getRangeAt(0);
 
-  const existing = findAncestorTag(
-    range.commonAncestorContainer,
-    tag,
-    className
-  );
+  const existing = findAncestorTag(range.commonAncestorContainer, tag, className);
 
   if (existing) {
     unwrapElement(existing);
@@ -1612,17 +1067,12 @@ function toggleCustomTag(cmd, selection) {
   selection.addRange(newRange);
 }
 
+
 function findAncestorTag(node, tagName, className) {
-  let el =
-    node.nodeType === 3
-      ? node.parentElement
-      : node;
+  let el = node.nodeType === 3 ? node.parentElement : node;
 
   while (el && el.contentEditable !== 'true') {
-    if (
-      el.tagName === tagName &&
-      (!className || el.classList.contains(className))
-    ) {
+    if (el.tagName === tagName && (!className || el.classList.contains(className))) {
       return el;
     }
     el = el.parentElement;
@@ -1630,6 +1080,7 @@ function findAncestorTag(node, tagName, className) {
 
   return null;
 }
+
 
 function unwrapElement(el) {
   const parent = el.parentNode;
@@ -1641,59 +1092,38 @@ function unwrapElement(el) {
   parent.removeChild(el);
 }
 
-// ---------------------------------------------------------
-// Полный сброс форматирования (только в пределах выделения)
-// ---------------------------------------------------------
 
 function removeAllFormatting(blockEl, selection) {
-  if (!selection || selection.rangeCount === 0) {
-    return;
-  }
+  if (!selection || selection.rangeCount === 0) return;
 
   const range = selection.getRangeAt(0);
 
-  if (!blockEl.contains(range.commonAncestorContainer)) {
-    return;
-  }
+  if (!blockEl.contains(range.commonAncestorContainer)) return;
 
   const selectedText = range.toString();
 
-  if (!selectedText.trim()) {
-    return;
-  }
+  if (!selectedText.trim()) return;
 
-  // Удаляем выделенный контент
   range.deleteContents();
 
-  // Поднимаем точку вставки до уровня blockEl
-  const point = splitAncestorsUpTo(
-    range.startContainer,
-    range.startOffset,
-    blockEl
-  );
+  const point = splitAncestorsUpTo(range.startContainer, range.startOffset, blockEl);
 
   const textNode = document.createTextNode(selectedText);
 
   if (point.container.childNodes[point.offset]) {
-    point.container.insertBefore(
-      textNode,
-      point.container.childNodes[point.offset]
-    );
+    point.container.insertBefore(textNode, point.container.childNodes[point.offset]);
   } else {
     point.container.appendChild(textNode);
   }
 
-  // Убираем опустевшие теги форматирования
   cleanupEmptyInlineTags(blockEl);
 
-  // Ставим курсор после вставленного текста
   const newRange = document.createRange();
   newRange.setStartAfter(textNode);
   newRange.collapse(true);
   selection.removeAllRanges();
   selection.addRange(newRange);
 
-  // Сохраняем изменения в state.draft
   const blockIndex = parseInt(blockEl.dataset.i);
   if (!isNaN(blockIndex) && state.draft.blocks[blockIndex]) {
     const cleanHtml = sanitizeHtml(blockEl.innerHTML);
@@ -1704,16 +1134,14 @@ function removeAllFormatting(blockEl, selection) {
   updateFloatingToolbarButtons();
 }
 
+
 function splitAncestorsUpTo(container, offset, boundary) {
   let node = container;
   let off = offset;
 
   while (node !== boundary) {
     const parent = node.parentNode;
-
-    if (!parent) {
-      break;
-    }
+    if (!parent) break;
 
     if (node.nodeType === Node.TEXT_NODE) {
       if (off > 0 && off < node.nodeValue.length) {
@@ -1723,7 +1151,6 @@ function splitAncestorsUpTo(container, offset, boundary) {
       const idx = Array.prototype.indexOf.call(parent.childNodes, node);
       off = off === 0 ? idx : idx + 1;
       node = parent;
-
     } else {
       const clone = node.cloneNode(false);
 
@@ -1744,11 +1171,9 @@ function splitAncestorsUpTo(container, offset, boundary) {
   return { container: node, offset: off };
 }
 
+
 function cleanupEmptyInlineTags(blockEl) {
-  const tags = [
-    'B', 'STRONG', 'I', 'EM', 'U', 'S', 'STRIKE',
-    'CODE', 'SPAN', 'BLOCKQUOTE'
-  ];
+  const tags = ['B', 'STRONG', 'I', 'EM', 'U', 'S', 'STRIKE', 'CODE', 'SPAN', 'BLOCKQUOTE'];
 
   blockEl.querySelectorAll(tags.join(',')).forEach(el => {
     if (!el.textContent.trim() && !el.querySelector('img')) {
@@ -1780,19 +1205,18 @@ function initFloatingToolbar() {
   });
 }
 
+
 function updateFloatingToolbarButtons() {
   const nativeCommands = ['bold', 'italic', 'underline', 'strikeThrough'];
 
   nativeCommands.forEach(cmd => {
-    document
-      .querySelectorAll(`#floatingToolbar [data-cmd="${cmd}"]`)
-      .forEach(btn => {
-        let isActive = false;
-        try {
-          isActive = document.queryCommandState(cmd);
-        } catch (e) {}
-        btn.classList.toggle('active', isActive);
-      });
+    document.querySelectorAll(`#floatingToolbar [data-cmd="${cmd}"]`).forEach(btn => {
+      let isActive = false;
+      try {
+        isActive = document.queryCommandState(cmd);
+      } catch (e) {}
+      btn.classList.toggle('active', isActive);
+    });
   });
 
   const selection = window.getSelection();
@@ -1805,17 +1229,16 @@ function updateFloatingToolbarButtons() {
       isActive = !!findAncestorTag(range.commonAncestorContainer, tag, className);
     }
 
-    if (
-      typingWrapperEl &&
+    if (typingWrapperEl &&
       typingWrapperEl.tagName === tag &&
       (!className || typingWrapperEl.classList.contains(className))
     ) {
       isActive = true;
     }
 
-    document
-      .querySelectorAll(`#floatingToolbar [data-cmd="${cmd}"]`)
-      .forEach(btn => btn.classList.toggle('active', isActive));
+    document.querySelectorAll(`#floatingToolbar [data-cmd="${cmd}"]`).forEach(btn =>
+      btn.classList.toggle('active', isActive)
+    );
   });
 }
 
@@ -1825,215 +1248,110 @@ function updateFloatingToolbarButtons() {
 // =========================================================
 
 async function publishDraft() {
-  // Сначала сохраняем текущее содержимое
   saveBlocksContent();
 
   const d = state.draft;
-
-  const hasContent =
-    !!d.title.trim() ||
-    !!d.cover ||
-    d.blocks.some(
-      b =>
-        b.type === 'image' ||
-        (
-          b.type === 'text' &&
-          b.html
-            .replace(
-              /<[^>]+>/g,
-              ''
-            )
-            .trim()
-        )
-    );
-
-  if (!hasContent) {
-    showToast(
-      'Добавьте заголовок или содержимое'
-    );
-
+  if (!d) {
+    showToast('Нет черновика для публикации');
     return;
   }
 
-  const button =
-    document.getElementById(
-      'publishBtn'
+  const hasContent = !!d.title.trim() ||
+    !!d.cover ||
+    d.blocks.some(b =>
+      b.type === 'image' ||
+      (b.type === 'text' && b.html.replace(/<[^>]+>/g, '').trim())
     );
 
-  const hint =
-    document.getElementById(
-      'editorHint'
-    );
+  if (!hasContent) {
+    showToast('Добавьте заголовок или содержимое');
+    return;
+  }
+
+  const button = document.getElementById('publishBtn');
+  const hint = document.getElementById('editorHint');
 
   button.disabled = true;
-
-  hint.textContent =
-    d.id
-      ? 'Сохраняем изменения…'
-      : 'Публикуем…';
+  hint.textContent = d._isEdit ? 'Сохраняем изменения…' : 'Публикуем…';
 
   try {
-
-    const profile =
-      await ensureProfile(true);
-
+    const profile = await ensureProfile(true);
     if (!profile) {
-      throw new Error(
-        'Необходимо указать ник'
-      );
+      throw new Error('Необходимо указать ник');
     }
 
-
-    // -----------------------------------------------------
     // Обложка
-    // -----------------------------------------------------
-
-    let cover =
-      d.cover || null;
-
-    if (
-      cover?.startsWith('data:')
-    ) {
-      cover =
-        await uploadImage(
-          cover,
-          'cover.jpg'
-        );
+    let cover = d.cover || null;
+    if (cover?.startsWith('data:')) {
+      cover = await uploadImage(cover, 'cover.jpg');
     }
 
-
-    // -----------------------------------------------------
     // Изображения внутри статьи
-    // -----------------------------------------------------
-
-    for (
-      const b of d.blocks
-    ) {
-
-      if (
-        b.type === 'image' &&
-        b._pendingFile
-      ) {
-
-        b.src =
-          await uploadImage(
-            b.src,
-            'image.jpg'
-          );
-
+    for (const b of d.blocks) {
+      if (b.type === 'image' && b._pendingFile) {
+        b.src = await uploadImage(b.src, 'image.jpg');
         delete b._pendingFile;
       }
     }
 
-
-    // -----------------------------------------------------
     // Excerpt
-    // -----------------------------------------------------
-
-    const first =
-      d.blocks.find(
-        b =>
-          b.type === 'text' &&
-          b.html?.trim()
-      );
-
-    const excerpt =
-      first
-        ? first.html
-            .replace(
-              /<[^>]+>/g,
-              ''
-            )
-            .trim()
-            .slice(0, 140)
-        : '';
-
-
-    // -----------------------------------------------------
-    // Payload
-    // -----------------------------------------------------
+    const first = d.blocks.find(b => b.type === 'text' && b.html?.trim());
+    const excerpt = first
+      ? first.html.replace(/<[^>]+>/g, '').trim().slice(0, 140)
+      : '';
 
     const payload = {
-      title:
-        d.title.trim() ||
-        'Без названия',
-
+      title: d.title.trim() || 'Без названия',
       excerpt,
-
       cover,
-
-      blocks:
-        d.blocks
+      blocks: d.blocks
     };
 
+    // Если это редактирование существующей статьи
+    if (d._isEdit && d._originalId) {
+      const r = await callTelegramApi('update-article', {
+        article: {
+          id: d._originalId,
+          ...payload
+        }
+      });
 
-    // -----------------------------------------------------
-    // Новая статья
-    // -----------------------------------------------------
+      // Удаляем черновик после успешного обновления
+      if (state.activeDraftId) {
+        deleteDraftById(state.activeDraftId);
+      }
 
-    if (!d.id) {
+      state.draft = null;
+      state.activeDraftId = null;
+      state.hasDraft = false;
 
-      const r =
-        await callTelegramApi(
-          'create-article',
-          {
-            article:
-              payload
-          }
-        );
-
-      clearDraft();
-
-      showToast(
-        'Опубликовано'
-      );
-
-      await openReader(
-        r.article.id
-      );
-
-
-    // -----------------------------------------------------
-    // Обновление статьи
-    // -----------------------------------------------------
-
+      showToast('Изменения сохранены');
+      await openReader(r.article.id);
     } else {
+      // Новая статья
+      const r = await callTelegramApi('create-article', {
+        article: payload
+      });
 
-      const r =
-        await callTelegramApi(
-          'update-article',
-          {
-            article: {
-              id: d.id,
-              ...payload
-            }
-          }
-        );
+      // Удаляем черновик после успешной публикации
+      if (state.activeDraftId) {
+        deleteDraftById(state.activeDraftId);
+      }
 
-      clearDraft();
+      state.draft = null;
+      state.activeDraftId = null;
+      state.hasDraft = false;
 
-      showToast(
-        'Изменения сохранены'
-      );
-
-      await openReader(
-        r.article.id
-      );
+      showToast('Опубликовано');
+      await openReader(r.article.id);
     }
 
   } catch (e) {
-
     console.error(e);
-
-    showToast(
-      e.message ||
-      'Ошибка публикации'
-    );
-
+    showToast(e.message || 'Ошибка публикации');
     hint.textContent = '';
 
   } finally {
-
     button.disabled = false;
   }
 }
