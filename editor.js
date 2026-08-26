@@ -312,7 +312,7 @@ function renderEditor() {
     ></div>
 
     <!-- ===================================================
-         ПЛАВАЮЩАЯ ПАНЕЛЬ ФОРМАТИРОВАНИЯ
+         ПЛАВАЮЩАЯ ПАНЕЛЬ ИРОВАНИЯ
          =================================================== -->
 
     <div id="floatingToolbar" class="floating-toolbar">
@@ -364,7 +364,7 @@ function renderEditor() {
 
 
   // =======================================================
-  // Плавающая панель форматирования
+  // Плавающая панель ирования
   // =======================================================
 
   document
@@ -1278,7 +1278,7 @@ function updateDraftBanner() {
 
 
 // =========================================================
-// ФОРМАТИРОВАНИЕ ТЕКСТА
+// ИРОВАНИЕ ТЕКСТА
 // =========================================================
 
 const CUSTOM_TAGS = {
@@ -1304,7 +1304,7 @@ function applyFormatCommand(cmd) {
 
   // Если нет выделения — показываем подсказку
   if (!selection || selection.isCollapsed) {
-    showToast('Выделите текст, чтобы применить форматирование');
+    showToast('Выделите текст, чтобы применить ирование');
     return;
   }
 
@@ -1415,60 +1415,53 @@ function removeAllFormatting(blockEl, selection) {
     return;
   }
 
-  // Сохраняем текст выделения (извлекаем его из DOM)
-  const selectedFragment = range.extractContents();
+  // Получаем выделенный текст
+  const selectedText = range.toString();
   
-  // Создаем временный контейнер
-  const temp = document.createElement('div');
-  temp.appendChild(selectedFragment);
-
-  // Рекурсивно удаляем все теги форматирования, оставляя только текст
-  function stripFormatting(node) {
-    const children = [...node.childNodes];
-    
-    children.forEach(child => {
-      if (child.nodeType === 1) {
-        // Это элемент — удаляем его теги, но сохраняем содержимое
-        const parent = child.parentNode;
-        while (child.firstChild) {
-          parent.insertBefore(child.firstChild, child);
-        }
-        parent.removeChild(child);
-        // Рекурсивно обрабатываем родителя, так как там могли появиться новые узлы
-        if (parent.nodeType === 1) {
-          stripFormatting(parent);
-        }
-      }
-      // Текстовые узлы (nodeType === 3) оставляем как есть
-    });
+  if (!selectedText.trim()) {
+    return;
   }
 
-  // Очищаем временный контейнер от всех тегов
-  stripFormatting(temp);
-
-  // Получаем очищенный текст
-  const cleanText = temp.textContent;
-
-  // Создаем текстовый узел с очищенным текстом
-  const textNode = document.createTextNode(cleanText);
+  // Удаляем выделение из DOM
+  range.deleteContents();
   
-  // Вставляем его обратно в то же место
+  // Создаем текстовый узел с чистым текстом
+  const textNode = document.createTextNode(selectedText);
+  
+  // Вставляем его обратно
   range.insertNode(textNode);
 
-  // Если текст был вставлен, и в блоке не осталось другого текста,
-  // но при этом есть пустые теги — удаляем их
-  if (blockEl.textContent.trim() === '') {
-    blockEl.innerHTML = '';
-  }
-
-  // Сбрасываем выделение
+  // Снимаем выделение
   selection.removeAllRanges();
 
-  // Ставим курсор в конец блока
+  // Ставим курсор после вставленного текста
   const newRange = document.createRange();
-  newRange.selectNodeContents(blockEl);
-  newRange.collapse(false);
+  
+  // Если есть следующий узел, ставим курсор перед ним
+  if (textNode.nextSibling) {
+    newRange.setStartBefore(textNode.nextSibling);
+    newRange.collapse(true);
+  } else {
+    // Иначе ставим в конец блока
+    newRange.selectNodeContents(blockEl);
+    newRange.collapse(false);
+  }
+  
   selection.addRange(newRange);
+
+  // Сохраняем изменения в state.draft напрямую
+  const blockIndex = parseInt(blockEl.dataset.i);
+  if (!isNaN(blockIndex) && state.draft.blocks[blockIndex]) {
+    // Получаем чистый HTML блока без лишних тегов
+    const cleanHtml = sanitizeHtml(blockEl.innerHTML);
+    state.draft.blocks[blockIndex].html = cleanHtml;
+    
+    // Сохраняем черновик
+    autoSaveDraft();
+  }
+
+  // Обновляем кнопки
+  updateFloatingToolbarButtons();
 }
 
 // =========================================================
