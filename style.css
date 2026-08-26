@@ -3740,7 +3740,7 @@ img{
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 .author-subscribe-btn {
@@ -3827,21 +3827,18 @@ img{
   .author-actions-row {
     margin-top: 8px;
     padding-top: 8px;
-    flex-direction: column;
-    align-items: stretch;
+    flex-wrap: nowrap;
   }
 
   .author-subscribe-btn {
     font-size: 11px;
-    padding: 4px 12px;
-    min-width: 90px;
-    width: 100%;
+    padding: 4px 10px;
+    min-width: 80px;
   }
 
   .author-donate-btn {
     font-size: 12px;
-    padding: 5px 14px;
-    width: 100%;
+    padding: 5px 12px;
   }
 }
 
@@ -3884,8 +3881,19 @@ img{
   .author-actions-row {
     margin-top: 8px;
     padding-top: 8px;
-    flex-direction: column;
-    align-items: stretch;
+    flex-wrap: nowrap;
+    justify-content: center;
+  }
+
+  .author-subscribe-btn {
+    font-size: 10px;
+    padding: 4px 8px;
+    min-width: 70px;
+  }
+
+  .author-donate-btn {
+    font-size: 11px;
+    padding: 4px 10px;
   }
 }
 
