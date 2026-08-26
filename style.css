@@ -3399,17 +3399,23 @@ img{
   border-top: 1px solid var(--line);
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 10px;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
 }
 
+/* Кнопка подписки — прижата к донату, но если доната нет, то справа */
 .author-subscribe-btn {
   font-size: 12px;
   padding: 5px 14px;
   flex-shrink: 0;
   white-space: nowrap;
   min-width: 110px;
+}
+
+/* Если нет кнопки доната, подписка остается справа */
+.author-actions-row:not(:has(.author-donate-btn)) .author-subscribe-btn {
+  margin-left: auto;
 }
 
 .author-donate-btn {
@@ -3489,7 +3495,7 @@ img{
   .author-actions-row {
     margin-top: 8px;
     padding-top: 8px;
-    flex-wrap: nowrap;
+    gap: 8px;
   }
 
   .author-subscribe-btn {
@@ -3545,7 +3551,7 @@ img{
   .author-actions-row {
     margin-top: 8px;
     padding-top: 8px;
-    flex-wrap: nowrap;
+    gap: 6px;
     justify-content: center;
   }
 
