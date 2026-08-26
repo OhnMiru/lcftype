@@ -1104,11 +1104,11 @@ async function openProfile() {
             id="feedbackBtn"
             type="button"
           >
-            💬 Написать в поддержку
+            Написать в поддержку
           </button>
 
           <div class="feedback-hint">
-            Ответ придёт в этот чат от бота
+            Ответ придёт от бота
           </div>
         </div>
 
@@ -1126,7 +1126,7 @@ async function openProfile() {
               Комментарии (${comments.length})
             </button>
             <button class="profile-tab-btn" data-tab="subscribers">
-              Подписчики (${subscribersCount})
+              Подписки (${subscribersCount})
             </button>
           </div>
 
@@ -1159,7 +1159,7 @@ async function openProfile() {
         
         await saveProfile(p.username, avatarUrl, bio);
         
-        showToast(avatarUrl ? 'Аватарка обновлена ✅' : 'Аватарка удалена');
+        showToast(avatarUrl ? 'Аватарка обновлена' : 'Аватарка удалена');
         openProfile();
         
       } catch (e) {
@@ -1174,7 +1174,7 @@ async function openProfile() {
       if (newUsername) {
         try {
           await saveProfile(newUsername, avatar, bio);
-          showToast('Ник изменён ✅');
+          showToast('Ник изменён');
           openProfile();
         } catch (e) {
           console.error('save username error:', e);
@@ -1191,7 +1191,7 @@ async function openProfile() {
       
       try {
         await saveProfile(p.username, avatar, result);
-        showToast(result ? 'Описание сохранено ✅' : 'Описание удалено');
+        showToast(result ? 'Описание сохранено' : 'Описание удалено');
         openProfile();
       } catch (e) {
         console.error('save bio error:', e);
@@ -1217,7 +1217,7 @@ async function openProfile() {
           is_enabled: !!link
         });
 
-        showToast(link ? 'Ссылка сохранена! Донаты включены ✅' : 'Донаты отключены');
+        showToast(link ? 'Ссылка сохранена! Донаты включены' : 'Донаты отключены');
         openProfile();
 
       } catch (e) {
