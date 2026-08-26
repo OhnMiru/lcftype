@@ -312,7 +312,7 @@ function renderEditor() {
     if (!f) return;
 
     try {
-      d.cover = await compressImageFile(f, 1600, 0.84);
+      d.cover = await compressImageFile(f, 1600, 0.74);
       renderEditor();
       autoSaveDraft();
     } catch (err) {
