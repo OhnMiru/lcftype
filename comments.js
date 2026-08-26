@@ -138,6 +138,16 @@ function buildCommentTree(comments) {
 
 
 // =========================================================
+// Проверка, является ли пользователь автором комментария
+// =========================================================
+
+function isCommentOwner(comment) {
+  if (!tgUser) return false;
+  return Number(comment.author_id) === Number(tgUser.id);
+}
+
+
+// =========================================================
 // Одна реакция
 // =========================================================
 
@@ -191,7 +201,7 @@ function renderCommentReaction(
 
 
 // =========================================================
-// Рендер одного комментария
+// Рендер одного комментария (с редактированием/удалением)
 // =========================================================
 
 function renderComment(
@@ -226,6 +236,9 @@ function renderComment(
 
   const avatar = comment.author_avatar || null;
   const avatarLetter = authorName.charAt(0).toUpperCase();
+  
+  const isOwner = isCommentOwner(comment);
+  const isEdited = comment.is_edited === true;
 
   return `
     <div
@@ -265,16 +278,74 @@ function renderComment(
                 comment.created_at
               )
             )}
+            ${isEdited ? `<span class="comment-edited">(изменён)</span>` : ''}
           </time>
+
+          <!-- Действия владельца комментария -->
+          ${isOwner ? `
+            <div class="comment-owner-actions">
+              <button
+                class="comment-edit-btn"
+                type="button"
+                data-comment-edit="${escapeHtml(comment.id)}"
+                aria-label="Редактировать комментарий"
+                title="Редактировать"
+              >
+                ✎
+              </button>
+              <button
+                class="comment-delete-btn"
+                type="button"
+                data-comment-delete="${escapeHtml(comment.id)}"
+                aria-label="Удалить комментарий"
+                title="Удалить"
+              >
+                ✕
+              </button>
+            </div>
+          ` : ''}
 
         </div>
 
 
-        <div class="comment-content">
+        <!-- Тело комментария -->
+        <div class="comment-content" id="commentContent-${escapeHtml(comment.id)}">
           ${renderCommentText(
             comment.content
           )}
         </div>
+
+        <!-- Форма редактирования (скрыта по умолчанию) -->
+        ${isOwner ? `
+          <div
+            class="comment-edit-form"
+            data-edit-form="${escapeHtml(comment.id)}"
+            hidden
+          >
+            <textarea
+              class="comment-input comment-edit-textarea"
+              rows="3"
+              maxlength="2000"
+            >${escapeHtml(comment.content)}</textarea>
+
+            <div class="comment-form-actions">
+              <button
+                class="btn btn-secondary comment-cancel-edit"
+                type="button"
+                data-cancel-edit="${escapeHtml(comment.id)}"
+              >
+                Отмена
+              </button>
+              <button
+                class="btn btn-primary comment-save-edit"
+                type="button"
+                data-save-edit="${escapeHtml(comment.id)}"
+              >
+                Сохранить
+              </button>
+            </div>
+          </div>
+        ` : ''}
 
 
         <div class="comment-actions">
@@ -577,6 +648,95 @@ async function submitComment(
 
 
 // =========================================================
+// Редактировать комментарий
+// =========================================================
+
+async function editComment(
+  commentId,
+  content
+) {
+
+  const text =
+    String(content || '')
+      .trim();
+
+
+  if (!text) {
+
+    showToast(
+      'Комментарий не может быть пустым'
+    );
+
+    return false;
+  }
+
+
+  if (text.length > 2000) {
+
+    showToast(
+      'Максимум 2000 символов'
+    );
+
+    return false;
+  }
+
+
+  // -------------------------------------------------------
+  // Проверяем профиль
+  // -------------------------------------------------------
+
+  const profile =
+    await ensureProfile(true);
+
+
+  if (!profile) {
+    return false;
+  }
+
+
+  await callTelegramApi(
+    'update-comment',
+    {
+      commentId,
+      content: text
+    }
+  );
+
+
+  return true;
+}
+
+
+// =========================================================
+// Удалить комментарий
+// =========================================================
+
+async function deleteComment(
+  commentId
+) {
+
+  if (
+    !confirm(
+      'Удалить комментарий безвозвратно?'
+    )
+  ) {
+    return false;
+  }
+
+
+  await callTelegramApi(
+    'delete-comment',
+    {
+      commentId
+    }
+  );
+
+
+  return true;
+}
+
+
+// =========================================================
 // Обновить отображение реакций
 // =========================================================
 //
@@ -811,6 +971,26 @@ function bindComments(
           }
 
 
+          // Скрываем все другие формы ответа
+          document
+            .querySelectorAll(
+              '.comment-reply-form'
+            )
+            .forEach(f => {
+              if (f !== form) f.hidden = true;
+            });
+
+
+          // Скрываем все формы редактирования
+          document
+            .querySelectorAll(
+              '.comment-edit-form'
+            )
+            .forEach(f => {
+              f.hidden = true;
+            });
+
+
           form.hidden =
             !form.hidden;
 
@@ -959,212 +1139,549 @@ function bindComments(
     });
 
 
-// =========================================================
-// Реакции
-// =========================================================
-
-document
-  .querySelectorAll(
-    '[data-comment-reaction]'
-  )
-  .forEach(button => {
-
-    button.addEventListener(
-      'click',
-      async () => {
-
-        const commentId =
-          button.dataset.commentId;
-
-        const reactionType =
-          button.dataset.commentReaction;
+  // =========================================================
+  // РЕДАКТИРОВАНИЕ КОММЕНТАРИЯ
+  // =========================================================
 
 
-        if (
-          !commentId ||
-          !reactionType
-        ) {
-          return;
+  // -------------------------------------------------------
+  // Открыть форму редактирования
+  // -------------------------------------------------------
+
+  document
+    .querySelectorAll(
+      '[data-comment-edit]'
+    )
+    .forEach(button => {
+
+      button.addEventListener(
+        'click',
+        () => {
+
+          const commentId =
+            button.dataset.commentEdit;
+
+
+          const form =
+            document.querySelector(
+              `[data-edit-form="${CSS.escape(
+                commentId
+              )}"]`
+            );
+
+
+          const content =
+            document.getElementById(
+              `commentContent-${CSS.escape(
+                commentId
+              )}`
+            );
+
+
+          if (!form || !content) {
+            return;
+          }
+
+
+          // Скрываем все другие формы редактирования
+          document
+            .querySelectorAll(
+              '.comment-edit-form'
+            )
+            .forEach(f => {
+              if (f !== form) f.hidden = true;
+            });
+
+
+          // Скрываем все формы ответа
+          document
+            .querySelectorAll(
+              '.comment-reply-form'
+            )
+            .forEach(f => {
+              f.hidden = true;
+            });
+
+
+          // Показываем/скрываем форму редактирования
+          form.hidden = !form.hidden;
+
+
+          if (!form.hidden) {
+            const textarea =
+              form.querySelector(
+                'textarea'
+              );
+
+            textarea?.focus();
+            textarea?.select();
+          }
+
         }
+      );
+
+    });
 
 
-        // -------------------------------------------------
-        // Находим именно ARTICLE этого комментария
-        //
-        // ВАЖНО:
-        // НЕ .comment-thread
-        //
-        // Потому что .comment-thread может содержать
-        // дочерние комментарии.
-        // -------------------------------------------------
+  // -------------------------------------------------------
+  // Отмена редактирования
+  // -------------------------------------------------------
 
-        const commentArticle =
-          button.closest(
-            'article.comment'
-          );
+  document
+    .querySelectorAll(
+      '.comment-cancel-edit'
+    )
+    .forEach(button => {
+
+      button.addEventListener(
+        'click',
+        () => {
+
+          const commentId =
+            button.dataset.cancelEdit;
 
 
-        if (!commentArticle) {
+          const form =
+            document.querySelector(
+              `[data-edit-form="${CSS.escape(
+                commentId
+              )}"]`
+            );
 
-          console.error(
-            'Не найден article.comment для реакции',
-            {
-              commentId,
-              reactionType
+
+          if (form) {
+            form.hidden = true;
+          }
+
+        }
+      );
+
+    });
+
+
+  // -------------------------------------------------------
+  // Сохранить изменения
+  // -------------------------------------------------------
+
+  document
+    .querySelectorAll(
+      '.comment-save-edit'
+    )
+    .forEach(button => {
+
+      button.addEventListener(
+        'click',
+        async () => {
+
+          const commentId =
+            button.dataset.saveEdit;
+
+
+          const form =
+            document.querySelector(
+              `[data-edit-form="${CSS.escape(
+                commentId
+              )}"]`
+            );
+
+
+          const textarea =
+            form?.querySelector(
+              'textarea'
+            );
+
+
+          if (!textarea) {
+            return;
+          }
+
+
+          const newContent =
+            textarea.value;
+
+
+          // Проверяем, изменилось ли содержимое
+          const currentContent =
+            document.getElementById(
+              `commentContent-${CSS.escape(
+                commentId
+              )}`
+            );
+
+
+          if (currentContent) {
+            const currentText =
+              currentContent.textContent.trim();
+
+
+            if (
+              currentText ===
+              newContent.trim()
+            ) {
+              form.hidden = true;
+              showToast('Изменений нет');
+              return;
             }
-          );
+          }
 
-          return;
+
+          button.disabled = true;
+          button.textContent = 'Сохраняем…';
+
+
+          try {
+
+            const ok =
+              await editComment(
+                commentId,
+                newContent
+              );
+
+
+            if (!ok) {
+              return;
+            }
+
+
+            showToast(
+              'Комментарий обновлён ✅'
+            );
+
+
+            await renderComments(
+              articleId
+            );
+
+
+          } catch (e) {
+
+            console.error(
+              'edit comment:',
+              e
+            );
+
+
+            showToast(
+              e.message ||
+              'Не удалось обновить комментарий'
+            );
+
+
+          } finally {
+
+            button.disabled = false;
+            button.textContent = 'Сохранить';
+
+          }
+
         }
+      );
+
+    });
 
 
-        // -------------------------------------------------
-        // Блокируем кнопку
-        // -------------------------------------------------
+  // =========================================================
+  // УДАЛЕНИЕ КОММЕНТАРИЯ
+  // =========================================================
 
-        button.disabled = true;
+  document
+    .querySelectorAll(
+      '[data-comment-delete]'
+    )
+    .forEach(button => {
+
+      button.addEventListener(
+        'click',
+        async () => {
+
+          const commentId =
+            button.dataset.commentDelete;
 
 
-        try {
+          try {
 
-          const result =
-            await callTelegramApi(
-              'react-comment',
+            button.disabled = true;
+            button.textContent = '…';
+
+
+            const ok =
+              await deleteComment(
+                commentId
+              );
+
+
+            if (!ok) {
+              return;
+            }
+
+
+            showToast(
+              'Комментарий удалён'
+            );
+
+
+            await renderComments(
+              articleId
+            );
+
+
+          } catch (e) {
+
+            console.error(
+              'delete comment:',
+              e
+            );
+
+
+            showToast(
+              e.message ||
+              'Не удалось удалить комментарий'
+            );
+
+
+          } finally {
+
+            button.disabled = false;
+            button.textContent = '✕';
+
+          }
+
+        }
+      );
+
+    });
+
+
+  // =========================================================
+  // РЕАКЦИИ НА КОММЕНТАРИИ
+  // =========================================================
+
+  document
+    .querySelectorAll(
+      '[data-comment-reaction]'
+    )
+    .forEach(button => {
+
+      button.addEventListener(
+        'click',
+        async () => {
+
+          const commentId =
+            button.dataset.commentId;
+
+          const reactionType =
+            button.dataset.commentReaction;
+
+
+          if (
+            !commentId ||
+            !reactionType
+          ) {
+            return;
+          }
+
+
+          // -------------------------------------------------
+          // Находим именно ARTICLE этого комментария
+          //
+          // ВАЖНО:
+          // НЕ .comment-thread
+          //
+          // Потому что .comment-thread может содержать
+          // дочерние комментарии.
+          // -------------------------------------------------
+
+          const commentArticle =
+            button.closest(
+              'article.comment'
+            );
+
+
+          if (!commentArticle) {
+
+            console.error(
+              'Не найден article.comment для реакции',
               {
                 commentId,
                 reactionType
               }
             );
 
-
-          console.log(
-            'reaction result:',
-            result
-          );
-
-
-          const reactions =
-            result?.reactions;
-
-
-          if (!reactions) {
-
-            throw new Error(
-              'Сервер не вернул данные реакции'
-            );
+            return;
           }
 
 
           // -------------------------------------------------
-          // ИЩЕМ КНОПКИ ТОЛЬКО ВНУТРИ ЭТОГО ARTICLE
+          // Блокируем кнопку
           // -------------------------------------------------
 
-          const reactionButtons =
-            commentArticle.querySelectorAll(
-              '[data-comment-reaction]'
-            );
+          button.disabled = true;
 
 
-          reactionButtons.forEach(
-            reactionButton => {
+          try {
 
-              const type =
-                reactionButton.dataset
-                  .commentReaction;
-
-
-              if (!type) {
-                return;
-              }
-
-
-              // ---------------------------------------------
-              // Количество реакций этого типа
-              // ---------------------------------------------
-
-              const count =
-                Number(
-                  reactions.counts?.[type] || 0
-                );
-
-
-              // ---------------------------------------------
-              // Активная реакция пользователя
-              // ---------------------------------------------
-
-              const isActive =
-                reactions.my_reaction === type;
-
-
-              reactionButton.classList.toggle(
-                'active',
-                isActive
+            const result =
+              await callTelegramApi(
+                'react-comment',
+                {
+                  commentId,
+                  reactionType
+                }
               );
 
 
-              // ---------------------------------------------
-              // Счётчик
-              // ---------------------------------------------
-
-              let countElement =
-                reactionButton.querySelector(
-                  '.comment-reaction-count'
-                );
+            console.log(
+              'reaction result:',
+              result
+            );
 
 
-              if (count > 0) {
+            const reactions =
+              result?.reactions;
 
-                if (!countElement) {
 
-                  countElement =
-                    document.createElement(
-                      'span'
-                    );
+            if (!reactions) {
 
-                  countElement.className =
-                    'comment-reaction-count';
+              throw new Error(
+                'Сервер не вернул данные реакции'
+              );
+            }
 
-                  reactionButton.appendChild(
-                    countElement
-                  );
+
+            // -------------------------------------------------
+            // ИЩЕМ КНОПКИ ТОЛЬКО ВНУТРИ ЭТОГО ARTICLE
+            // -------------------------------------------------
+
+            const reactionButtons =
+              commentArticle.querySelectorAll(
+                '[data-comment-reaction]'
+              );
+
+
+            reactionButtons.forEach(
+              reactionButton => {
+
+                const type =
+                  reactionButton.dataset
+                    .commentReaction;
+
+
+                if (!type) {
+                  return;
                 }
 
 
-                countElement.textContent =
-                  String(count);
+                // ---------------------------------------------
+                // Количество реакций этого типа
+                // ---------------------------------------------
 
-              } else {
+                const count =
+                  Number(
+                    reactions.counts?.[type] || 0
+                  );
 
-                countElement?.remove();
+
+                // ---------------------------------------------
+                // Активная реакция пользователя
+                // ---------------------------------------------
+
+                const isActive =
+                  reactions.my_reaction === type;
+
+
+                reactionButton.classList.toggle(
+                  'active',
+                  isActive
+                );
+
+
+                // ---------------------------------------------
+                // Счётчик
+                // ---------------------------------------------
+
+                let countElement =
+                  reactionButton.querySelector(
+                    '.comment-reaction-count'
+                  );
+
+
+                if (count > 0) {
+
+                  if (!countElement) {
+
+                    countElement =
+                      document.createElement(
+                        'span'
+                      );
+
+                    countElement.className =
+                      'comment-reaction-count';
+
+                    reactionButton.appendChild(
+                      countElement
+                    );
+                  }
+
+
+                  countElement.textContent =
+                    String(count);
+
+                } else {
+
+                  countElement?.remove();
+
+                }
 
               }
-
-            }
-          );
+            );
 
 
-        } catch (e) {
+          } catch (e) {
 
-          console.error(
-            'comment reaction:',
-            e
-          );
+            console.error(
+              'comment reaction:',
+              e
+            );
 
-          showToast(
-            e.message ||
-            'Не удалось поставить реакцию'
-          );
+            showToast(
+              e.message ||
+              'Не удалось поставить реакцию'
+            );
 
 
-        } finally {
+          } finally {
 
-          button.disabled = false;
+            button.disabled = false;
+
+          }
 
         }
+      );
+
+    });
+
+
+  // =========================================================
+  // ЗАКРЫТИЕ ФОРМ ПО ESCAPE
+  // =========================================================
+
+  document.addEventListener(
+    'keydown',
+    (e) => {
+
+      if (e.key === 'Escape') {
+
+        document
+          .querySelectorAll(
+            '.comment-edit-form, .comment-reply-form'
+          )
+          .forEach(form => {
+            form.hidden = true;
+          });
 
       }
-    );
 
-  });
+    }
+  );
 
 }
