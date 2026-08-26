@@ -1239,6 +1239,24 @@ img{
   font-weight:700;
 }
 
+.toolbar button[data-cmd="strikeThrough"]{
+  text-decoration:line-through;
+}
+
+.toolbar button[data-cmd="mono"]{
+  font-family:'Courier New',monospace;
+  font-size:13px;
+}
+
+.toolbar button[data-cmd="blockquote"]{
+  font-family:'Georgia',serif;
+  font-size:18px;
+}
+
+.toolbar button[data-cmd="spoiler"]{
+  font-size:13px;
+}
+
 
 /* =========================================================
    BLOCKS
@@ -3848,4 +3866,60 @@ img{
   .profile-stat-card {
     padding: 12px 8px;
   }
+}
+
+
+/* =========================================================
+   ИНЛАЙН-ФОРМАТИРОВАНИЕ — code / blockquote / spoiler
+   ========================================================= */
+/* Раньше эти теги вставлялись редактором (mono/blockquote/
+   spoiler), но никак не стилизовались ни в самом редакторе
+   (.block-text), ни при чтении статьи (.reader-body). */
+
+.block-text code,
+.reader-body code{
+  font-family:'Courier New',monospace;
+  font-size:.9em;
+  background:var(--paper-dim);
+  padding:1px 6px;
+  border-radius:4px;
+  word-break:break-word;
+}
+
+.block-text blockquote,
+.reader-body blockquote{
+  margin:12px 0;
+  padding:8px 16px;
+  border-left:3px solid var(--indigo);
+  background:var(--indigo-alpha-06);
+  border-radius:0 6px 6px 0;
+  font-style:italic;
+  color:var(--ink);
+}
+
+.block-text s,
+.block-text strike,
+.reader-body s,
+.reader-body strike{
+  text-decoration:line-through;
+}
+
+.block-text .tg-spoiler{
+  background:color-mix(in srgb, var(--ink) 12%, var(--paper-dim));
+  border-radius:3px;
+  padding:0 2px;
+}
+
+.reader-body .tg-spoiler{
+  background:var(--ink);
+  color:transparent;
+  border-radius:3px;
+  padding:0 2px;
+  cursor:pointer;
+  transition:color .15s ease;
+}
+
+.reader-body .tg-spoiler.revealed{
+  color:inherit;
+  background:color-mix(in srgb, var(--ink) 12%, var(--paper-dim));
 }
