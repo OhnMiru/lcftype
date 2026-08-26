@@ -121,15 +121,6 @@ function renderAuthorPage(profile, articles, isSubscribed = false, isOwnProfile 
             <h1 class="author-name">
               ${escapeHtml(profile.username)}
             </h1>
-            ${!isOwnProfile ? `
-              <button
-                class="btn ${isSubscribed ? 'btn-secondary' : 'btn-primary'} author-subscribe-btn"
-                id="subscribeBtn"
-                type="button"
-              >
-                ${isSubscribed ? '✓ Подписан' : '➕ Подписаться'}
-              </button>
-            ` : ''}
           </div>
 
           <div class="author-stats">
@@ -151,8 +142,17 @@ function renderAuthorPage(profile, articles, isSubscribed = false, isOwnProfile 
             </div>
           ` : ''}
 
-          ${hasDonations ? `
-            <div class="author-actions-row">
+          <div class="author-actions-row">
+            ${!isOwnProfile ? `
+              <button
+                class="btn ${isSubscribed ? 'btn-secondary' : 'btn-primary'} author-subscribe-btn"
+                id="subscribeBtn"
+                type="button"
+              >
+                ${isSubscribed ? '✓ Подписан' : '➕ Подписаться'}
+              </button>
+            ` : ''}
+            ${hasDonations ? `
               <button
                 class="btn btn-primary author-donate-btn"
                 id="authorDonateBtn"
@@ -160,8 +160,8 @@ function renderAuthorPage(profile, articles, isSubscribed = false, isOwnProfile 
               >
                 Поддержать
               </button>
-            </div>
-          ` : ''}
+            ` : ''}
+          </div>
 
         </div>
 
@@ -230,7 +230,6 @@ function renderAuthorPage(profile, articles, isSubscribed = false, isOwnProfile 
     });
   }
 }
-
 
 // =========================================================
 // Карточка статьи на странице автора
