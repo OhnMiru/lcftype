@@ -22,20 +22,36 @@ if (tg) {
 const tgUser =
   tg?.initDataUnsafe?.user || null;
 
-// Ключ для хранения черновика в localStorage
-const DRAFT_STORAGE_KEY = 'lcftype_draft';
+// =========================================================
+// Ключи для хранения в localStorage
+// =========================================================
+
+const DRAFTS_STORAGE_KEY = 'lcftype_drafts';
+const OLD_DRAFT_STORAGE_KEY = 'lcftype_draft'; // Для миграции
+
+// =========================================================
+// Лимиты
+// =========================================================
+
+const MAX_DRAFTS = 10;
+const DRAFTS_WARNING_THRESHOLD = 7;
+
+// =========================================================
+// Состояние приложения
+// =========================================================
 
 const state = {
   view: 'feed',
   articles: [],
-  draft: null,
+  draft: null,           // Текущий редактируемый черновик (объект)
+  activeDraftId: null,   // ID текущего открытого черновика
   currentId: null,
   profile: null,
   search: '',
   authorFilter: new Set(),
   pendingImageInsertIndex: null,
-  sortOrder: 'desc', // 'desc' — новые сначала, 'asc' — старые сначала
-  hasDraft: false
+  sortOrder: 'desc',
+  hasDraft: false        // Есть ли непустые черновики
 };
 
 let activeBlockEl = null;
@@ -82,6 +98,40 @@ function fmtDate(iso) {
     : '';
 }
 
+function fmtDateShort(iso) {
+  if (!iso) return '';
+  
+  const date = new Date(iso);
+  const now = new Date();
+  const diff = now - date;
+  const oneDay = 24 * 60 * 60 * 1000;
+  const oneWeek = 7 * oneDay;
+  
+  if (diff < oneDay) {
+    return 'сегодня, ' + date.toLocaleTimeString('ru-RU', {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  } else if (diff < 2 * oneDay) {
+    return 'вчера, ' + date.toLocaleTimeString('ru-RU', {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  } else if (diff < oneWeek) {
+    const days = ['воскресенье', 'понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота'];
+    return days[date.getDay()] + ', ' + date.toLocaleTimeString('ru-RU', {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  } else {
+    return date.toLocaleDateString('ru-RU', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric'
+    });
+  }
+}
+
 
 // =========================================================
 // Экранирование HTML
@@ -89,9 +139,7 @@ function fmtDate(iso) {
 
 function escapeHtml(s) {
   const d = document.createElement('div');
-
   d.textContent = s ?? '';
-
   return d.innerHTML;
 }
 
@@ -109,10 +157,10 @@ const ALLOWED_TAGS = new Set([
   'BR',
   'SPAN',
   'DIV',
-  'CODE',           // ← добавлено для моноширинного текста
-  'BLOCKQUOTE',     // ← добавлено для цитат
-  'S',              // ← добавлено для зачёркнутого
-  'STRIKE'          // ← добавлено для зачёркнутого
+  'CODE',
+  'BLOCKQUOTE',
+  'S',
+  'STRIKE'
 ]);
 
 
@@ -239,81 +287,30 @@ function setBackButton(
 
 
 // =========================================================
-// Черновики
+// ЧЕРНОВИКИ — НОВАЯ СИСТЕМА
 // =========================================================
 
-// Сохранить черновик в localStorage
-function saveDraftToStorage(draft) {
-  try {
-    if (!draft) {
-      localStorage.removeItem(DRAFT_STORAGE_KEY);
-      state.hasDraft = false;
-      return;
-    }
+// ---------------------------------------------------------
+// Вспомогательные функции
+// ---------------------------------------------------------
 
-    // Сохраняем только текст, без изображений (они сохраняются отдельно)
-    const draftToSave = {
-      id: draft.id || null,
-      title: draft.title || '',
-      cover: draft.cover || null,
-      blocks: draft.blocks || [],
-      savedAt: new Date().toISOString()
-    };
-
-    localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(draftToSave));
-    state.hasDraft = true;
-  } catch (e) {
-    console.warn('saveDraftToStorage error:', e);
-  }
+function generateDraftId() {
+  return 'draft_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
 }
 
-// Загрузить черновик из localStorage
-function loadDraftFromStorage() {
-  try {
-    const saved = localStorage.getItem(DRAFT_STORAGE_KEY);
-    if (!saved) {
-      state.hasDraft = false;
-      return null;
-    }
-
-    const draft = JSON.parse(saved);
-    
-    // Проверяем, не слишком ли старый черновик (например, старше 7 дней)
-    const savedAt = new Date(draft.savedAt);
-    const now = new Date();
-    const daysDiff = (now - savedAt) / (1000 * 60 * 60 * 24);
-    
-    if (daysDiff > 7) {
-      // Слишком старый черновик — удаляем
-      localStorage.removeItem(DRAFT_STORAGE_KEY);
-      state.hasDraft = false;
-      return null;
-    }
-
-    state.hasDraft = true;
-    return draft;
-  } catch (e) {
-    console.warn('loadDraftFromStorage error:', e);
-    localStorage.removeItem(DRAFT_STORAGE_KEY);
-    state.hasDraft = false;
-    return null;
-  }
+function countWords(text) {
+  if (!text) return 0;
+  const clean = text.replace(/<[^>]+>/g, ' ').trim();
+  if (!clean) return 0;
+  return clean.split(/\s+/).length;
 }
 
-// Очистить черновик
-function clearDraft() {
-  localStorage.removeItem(DRAFT_STORAGE_KEY);
-  state.hasDraft = false;
-  state.draft = null;
+function countImages(blocks) {
+  if (!blocks || !Array.isArray(blocks)) return 0;
+  return blocks.filter(b => b.type === 'image' && b.src).length;
 }
 
-// Проверить, есть ли черновик
-function hasSavedDraft() {
-  return state.hasDraft;
-}
-
-// Проверить, есть ли у черновика содержимое
-function isDraftEmpty(draft) {
+function isEmptyDraft(draft) {
   if (!draft) return true;
   
   const hasTitle = draft.title && draft.title.trim().length > 0;
@@ -329,4 +326,297 @@ function isDraftEmpty(draft) {
   });
   
   return !(hasTitle || hasCover || hasContent);
+}
+
+function createEmptyDraft() {
+  return {
+    id: generateDraftId(),
+    title: '',
+    cover: null,
+    blocks: [{ type: 'text', html: '' }],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+}
+
+// ---------------------------------------------------------
+// Получить все черновики из localStorage
+// ---------------------------------------------------------
+
+function getDraftsFromStorage() {
+  try {
+    const saved = localStorage.getItem(DRAFTS_STORAGE_KEY);
+    if (!saved) return [];
+    
+    const data = JSON.parse(saved);
+    if (!data || !Array.isArray(data.drafts)) return [];
+    
+    return data.drafts;
+  } catch (e) {
+    console.warn('getDraftsFromStorage error:', e);
+    return [];
+  }
+}
+
+// ---------------------------------------------------------
+// Сохранить черновики в localStorage
+// ---------------------------------------------------------
+
+function saveDraftsToStorage(drafts) {
+  try {
+    if (!Array.isArray(drafts)) return;
+    
+    const data = {
+      drafts: drafts,
+      updatedAt: new Date().toISOString()
+    };
+    
+    localStorage.setItem(DRAFTS_STORAGE_KEY, JSON.stringify(data));
+  } catch (e) {
+    console.warn('saveDraftsToStorage error:', e);
+  }
+}
+
+// ---------------------------------------------------------
+// Получить черновик по ID
+// ---------------------------------------------------------
+
+function getDraftById(id) {
+  const drafts = getDraftsFromStorage();
+  return drafts.find(d => d.id === id) || null;
+}
+
+// ---------------------------------------------------------
+// Сохранить черновик (создать или обновить)
+// ---------------------------------------------------------
+
+function saveDraft(draft) {
+  if (!draft) return false;
+  
+  let drafts = getDraftsFromStorage();
+  const index = drafts.findIndex(d => d.id === draft.id);
+  
+  // Обновляем дату
+  draft.updatedAt = new Date().toISOString();
+  
+  // Если черновик пустой и это не новый — возможно, его стоит удалить?
+  // Но мы не удаляем пустые черновики автоматически, пользователь сам решает
+  
+  if (index >= 0) {
+    drafts[index] = draft;
+  } else {
+    // Проверяем лимит
+    if (drafts.length >= MAX_DRAFTS) {
+      showToast('Достигнут лимит черновиков (10). Удалите ненужные.');
+      return false;
+    }
+    drafts.push(draft);
+  }
+  
+  saveDraftsToStorage(drafts);
+  return true;
+}
+
+// ---------------------------------------------------------
+// Удалить черновик по ID
+// ---------------------------------------------------------
+
+function deleteDraftById(id) {
+  if (!id) return false;
+  
+  let drafts = getDraftsFromStorage();
+  const filtered = drafts.filter(d => d.id !== id);
+  
+  if (filtered.length === drafts.length) {
+    // Черновик не найден
+    return false;
+  }
+  
+  saveDraftsToStorage(filtered);
+  
+  // Если удалили активный черновик — сбрасываем
+  if (state.activeDraftId === id) {
+    state.activeDraftId = null;
+    state.draft = null;
+  }
+  
+  return true;
+}
+
+// ---------------------------------------------------------
+// Создать новый черновик
+// ---------------------------------------------------------
+
+function createNewDraft() {
+  const drafts = getDraftsFromStorage();
+  
+  // Проверяем лимит
+  if (drafts.length >= MAX_DRAFTS) {
+    showToast('Достигнут лимит черновиков (10). Удалите ненужные.');
+    return null;
+  }
+  
+  // Проверяем предупреждение
+  if (drafts.length >= DRAFTS_WARNING_THRESHOLD) {
+    const remaining = MAX_DRAFTS - drafts.length;
+    showToast('Осталось ' + remaining + ' место для черновиков. Чтобы создать новый, удалите старые.');
+  }
+  
+  const draft = createEmptyDraft();
+  drafts.push(draft);
+  saveDraftsToStorage(drafts);
+  
+  return draft;
+}
+
+// ---------------------------------------------------------
+// Получить количество черновиков
+// ---------------------------------------------------------
+
+function countDrafts() {
+  return getDraftsFromStorage().length;
+}
+
+// ---------------------------------------------------------
+// Проверить, есть ли непустые черновики
+// ---------------------------------------------------------
+
+function hasNonEmptyDrafts() {
+  const drafts = getDraftsFromStorage();
+  return drafts.some(d => !isEmptyDraft(d));
+}
+
+// ---------------------------------------------------------
+// МИГРАЦИЯ из старого формата
+// ---------------------------------------------------------
+
+function migrateOldDraft() {
+  try {
+    const oldDraft = localStorage.getItem(OLD_DRAFT_STORAGE_KEY);
+    if (!oldDraft) return false;
+    
+    const parsed = JSON.parse(oldDraft);
+    if (!parsed || !parsed.title && !parsed.blocks) {
+      // Старый черновик пустой — просто удаляем ключ
+      localStorage.removeItem(OLD_DRAFT_STORAGE_KEY);
+      return false;
+    }
+    
+    // Проверяем, есть ли уже черновики в новой системе
+    const drafts = getDraftsFromStorage();
+    
+    // Проверяем, не был ли уже мигрирован этот черновик
+    const alreadyMigrated = drafts.some(d => 
+      d.title === parsed.title && 
+      JSON.stringify(d.blocks) === JSON.stringify(parsed.blocks)
+    );
+    
+    if (alreadyMigrated) {
+      localStorage.removeItem(OLD_DRAFT_STORAGE_KEY);
+      return false;
+    }
+    
+    // Создаём новый черновик из старого
+    const newDraft = {
+      id: generateDraftId(),
+      title: parsed.title || '',
+      cover: parsed.cover || null,
+      blocks: parsed.blocks || [{ type: 'text', html: '' }],
+      createdAt: parsed.savedAt || new Date().toISOString(),
+      updatedAt: parsed.savedAt || new Date().toISOString()
+    };
+    
+    // Добавляем в список
+    drafts.push(newDraft);
+    saveDraftsToStorage(drafts);
+    
+    // Удаляем старый ключ
+    localStorage.removeItem(OLD_DRAFT_STORAGE_KEY);
+    
+    return true;
+  } catch (e) {
+    console.warn('migrateOldDraft error:', e);
+    return false;
+  }
+}
+
+// ---------------------------------------------------------
+// ПОИСК ЧЕРНОВИКА ПО АКТИВНОМУ ID
+// ---------------------------------------------------------
+
+function getActiveDraft() {
+  if (!state.activeDraftId) return null;
+  return getDraftById(state.activeDraftId);
+}
+
+// ---------------------------------------------------------
+// УСТАНОВИТЬ АКТИВНЫЙ ЧЕРНОВИК
+// ---------------------------------------------------------
+
+function setActiveDraft(draft) {
+  if (!draft) {
+    state.activeDraftId = null;
+    state.draft = null;
+    return;
+  }
+  
+  state.activeDraftId = draft.id;
+  state.draft = draft;
+}
+
+// ---------------------------------------------------------
+// СТАРЫЕ ФУНКЦИИ (для обратной совместимости, помечены как deprecated)
+// ---------------------------------------------------------
+
+// DEPRECATED: Используйте getDraftsFromStorage() и getDraftById()
+function loadDraftFromStorage() {
+  // Пытаемся загрузить активный черновик
+  const draft = getActiveDraft();
+  if (draft) {
+    state.hasDraft = !isEmptyDraft(draft);
+    return draft;
+  }
+  
+  // Если нет активного, но есть черновики — берём первый
+  const drafts = getDraftsFromStorage();
+  if (drafts.length > 0) {
+    const first = drafts[0];
+    state.activeDraftId = first.id;
+    state.draft = first;
+    state.hasDraft = !isEmptyDraft(first);
+    return first;
+  }
+  
+  state.hasDraft = false;
+  return null;
+}
+
+// DEPRECATED: Используйте saveDraft()
+function saveDraftToStorage(draft) {
+  if (!draft) {
+    // Если передали null — не делаем ничего
+    return;
+  }
+  saveDraft(draft);
+  state.hasDraft = !isEmptyDraft(draft);
+}
+
+// DEPRECATED: Используйте deleteDraftById()
+function clearDraft() {
+  if (state.activeDraftId) {
+    deleteDraftById(state.activeDraftId);
+  }
+  state.draft = null;
+  state.activeDraftId = null;
+  state.hasDraft = false;
+}
+
+// DEPRECATED: Используйте hasNonEmptyDrafts()
+function hasSavedDraft() {
+  return hasNonEmptyDrafts();
+}
+
+// DEPRECATED: Используйте isEmptyDraft()
+function isDraftEmpty(draft) {
+  return isEmptyDraft(draft);
 }
