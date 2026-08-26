@@ -3,6 +3,7 @@
 // Исправленная версия: безопасное форматирование, iOS-фиксы
 // =========================================================
 
+
 function bindTapButton(btn, onActivate) {
   let handledByTouch = false;
   let resetTimer = null;
@@ -1272,18 +1273,37 @@ document.addEventListener('keydown', (e) => {
 // =========================================================
 
 function toggleCustomTag(cmd, selection) {
-  if (!selection || selection.isCollapsed) return;
+  if (!selection || selection.isCollapsed || !selection.rangeCount) return;
 
   const { tag, className } = CUSTOM_TAGS[cmd];
   const range = selection.getRangeAt(0);
 
-  const existing = findAncestorTag(range.commonAncestorContainer, tag, className);
+  // Ищем форматирование, которое реально пересекает выделение.
+  // Нельзя полагаться только на commonAncestorContainer:
+  // при выделении нескольких текстовых узлов он часто оказывается
+  // .block-text, хотя весь выбранный текст находится внутри <b>/<i>/...
+  const matching = getMatchingElementsInRange(
+    range,
+    tag,
+    className,
+    activeBlockEl
+  );
 
-  if (existing) {
-    unwrapElement(existing);
+  // Если весь выделенный текст уже находится внутри нужного тега,
+  // повторное нажатие должно СНЯТЬ именно этот стиль.
+  if (isRangeFullyInsideTag(range, tag, className, activeBlockEl)) {
+    unwrapRangeFormatting(range, tag, className, activeBlockEl);
+
+    const blockIndex = parseInt(activeBlockEl.dataset.i);
+    if (!isNaN(blockIndex) && state.draft.blocks[blockIndex]) {
+      state.draft.blocks[blockIndex].html = sanitizeHtml(activeBlockEl.innerHTML);
+      autoSaveDraft();
+    }
+
     return;
   }
 
+  // Иначе добавляем стиль к выделению.
   const wrapper = document.createElement(tag);
   if (className) {
     wrapper.className = className;
@@ -1294,6 +1314,7 @@ function toggleCustomTag(cmd, selection) {
     wrapper.appendChild(contents);
     range.insertNode(wrapper);
   } catch (e) {
+    console.error('Не удалось применить форматирование:', e);
     return;
   }
 
@@ -1303,6 +1324,245 @@ function toggleCustomTag(cmd, selection) {
   selection.addRange(newRange);
 }
 
+
+// Возвращает все элементы нужного формата, пересекающие Range.
+function getMatchingElementsInRange(range, tagName, className, blockEl) {
+  if (!blockEl) return [];
+
+  const result = [];
+  const elements = blockEl.querySelectorAll(tagName);
+
+  elements.forEach(el => {
+    if (className && !el.classList.contains(className)) return;
+
+    try {
+      if (
+        range.intersectsNode(el) ||
+        el.contains(range.startContainer) ||
+        el.contains(range.endContainer)
+      ) {
+        result.push(el);
+      }
+    } catch (e) {}
+  });
+
+  return result;
+}
+
+
+// Проверяем, находится ли весь текст выделения внутри нужного тега.
+// Это принципиально для переключателя: если выделение частично
+// форматировано, повторное нажатие не должно случайно снимать
+// форматирование с соседнего текста.
+function isRangeFullyInsideTag(range, tagName, className, blockEl) {
+  if (!blockEl || !range || range.collapsed) return false;
+
+  const text = range.toString();
+  if (!text) return false;
+
+  const walker = document.createTreeWalker(
+    blockEl,
+    NodeFilter.SHOW_TEXT,
+    {
+      acceptNode(node) {
+        if (!node.nodeValue || !node.nodeValue.length) {
+          return NodeFilter.FILTER_REJECT;
+        }
+
+        try {
+          return range.intersectsNode(node)
+            ? NodeFilter.FILTER_ACCEPT
+            : NodeFilter.FILTER_REJECT;
+        } catch (e) {
+          return NodeFilter.FILTER_REJECT;
+        }
+      }
+    }
+  );
+
+  let foundText = false;
+  let node;
+
+  while ((node = walker.nextNode())) {
+    const parent = node.parentElement;
+    if (!parent) return false;
+
+    const formattedParent = parent.closest(tagName);
+    if (
+      !formattedParent ||
+      !blockEl.contains(formattedParent) ||
+      (className && !formattedParent.classList.contains(className))
+    ) {
+      return false;
+    }
+
+    foundText = true;
+  }
+
+  return foundText;
+}
+
+
+// Снимает нужный формат только с выделенного текста.
+// Вместо unwrapElement(existing), который снимает тег целиком,
+// делаем split по границам выделения и удаляем только нужные
+// обёртки.
+function unwrapRangeFormatting(range, tagName, className, blockEl) {
+  // Сохраняем положение выделения как текстовые offsets внутри блока.
+  const startOffset = getTextOffsetInBlock(blockEl, range.startContainer, range.startOffset);
+  const endOffset = getTextOffsetInBlock(blockEl, range.endContainer, range.endOffset);
+
+  // Разбиваем DOM по границам выделения.
+  splitRangeBoundaries(range);
+
+  // После split ищем все подходящие элементы, пересекающие исходное
+  // выделение, и снимаем только их.
+  const candidates = Array.from(blockEl.querySelectorAll(tagName))
+    .filter(el => {
+      if (className && !el.classList.contains(className)) return false;
+
+      const elStart = getTextOffsetInBlock(blockEl, el, 0);
+      const elEnd = getTextOffsetInBlock(blockEl, el, el.childNodes.length);
+
+      return elStart < endOffset && elEnd > startOffset;
+    })
+    .sort((a, b) => {
+      const depth = el => {
+        let d = 0;
+        let n = el;
+        while (n && n !== blockEl) {
+          d++;
+          n = n.parentElement;
+        }
+        return d;
+      };
+      return depth(b) - depth(a);
+    });
+
+  candidates.forEach(el => {
+    if (!el.parentNode) return;
+
+    while (el.firstChild) {
+      el.parentNode.insertBefore(el.firstChild, el);
+    }
+    el.remove();
+  });
+
+  cleanupEmptyInlineTags(blockEl);
+
+  // Восстанавливаем исходное выделение по текстовым offsets.
+  const newRange = createRangeFromTextOffsets(blockEl, startOffset, endOffset);
+  const selection = window.getSelection();
+
+  selection.removeAllRanges();
+  selection.addRange(newRange);
+}
+
+
+function getTextOffsetInBlock(blockEl, container, offset) {
+  const range = document.createRange();
+  range.selectNodeContents(blockEl);
+
+  try {
+    range.setEnd(container, offset);
+  } catch (e) {
+    return 0;
+  }
+
+  return range.toString().length;
+}
+
+
+function createRangeFromTextOffsets(blockEl, startOffset, endOffset) {
+  const range = document.createRange();
+  const walker = document.createTreeWalker(blockEl, NodeFilter.SHOW_TEXT);
+
+  let pos = 0;
+  let startNode = null;
+  let startNodeOffset = 0;
+  let endNode = null;
+  let endNodeOffset = 0;
+  let node;
+
+  while ((node = walker.nextNode())) {
+    const len = node.nodeValue.length;
+    const nextPos = pos + len;
+
+    if (!startNode && startOffset >= pos && startOffset <= nextPos) {
+      startNode = node;
+      startNodeOffset = Math.max(0, startOffset - pos);
+    }
+
+    if (endOffset >= pos && endOffset <= nextPos) {
+      endNode = node;
+      endNodeOffset = Math.max(0, endOffset - pos);
+      break;
+    }
+
+    pos = nextPos;
+  }
+
+  if (!startNode) {
+    const last = getLastTextNode(blockEl);
+    if (last) {
+      startNode = last;
+      startNodeOffset = last.nodeValue.length;
+    } else {
+      range.selectNodeContents(blockEl);
+      range.collapse(true);
+      return range;
+    }
+  }
+
+  if (!endNode) {
+    endNode = startNode;
+    endNodeOffset = startNodeOffset;
+  }
+
+  range.setStart(startNode, Math.min(startNodeOffset, startNode.nodeValue.length));
+  range.setEnd(endNode, Math.min(endNodeOffset, endNode.nodeValue.length));
+
+  return range;
+}
+
+
+function getLastTextNode(blockEl) {
+  const walker = document.createTreeWalker(blockEl, NodeFilter.SHOW_TEXT);
+  let last = null;
+  let node;
+
+  while ((node = walker.nextNode())) {
+    last = node;
+  }
+
+  return last;
+}
+
+
+function splitRangeBoundaries(range) {
+  // Разрезаем текстовые узлы на границах выделения, чтобы форматирование
+  // можно было снять только с выбранного фрагмента.
+  if (
+    range.startContainer.nodeType === Node.TEXT_NODE &&
+    range.startOffset > 0 &&
+    range.startOffset < range.startContainer.nodeValue.length
+  ) {
+    const newNode = range.startContainer.splitText(range.startOffset);
+    range.setStart(newNode, 0);
+
+    if (range.endContainer === range.startContainer) {
+      range.setEnd(newNode, range.endOffset - range.startOffset);
+    }
+  }
+
+  if (
+    range.endContainer.nodeType === Node.TEXT_NODE &&
+    range.endOffset > 0 &&
+    range.endOffset < range.endContainer.nodeValue.length
+  ) {
+    range.endContainer.splitText(range.endOffset);
+  }
+}
 
 // =========================================================
 // Найти ближайшего предка с заданным тегом/классом,
