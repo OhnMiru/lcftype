@@ -819,20 +819,31 @@ function updateDraftBanner() {
 
 
 // =========================================================
-// ФОРМАТИРОВАНИЕ ТЕКСТА
+// ФОРМАТИРОВАНИЕ ТЕКСТА (исправленная версия)
 // =========================================================
 
+// Все теги форматирования через единый безопасный механизм
 const CUSTOM_TAGS = {
+  bold: { tag: 'B', className: null },
+  italic: { tag: 'I', className: null },
+  underline: { tag: 'U', className: null },
+  strikeThrough: { tag: 'S', className: null },
   mono: { tag: 'CODE', className: null },
   spoiler: { tag: 'SPAN', className: 'tg-spoiler' },
   blockquote: { tag: 'BLOCKQUOTE', className: null }
 };
 
-const NATIVE_COMMANDS = new Set(['bold', 'italic', 'underline', 'strikeThrough']);
+// execCommand больше не используется для форматирования
+const NATIVE_COMMANDS = new Set();
+
 const ZWSP = '\u200B';
 
 let typingWrapperEl = null;
 
+
+// =========================================================
+// Применить команду форматирования (исправленная версия)
+// =========================================================
 
 function applyFormatCommand(cmd) {
   if (!activeBlockEl) {
@@ -844,12 +855,26 @@ function applyFormatCommand(cmd) {
 
   const selection = window.getSelection();
 
-  // Есть выделение — форматируем сам выделенный текст
-  if (selection && !selection.isCollapsed && activeBlockEl.contains(selection.anchorNode)) {
+  if (selection && !selection.isCollapsed) {
+    const range = selection.getRangeAt(0);
+
+    // =====================================================
+    // ЗАЩИТА: выделение не должно выходить за пределы блока
+    // =====================================================
+
+    if (!activeBlockEl.contains(range.startContainer) ||
+        !activeBlockEl.contains(range.endContainer)) {
+      showToast('Выделение вышло за пределы блока — попробуйте ещё раз');
+      selection.removeAllRanges();
+      return;
+    }
+
+    // =====================================================
+    // Применяем форматирование через безопасный Range
+    // =====================================================
+
     if (cmd === 'removeFormat') {
       removeAllFormatting(activeBlockEl, selection);
-    } else if (NATIVE_COMMANDS.has(cmd)) {
-      document.execCommand(cmd, false, null);
     } else if (CUSTOM_TAGS[cmd]) {
       toggleCustomTag(cmd, selection);
     }
@@ -860,7 +885,10 @@ function applyFormatCommand(cmd) {
     return;
   }
 
-  // Выделения нет — включаем "режим печати" с форматом
+  // =====================================================
+  // Нет выделения — включаем "режим печати" с форматом
+  // =====================================================
+
   if (!selection || !activeBlockEl.contains(selection.anchorNode)) {
     placeCaretAtEnd(activeBlockEl);
   }
@@ -872,12 +900,6 @@ function applyFormatCommand(cmd) {
     return;
   }
 
-  if (NATIVE_COMMANDS.has(cmd)) {
-    document.execCommand(cmd, false, null);
-    updateFloatingToolbarButtons();
-    return;
-  }
-
   if (CUSTOM_TAGS[cmd]) {
     toggleCustomTagTypingMode(cmd);
     updateFloatingToolbarButtons();
@@ -885,6 +907,10 @@ function applyFormatCommand(cmd) {
   }
 }
 
+
+// =========================================================
+// Включить/выключить "печать внутри кастомного тега"
+// =========================================================
 
 function toggleCustomTagTypingMode(cmd) {
   const selection = window.getSelection();
@@ -935,6 +961,10 @@ function toggleCustomTagTypingMode(cmd) {
   activeBlockEl.dispatchEvent(new Event('input'));
 }
 
+
+// =========================================================
+// Завершить "режим печати" в кастомном теге
+// =========================================================
 
 function exitTypingWrapper() {
   if (!typingWrapperEl) return;
@@ -989,13 +1019,11 @@ let enterPressCount = 0;
 let enterPressTimer = null;
 
 document.addEventListener('keydown', (e) => {
-  // Обрабатываем только Enter
   if (e.key !== 'Enter') return;
   
   const blockText = e.target.closest('.block-text');
   if (!blockText) return;
   
-  // Отменяем поведение браузера
   e.preventDefault();
   
   enterPressCount++;
@@ -1011,16 +1039,13 @@ document.addEventListener('keydown', (e) => {
     
     const blockIndex = parseInt(blockText.dataset.i);
     if (!isNaN(blockIndex)) {
-      // Сохраняем текущее содержимое блока
       const d = state.draft;
       if (d && d.blocks[blockIndex]?.type === 'text') {
         d.blocks[blockIndex].html = sanitizeHtml(blockText.innerHTML);
       }
       
-      // Если был активный кастомный тег — завершаем его
       exitTypingWrapper();
       
-      // Вставляем новый текстовый блок после текущего
       insertBlockAfter(blockIndex, { type: 'text', html: '' });
     }
     
@@ -1030,19 +1055,20 @@ document.addEventListener('keydown', (e) => {
   // Одиночный Enter — вставляем <br>
   document.execCommand('insertLineBreak', false, null);
   
-  // Завершаем режим кастомного тега, если активен
   exitTypingWrapper();
   
-  // Сохраняем изменения
   blockText.dispatchEvent(new Event('input'));
   
-  // Сбрасываем счётчик через 300 мс (если не будет второго Enter)
   enterPressTimer = setTimeout(() => {
     enterPressCount = 0;
     enterPressTimer = null;
   }, 300);
 });
 
+
+// =========================================================
+// Обернуть/снять кастомный тег (безопасный Range)
+// =========================================================
 
 function toggleCustomTag(cmd, selection) {
   if (!selection || selection.isCollapsed) return;
@@ -1101,6 +1127,10 @@ function unwrapElement(el) {
   parent.removeChild(el);
 }
 
+
+// =========================================================
+// Полный сброс форматирования (только в пределах выделения)
+// =========================================================
 
 function removeAllFormatting(blockEl, selection) {
   if (!selection || selection.rangeCount === 0) return;
@@ -1216,18 +1246,6 @@ function initFloatingToolbar() {
 
 
 function updateFloatingToolbarButtons() {
-  const nativeCommands = ['bold', 'italic', 'underline', 'strikeThrough'];
-
-  nativeCommands.forEach(cmd => {
-    document.querySelectorAll(`#floatingToolbar [data-cmd="${cmd}"]`).forEach(btn => {
-      let isActive = false;
-      try {
-        isActive = document.queryCommandState(cmd);
-      } catch (e) {}
-      btn.classList.toggle('active', isActive);
-    });
-  });
-
   const selection = window.getSelection();
 
   Object.entries(CUSTOM_TAGS).forEach(([cmd, { tag, className }]) => {
