@@ -3,36 +3,14 @@
 // Исправленная версия: безопасное форматирование, iOS-фиксы
 // =========================================================
 
-
-// =========================================================
-// Безопасная привязка тап-кнопок рядом с contenteditable
-//
-// Проблема: если просто вешать click, то на iOS Safari фокус
-// у contenteditable-блока теряется ДО срабатывания click
-// (между touchstart и click проходит blur), из-за чего
-// выделение/курсор к моменту клика уже неверные.
-//
-// Наивное решение — preventDefault() на touchstart, чтобы
-// не терять фокус. Но по спецификации Touch Events
-// preventDefault() на touchstart ОТМЕНЯЕТ синтетический
-// click для этого касания — и на Android (Chrome/WebView,
-// включая Telegram) click после этого просто не срабатывает,
-// хотя на iOS Safari часто всё равно срабатывает (там
-// синтетический click генерируется иначе).
-//
-// Поэтому здесь: touchstart только предотвращает потерю
-// фокуса (preventDefault), а само действие выполняется
-// в touchend — без ожидания click. Обычный click остаётся
-// рабочим путём для мыши/клавиатуры/скринридеров, с флагом
-// защиты от повторного срабатывания, если браузер всё же
-// пришлёт click после touch.
-// =========================================================
-
 function bindTapButton(btn, onActivate) {
   let handledByTouch = false;
   let resetTimer = null;
 
+  // Важно: сначала запоминаем selection, затем предотвращаем стандартное
+  // touch-поведение. Это работает стабильнее на iOS и Android WebView.
   btn.addEventListener('touchstart', (e) => {
+    saveCurrentSelection();
     e.preventDefault();
   }, { passive: false });
 
@@ -41,12 +19,17 @@ function bindTapButton(btn, onActivate) {
     handledByTouch = true;
 
     if (resetTimer) clearTimeout(resetTimer);
-    resetTimer = setTimeout(() => { handledByTouch = false; }, 500);
+    resetTimer = setTimeout(() => {
+      handledByTouch = false;
+    }, 500);
 
     onActivate(e);
   }, { passive: false });
 
   btn.addEventListener('mousedown', (e) => {
+    // Для мыши также запоминаем выделение до того, как браузер
+    // переведёт фокус на кнопку.
+    saveCurrentSelection();
     e.preventDefault();
   });
 
@@ -626,6 +609,9 @@ function renderBlocks(options = {}) {
 
   host.innerHTML = '';
 
+  // После перерендера старые Range указывают на удалённые DOM-ноды.
+  clearSavedSelection();
+
   d.blocks.forEach((b, i) => {
     const block = document.createElement('div');
     block.className = 'block';
@@ -655,7 +641,13 @@ function renderBlocks(options = {}) {
 
   // Текстовые блоки
   host.querySelectorAll('.block-text').forEach(el => {
-    el.onfocus = () => { activeBlockEl = el; };
+    el.onfocus = () => {
+      activeBlockEl = el;
+
+      if (savedSelectionBlock !== el) {
+        clearSavedSelection();
+      }
+    };
     el.oninput = e => {
       const i = +e.target.dataset.i;
       if (d.blocks[i]?.type === 'text') {
@@ -664,7 +656,10 @@ function renderBlocks(options = {}) {
       autoSaveDraft();
     };
     el.onkeyup = () => { activeBlockEl = el; };
-    el.onmouseup = () => { activeBlockEl = el; };
+    el.onmouseup = () => {
+      activeBlockEl = el;
+      setTimeout(saveCurrentSelection, 0);
+    };
   });
 
   // Подписи изображений
@@ -909,35 +904,113 @@ const ZWSP = '\u200B';
 
 let typingWrapperEl = null;
 
+// Последнее валидное выделение пользователя.
+// На мобильных WebView (Telegram/iOS/Android) window.getSelection()
+// может сбрасываться во время нажатия на кнопку toolbar, поэтому
+// сохраняем Range заранее и восстанавливаем его перед форматированием.
+let savedSelectionRange = null;
+let savedSelectionBlock = null;
+
+function saveCurrentSelection() {
+  const selection = window.getSelection();
+
+  if (
+    !selection ||
+    !selection.rangeCount ||
+    selection.isCollapsed ||
+    !activeBlockEl ||
+    !activeBlockEl.isConnected
+  ) {
+    return;
+  }
+
+  const range = selection.getRangeAt(0);
+
+  if (
+    activeBlockEl.contains(range.startContainer) &&
+    activeBlockEl.contains(range.endContainer)
+  ) {
+    savedSelectionRange = range.cloneRange();
+    savedSelectionBlock = activeBlockEl;
+  }
+}
+
+function restoreSavedSelection() {
+  if (
+    !savedSelectionRange ||
+    !savedSelectionBlock ||
+    !savedSelectionBlock.isConnected
+  ) {
+    return false;
+  }
+
+  const selection = window.getSelection();
+  if (!selection) return false;
+
+  try {
+    selection.removeAllRanges();
+    selection.addRange(savedSelectionRange);
+
+    return (
+      selection.rangeCount > 0 &&
+      !selection.isCollapsed &&
+      savedSelectionBlock.contains(selection.getRangeAt(0).startContainer) &&
+      savedSelectionBlock.contains(selection.getRangeAt(0).endContainer)
+    );
+  } catch (e) {
+    return false;
+  }
+}
+
+function clearSavedSelection() {
+  savedSelectionRange = null;
+  savedSelectionBlock = null;
+}
+
 
 // =========================================================
 // Применить команду форматирования
 // =========================================================
 
 function applyFormatCommand(cmd) {
-  if (!activeBlockEl) {
+  if (!activeBlockEl || !activeBlockEl.isConnected) {
     showToast('Нажмите на текст, чтобы начать редактирование');
     return;
   }
 
-  activeBlockEl.focus();
-
   const selection = window.getSelection();
+  if (!selection) return;
 
-  if (selection && !selection.isCollapsed) {
+  // Критически важно: НЕ делать focus() до восстановления Range.
+  // На мобильных WebView focus() может уничтожить выделение.
+  let hasSelection = false;
+
+  if (
+    savedSelectionRange &&
+    savedSelectionBlock === activeBlockEl
+  ) {
+    hasSelection = restoreSavedSelection();
+  }
+
+  // Если сохранённого Range нет, используем текущее выделение.
+  if (!hasSelection && selection.rangeCount) {
+    const currentRange = selection.getRangeAt(0);
+
+    hasSelection =
+      !selection.isCollapsed &&
+      activeBlockEl.contains(currentRange.startContainer) &&
+      activeBlockEl.contains(currentRange.endContainer);
+  }
+
+  if (hasSelection) {
     const range = selection.getRangeAt(0);
 
-    // =====================================================
-    // ЗАЩИТА: выделение не должно выходить за пределы блока.
-    // Без этой проверки, если пользователь случайно выделил
-    // текст через несколько блоков (это физически возможно,
-    // т.к. блоки — соседние DOM-узлы), операция может
-    // затронуть чужой блок и слить их содержимое.
-    // =====================================================
-
-    if (!activeBlockEl.contains(range.startContainer) ||
-        !activeBlockEl.contains(range.endContainer)) {
+    if (
+      !activeBlockEl.contains(range.startContainer) ||
+      !activeBlockEl.contains(range.endContainer)
+    ) {
       showToast('Выделение вышло за пределы блока — попробуйте ещё раз');
+      clearSavedSelection();
       selection.removeAllRanges();
       return;
     }
@@ -951,18 +1024,23 @@ function applyFormatCommand(cmd) {
     exitTypingWrapper();
     activeBlockEl.dispatchEvent(new Event('input'));
     updateFloatingToolbarButtons();
+
+    // После форматирования сохраняем новый Range, если он есть.
+    if (selection.rangeCount && !selection.isCollapsed) {
+      savedSelectionRange = selection.getRangeAt(0).cloneRange();
+      savedSelectionBlock = activeBlockEl;
+    } else {
+      clearSavedSelection();
+    }
+
     return;
   }
 
-  // Выделения нет — включаем "режим печати" с форматом
-  if (!selection || !activeBlockEl.contains(selection.anchorNode)) {
-    placeCaretAtEnd(activeBlockEl);
-  }
+  // Выделения нет — теперь можно поставить фокус и включить
+  // режим форматирования для последующего ввода.
+  activeBlockEl.focus();
 
   if (cmd === 'removeFormat') {
-    // Снятие форматирования без выделения не имеет чёткого
-    // диапазона применения — просто выходим из текущей
-    // обёртки, если она активна.
     exitTypingWrapper();
     updateFloatingToolbarButtons();
     return;
@@ -971,7 +1049,6 @@ function applyFormatCommand(cmd) {
   if (CUSTOM_TAGS[cmd]) {
     toggleCustomTagTypingMode(cmd);
     updateFloatingToolbarButtons();
-    return;
   }
 }
 
@@ -1300,6 +1377,11 @@ function removeAllFormatting(blockEl, selection) {
   }
 
   updateFloatingToolbarButtons();
+
+  if (selection.rangeCount && !selection.isCollapsed) {
+    savedSelectionRange = selection.getRangeAt(0).cloneRange();
+    savedSelectionBlock = blockEl;
+  }
 }
 
 
@@ -1357,6 +1439,7 @@ function cleanupEmptyInlineTags(blockEl) {
 
 function initFloatingToolbar() {
   document.addEventListener('selectionchange', () => {
+    saveCurrentSelection();
     checkTypingWrapperExit();
     updateFloatingToolbarButtons();
   });
