@@ -1278,7 +1278,7 @@ function updateDraftBanner() {
 
 
 // =========================================================
-// ФОРМАТИРОВАНИЕ ТЕКСТА
+// ФОРМАТИРОВАНИЕ ТЕКСТА (исправленная версия)
 // =========================================================
 
 const CUSTOM_TAGS = {
@@ -1294,11 +1294,12 @@ const NATIVE_COMMANDS = new Set([
   'strikeThrough'
 ]);
 
-// Состояние активного форматирования для печати
-let pendingFormat = null;
+const ZWSP = '\u200B';
 
-// Флаг, чтобы не применять pending формат к уже отформатированному тексту
-let isApplyingFormat = false;
+// Элемент кастомного тега (code/spoiler/blockquote),
+// внутри которого сейчас "печатается" пользователь
+// (когда формат включен без выделения)
+let typingWrapperEl = null;
 
 function applyFormatCommand(cmd) {
   if (!activeBlockEl) {
@@ -1306,13 +1307,19 @@ function applyFormatCommand(cmd) {
     return;
   }
 
-  // Даем фокус блоку
   activeBlockEl.focus();
 
   const selection = window.getSelection();
 
-  // Если есть выделение — применяем форматирование к выделению
-  if (selection && !selection.isCollapsed && activeBlockEl.contains(selection.anchorNode)) {
+  // ---------------------------------------------------
+  // Есть выделение — форматируем сам выделенный текст
+  // ---------------------------------------------------
+
+  if (
+    selection &&
+    !selection.isCollapsed &&
+    activeBlockEl.contains(selection.anchorNode)
+  ) {
     if (cmd === 'removeFormat') {
       removeAllFormatting(activeBlockEl, selection);
     } else if (NATIVE_COMMANDS.has(cmd)) {
@@ -1321,99 +1328,160 @@ function applyFormatCommand(cmd) {
       toggleCustomTag(cmd, selection);
     }
 
+    exitTypingWrapper();
     activeBlockEl.dispatchEvent(new Event('input'));
     updateFloatingToolbarButtons();
     return;
   }
 
-  // Нет выделения — включаем режим печати с форматированием
+  // ---------------------------------------------------
+  // Выделения нет — включаем "режим печати" с форматом
+  // ---------------------------------------------------
+
+  if (!selection || !activeBlockEl.contains(selection.anchorNode)) {
+    placeCaretAtEnd(activeBlockEl);
+  }
+
   if (cmd === 'removeFormat') {
-    pendingFormat = null;
+    document.execCommand('removeFormat', false, null);
+    exitTypingWrapper();
     updateFloatingToolbarButtons();
     return;
   }
 
-  // Переключаем pending формат (без тостов)
-  if (pendingFormat === cmd) {
-    pendingFormat = null;
-  } else {
-    pendingFormat = cmd;
-  }
-
-  updateFloatingToolbarButtons();
-}
-
-// Функция для применения pending формата при вводе текста
-function applyPendingFormat(inputEvent) {
-  if (!pendingFormat || !activeBlockEl || isApplyingFormat) {
+  if (NATIVE_COMMANDS.has(cmd)) {
+    // Браузер сам запомнит стиль для следующих введённых
+    // символов — это штатное поведение execCommand
+    // при "схлопнутом" выделении.
+    document.execCommand(cmd, false, null);
+    updateFloatingToolbarButtons();
     return;
   }
 
+  if (CUSTOM_TAGS[cmd]) {
+    toggleCustomTagTypingMode(cmd);
+    updateFloatingToolbarButtons();
+    return;
+  }
+}
+
+// ---------------------------------------------------------
+// Включить/выключить "печать внутри кастомного тега"
+// ---------------------------------------------------------
+
+function toggleCustomTagTypingMode(cmd) {
   const selection = window.getSelection();
-  if (!selection || selection.isCollapsed) {
+
+  if (!selection || !selection.rangeCount) {
     return;
   }
 
   const range = selection.getRangeAt(0);
-  if (!activeBlockEl.contains(range.commonAncestorContainer)) {
-    return;
-  }
+  const { tag, className } = CUSTOM_TAGS[cmd];
 
-  // Получаем текст, который только что ввели
-  const text = range.toString();
-  
-  // Проверяем, что это действительно новый текст (не выделение мышкой)
-  // и что он не слишком длинный (чтобы не применять формат к вставленному тексту)
-  if (!text || text.length > 50) {
-    return;
-  }
+  // Если курсор уже внутри такого тега — выходим из него
+  const existing = findAncestorTag(range.startContainer, tag, className);
 
-  // Проверяем, не находится ли текст уже внутри нужного тега
-  const cmd = pendingFormat;
-  let alreadyFormatted = false;
-  
-  if (NATIVE_COMMANDS.has(cmd)) {
-    try {
-      alreadyFormatted = document.queryCommandState(cmd);
-    } catch (e) {}
-  } else if (CUSTOM_TAGS[cmd]) {
-    const { tag, className } = CUSTOM_TAGS[cmd];
-    const el = findAncestorTag(range.commonAncestorContainer, tag, className);
-    alreadyFormatted = !!el;
-  }
+  if (existing) {
+    const newRange = document.createRange();
+    newRange.setStartAfter(existing);
+    newRange.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(newRange);
 
-  // Если текст уже отформатирован нужным стилем, не применяем повторно
-  if (alreadyFormatted) {
-    return;
-  }
-
-  // Применяем форматирование к введенному тексту
-  isApplyingFormat = true;
-  
-  try {
-    if (NATIVE_COMMANDS.has(cmd)) {
-      document.execCommand(cmd, false, null);
-    } else if (CUSTOM_TAGS[cmd]) {
-      toggleCustomTag(cmd, selection);
+    if (existing === typingWrapperEl) {
+      typingWrapperEl = null;
     }
-  } finally {
-    isApplyingFormat = false;
+
+    cleanZeroWidthSpaces(existing);
+    if (!existing.textContent.trim()) {
+      existing.remove();
+    }
+
+    activeBlockEl.dispatchEvent(new Event('input'));
+    return;
   }
+
+  // Иначе создаём пустой тег с невидимым символом
+  // и ставим курсор внутрь него — дальше пользователь
+  // печатает прямо в этот узел
+  const wrapper = document.createElement(tag);
+  if (className) {
+    wrapper.className = className;
+  }
+
+  const marker = document.createTextNode(ZWSP);
+  wrapper.appendChild(marker);
+
+  range.insertNode(wrapper);
+
+  const newRange = document.createRange();
+  newRange.setStart(marker, marker.length);
+  newRange.collapse(true);
+  selection.removeAllRanges();
+  selection.addRange(newRange);
+
+  typingWrapperEl = wrapper;
 
   activeBlockEl.dispatchEvent(new Event('input'));
-  updateFloatingToolbarButtons();
 }
 
-// Перехватываем ввод текста для применения pending формата
-document.addEventListener('input', (e) => {
-  const blockText = e.target.closest('.block-text');
-  if (blockText && pendingFormat) {
-    // Используем setTimeout, чтобы дать браузеру вставить текст
-    setTimeout(() => {
-      applyPendingFormat(e);
-    }, 10);
+// ---------------------------------------------------------
+// Завершить "режим печати" в кастомном теге:
+// убрать служебный символ, удалить тег если он пустой
+// ---------------------------------------------------------
+
+function exitTypingWrapper() {
+  if (!typingWrapperEl) {
+    return;
   }
-});
+
+  cleanZeroWidthSpaces(typingWrapperEl);
+
+  if (!typingWrapperEl.textContent.trim()) {
+    typingWrapperEl.remove();
+  }
+
+  typingWrapperEl = null;
+}
+
+function cleanZeroWidthSpaces(el) {
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  let n;
+
+  while ((n = walker.nextNode())) {
+    if (n.nodeValue.includes(ZWSP)) {
+      n.nodeValue = n.nodeValue.replace(new RegExp(ZWSP, 'g'), '');
+    }
+  }
+}
+
+// Если курсор ушёл за пределы typingWrapperEl (стрелками,
+// кликом, сменой блока и т.д.) — завершаем режим печати
+function checkTypingWrapperExit() {
+  if (!typingWrapperEl) {
+    return;
+  }
+
+  const selection = window.getSelection();
+
+  const stillInside =
+    selection &&
+    selection.rangeCount &&
+    typingWrapperEl.isConnected &&
+    typingWrapperEl.contains(selection.getRangeAt(0).startContainer);
+
+  if (stillInside) {
+    return;
+  }
+
+  const changedBlock = activeBlockEl;
+  exitTypingWrapper();
+
+  if (changedBlock) {
+    changedBlock.dispatchEvent(new Event('input'));
+  }
+}
 
 // Обработка двойного Enter для отключения кастомных тегов
 let enterPressCount = 0;
@@ -1431,42 +1499,36 @@ document.addEventListener('keydown', (e) => {
       enterPressTimer = null;
     }
 
-    // Двойной Enter
     if (enterPressCount >= 2) {
       enterPressCount = 0;
       e.preventDefault();
 
-      // Отключаем кастомные теги (mono, blockquote, spoiler)
       const selection = window.getSelection();
       if (selection && selection.rangeCount) {
         const range = selection.getRangeAt(0);
         const container = range.commonAncestorContainer;
 
-        // Проверяем, находимся ли мы внутри кастомного тега
         let hasCustomTag = false;
         Object.entries(CUSTOM_TAGS).forEach(([cmd, { tag, className }]) => {
           const el = findAncestorTag(container, tag, className);
           if (el) {
             hasCustomTag = true;
+            if (el === typingWrapperEl) {
+              typingWrapperEl = null;
+            }
             unwrapElement(el);
           }
         });
 
         if (hasCustomTag) {
-          // Если pending формат был одним из кастомных, сбрасываем его
-          if (pendingFormat && CUSTOM_TAGS[pendingFormat]) {
-            pendingFormat = null;
-          }
           updateFloatingToolbarButtons();
         }
       }
 
-      // Вставляем обычный перенос строки
       document.execCommand('insertLineBreak', false, null);
       return;
     }
 
-    // Одиночный Enter — сбрасываем счетчик через 300ms
     enterPressTimer = setTimeout(() => {
       enterPressCount = 0;
       enterPressTimer = null;
@@ -1476,6 +1538,7 @@ document.addEventListener('keydown', (e) => {
 
 // ---------------------------------------------------------
 // Обернуть/снять кастомный тег (code / spoiler / blockquote)
+// — для случая, когда есть выделение
 // ---------------------------------------------------------
 
 function toggleCustomTag(cmd, selection) {
@@ -1486,7 +1549,6 @@ function toggleCustomTag(cmd, selection) {
   const { tag, className } = CUSTOM_TAGS[cmd];
   const range = selection.getRangeAt(0);
 
-  // Если выделение уже целиком внутри такого тега — снимаем его
   const existing = findAncestorTag(
     range.commonAncestorContainer,
     tag,
@@ -1498,7 +1560,6 @@ function toggleCustomTag(cmd, selection) {
     return;
   }
 
-  // Иначе — оборачиваем выделенное содержимое в тег
   const wrapper = document.createElement(tag);
   if (className) {
     wrapper.className = className;
@@ -1670,6 +1731,7 @@ function cleanupEmptyInlineTags(blockEl) {
 
 function initFloatingToolbar() {
   document.addEventListener('selectionchange', () => {
+    checkTypingWrapperExit();
     updateFloatingToolbarButtons();
   });
 
@@ -1696,8 +1758,6 @@ function updateFloatingToolbarButtons() {
         try {
           isActive = document.queryCommandState(cmd);
         } catch (e) {}
-        // Также подсвечиваем, если это pending формат
-        isActive = isActive || (pendingFormat === cmd);
         btn.classList.toggle('active', isActive);
       });
   });
@@ -1712,8 +1772,13 @@ function updateFloatingToolbarButtons() {
       isActive = !!findAncestorTag(range.commonAncestorContainer, tag, className);
     }
 
-    // Также подсвечиваем, если это pending формат
-    isActive = isActive || (pendingFormat === cmd);
+    if (
+      typingWrapperEl &&
+      typingWrapperEl.tagName === tag &&
+      (!className || typingWrapperEl.classList.contains(className))
+    ) {
+      isActive = true;
+    }
 
     document
       .querySelectorAll(`#floatingToolbar [data-cmd="${cmd}"]`)
