@@ -981,57 +981,66 @@ function checkTypingWrapperExit() {
 }
 
 
-// Обработка двойного Enter
+// =========================================================
+// ОБРАБОТКА ENTER — всегда вставляем <br>
+// =========================================================
+
 let enterPressCount = 0;
 let enterPressTimer = null;
 
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') {
-    const blockText = e.target.closest('.block-text');
-    if (!blockText) return;
-
-    enterPressCount++;
-
-    if (enterPressTimer) {
-      clearTimeout(enterPressTimer);
-      enterPressTimer = null;
-    }
-
-    if (enterPressCount >= 2) {
-      enterPressCount = 0;
-      e.preventDefault();
-
-      const selection = window.getSelection();
-      if (selection && selection.rangeCount) {
-        const range = selection.getRangeAt(0);
-        const container = range.commonAncestorContainer;
-
-        let hasCustomTag = false;
-        Object.entries(CUSTOM_TAGS).forEach(([cmd, { tag, className }]) => {
-          const el = findAncestorTag(container, tag, className);
-          if (el) {
-            hasCustomTag = true;
-            if (el === typingWrapperEl) {
-              typingWrapperEl = null;
-            }
-            unwrapElement(el);
-          }
-        });
-
-        if (hasCustomTag) {
-          updateFloatingToolbarButtons();
-        }
-      }
-
-      document.execCommand('insertLineBreak', false, null);
-      return;
-    }
-
-    enterPressTimer = setTimeout(() => {
-      enterPressCount = 0;
-      enterPressTimer = null;
-    }, 300);
+  // Обрабатываем только Enter
+  if (e.key !== 'Enter') return;
+  
+  const blockText = e.target.closest('.block-text');
+  if (!blockText) return;
+  
+  // Отменяем поведение браузера
+  e.preventDefault();
+  
+  enterPressCount++;
+  
+  if (enterPressTimer) {
+    clearTimeout(enterPressTimer);
+    enterPressTimer = null;
   }
+  
+  // Двойной Enter — создаём новый блок
+  if (enterPressCount >= 2) {
+    enterPressCount = 0;
+    
+    const blockIndex = parseInt(blockText.dataset.i);
+    if (!isNaN(blockIndex)) {
+      // Сохраняем текущее содержимое блока
+      const d = state.draft;
+      if (d && d.blocks[blockIndex]?.type === 'text') {
+        d.blocks[blockIndex].html = sanitizeHtml(blockText.innerHTML);
+      }
+      
+      // Если был активный кастомный тег — завершаем его
+      exitTypingWrapper();
+      
+      // Вставляем новый текстовый блок после текущего
+      insertBlockAfter(blockIndex, { type: 'text', html: '' });
+    }
+    
+    return;
+  }
+  
+  // Одиночный Enter — вставляем <br>
+  document.execCommand('insertLineBreak', false, null);
+  
+  // Завершаем режим кастомного тега, если активен
+  exitTypingWrapper();
+  
+  // Сохраняем изменения
+  blockText.dispatchEvent(new Event('input'));
+  
+  // Сбрасываем счётчик через 300 мс (если не будет второго Enter)
+  enterPressTimer = setTimeout(() => {
+    enterPressCount = 0;
+    enterPressTimer = null;
+  }, 300);
 });
 
 
