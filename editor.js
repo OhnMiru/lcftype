@@ -423,7 +423,12 @@ function renderEditor() {
       d.blocks.splice(idx, 0, ...blocks);
       state.pendingImageInsertIndex = null;
 
-      renderBlocks({ focusIndex: idx });
+      // Не перерисовываем весь blocksHost: на iOS это может привести
+      // к пересборке старых contenteditable-блоков и потере/слиянию DOM.
+      insertBlocksIntoDOM(idx, blocks, {
+        focusIndex: idx
+      });
+
       autoSaveDraft();
 
     } catch (err) {
@@ -555,8 +560,17 @@ function saveBlocksContent() {
 
 function insertBlockAfter(index, block) {
   saveBlocksContent();
-  state.draft.blocks.splice(index + 1, 0, block);
-  renderBlocks({ focusIndex: block.type === 'text' ? index + 1 : null });
+
+  const insertIndex = index + 1;
+  state.draft.blocks.splice(insertIndex, 0, block);
+
+  // Ключевой iOS-фикс:
+  // не уничтожаем и не создаём заново уже существующие .block-text.
+  // Добавляем только новый DOM-блок.
+  insertBlocksIntoDOM(insertIndex, [block], {
+    focusIndex: block.type === 'text' ? insertIndex : null
+  });
+
   autoSaveDraft();
 }
 
@@ -610,6 +624,213 @@ function createBlockAddControls(index) {
 
 
 // =========================================================
+// Инкрементальное добавление блоков
+//
+// ВАЖНО:
+// renderBlocks() полностью пересоздаёт blocksHost. Это нормально
+// для первоначального рендера, но плохо для contenteditable на iOS:
+// Safari/WebView может потерять Selection, caret или промежуточное
+// состояние DOM.
+//
+// Поэтому при добавлении текста/картинок существующие блоки НЕ
+// пересоздаются. В DOM вставляется только новый блок, после чего
+// обновляются индексы data-i и обработчики.
+// =========================================================
+
+function createSingleBlockElement(blockData, index) {
+  const block = document.createElement('div');
+  block.className = 'block';
+  block.dataset.i = index;
+
+  if (blockData.type === 'text') {
+    block.innerHTML = `
+      <button class="block-remove" data-act="del" data-i="${index}" type="button">×</button>
+      <div class="block-text" contenteditable="true" data-i="${index}" data-placeholder="Текст абзаца…">
+        ${sanitizeHtml(blockData.html || '')}
+      </div>
+    `;
+  } else if (blockData.type === 'image') {
+    block.className = 'block block-image-wrap';
+    block.innerHTML = `
+      <button class="block-remove" data-act="del" data-i="${index}" type="button">×</button>
+      <img src="${escapeHtml(blockData.src || '')}" alt="">
+      <input class="block-caption" data-i="${index}" placeholder="Подпись (необязательно)" value="${escapeHtml(blockData.caption || '')}">
+    `;
+  } else {
+    return null;
+  }
+
+  return block;
+}
+
+
+function bindBlockTextElement(el) {
+  const d = state.draft;
+
+  el.onfocus = () => {
+    activeBlockEl = el;
+
+    if (savedSelectionBlock !== el) {
+      clearSavedSelection();
+    }
+  };
+
+  el.oninput = e => {
+    const i = +e.target.dataset.i;
+
+    if (d.blocks[i]?.type === 'text') {
+      d.blocks[i].html = sanitizeHtml(e.target.innerHTML);
+    }
+
+    autoSaveDraft();
+  };
+
+  el.onkeyup = () => {
+    activeBlockEl = el;
+  };
+
+  el.onmouseup = () => {
+    activeBlockEl = el;
+    setTimeout(saveCurrentSelection, 0);
+  };
+}
+
+
+function bindBlockCaptionElement(el) {
+  const d = state.draft;
+
+  el.oninput = e => {
+    const i = +e.target.dataset.i;
+
+    if (d.blocks[i]?.type === 'image') {
+      d.blocks[i].caption = e.target.value;
+    }
+
+    autoSaveDraft();
+  };
+}
+
+
+function bindBlockDeleteButton(el) {
+  el.onclick = () => {
+    const i = +el.dataset.i;
+    const d = state.draft;
+
+    if (!d?.blocks[i]) return;
+
+    d.blocks.splice(i, 1);
+
+    if (!d.blocks.length) {
+      d.blocks.push({ type: 'text', html: '' });
+    }
+
+    // Удаление пока оставляем через полный render:
+    // в отличие от добавления, здесь пользователь сознательно
+    // удаляет существующий блок.
+    renderBlocks({
+      focusIndex: Math.min(i, d.blocks.length - 1)
+    });
+
+    autoSaveDraft();
+  };
+}
+
+
+function refreshBlockIndicesAndBindings() {
+  const host = document.getElementById('blocksHost');
+  const d = state.draft;
+
+  if (!host || !d) return;
+
+  const blockEls = [...host.querySelectorAll(':scope > .block')];
+
+  blockEls.forEach((blockEl, index) => {
+    blockEl.dataset.i = index;
+
+    const removeBtn = blockEl.querySelector('[data-act="del"]');
+    if (removeBtn) {
+      removeBtn.dataset.i = index;
+      bindBlockDeleteButton(removeBtn);
+    }
+
+    const textEl = blockEl.querySelector('.block-text');
+    if (textEl) {
+      textEl.dataset.i = index;
+      bindBlockTextElement(textEl);
+    }
+
+    const captionEl = blockEl.querySelector('.block-caption');
+    if (captionEl) {
+      captionEl.dataset.i = index;
+      bindBlockCaptionElement(captionEl);
+    }
+  });
+
+  // Старые кнопки добавления содержали closures со старыми индексами.
+  // Пересоздаём только эти маленькие control-row, не трогая текстовые
+  // блоки и их DOM.
+  host.querySelectorAll('.block-add-row').forEach(row => row.remove());
+
+  [...host.querySelectorAll(':scope > .block')].forEach((blockEl, index) => {
+    const row = createBlockAddControls(index);
+    blockEl.after(row);
+  });
+}
+
+
+function insertBlocksIntoDOM(insertIndex, blocks, options = {}) {
+  const host = document.getElementById('blocksHost');
+  const d = state.draft;
+
+  if (!host || !d || !Array.isArray(blocks) || !blocks.length) return;
+
+  // Сначала фиксируем HTML существующих текстовых блоков.
+  saveBlocksContent();
+
+  const existingBlocks = [...host.querySelectorAll(':scope > .block')];
+
+  // Найти DOM-позицию перед существующим блоком с этим индексом.
+  // Если вставляем в конец — добавляем перед последним add-row.
+  let referenceBlock = existingBlocks[insertIndex] || null;
+
+  blocks.forEach((blockData, offset) => {
+    const index = insertIndex + offset;
+    const blockEl = createSingleBlockElement(blockData, index);
+
+    if (!blockEl) return;
+
+    if (referenceBlock && referenceBlock.parentNode === host) {
+      host.insertBefore(blockEl, referenceBlock);
+    } else {
+      host.appendChild(blockEl);
+    }
+  });
+
+  // После вставки индексы последующих блоков изменились.
+  // Обновляем только data-i и обработчики, НЕ пересоздавая .block-text.
+  refreshBlockIndicesAndBindings();
+
+  const focusIndex = options.focusIndex;
+
+  if (focusIndex !== undefined && focusIndex !== null) {
+    const textEl = host.querySelector(
+      `.block-text[data-i="${focusIndex}"]`
+    );
+
+    if (textEl) {
+      requestAnimationFrame(() => {
+        textEl.focus();
+        activeBlockEl = textEl;
+        placeCaretAtEnd(textEl);
+      });
+    }
+  }
+
+  updateDraftBanner();
+}
+
+
+// =========================================================
 // Рендер блоков
 // =========================================================
 
@@ -645,83 +866,17 @@ function renderBlocks(options = {}) {
   clearSavedSelection();
 
   d.blocks.forEach((b, i) => {
-    const block = document.createElement('div');
-    block.className = 'block';
-    block.dataset.i = i;
-
-    if (b.type === 'text') {
-      block.innerHTML = `
-        <button class="block-remove" data-act="del" data-i="${i}" type="button">×</button>
-        <div class="block-text" contenteditable="true" data-i="${i}" data-placeholder="Текст абзаца…">
-          ${sanitizeHtml(b.html || '')}
-        </div>
-      `;
-    } else if (b.type === 'image') {
-      block.className = 'block block-image-wrap';
-      block.innerHTML = `
-        <button class="block-remove" data-act="del" data-i="${i}" type="button">×</button>
-        <img src="${escapeHtml(b.src || '')}" alt="">
-        <input class="block-caption" data-i="${i}" placeholder="Подпись (необязательно)" value="${escapeHtml(b.caption || '')}">
-      `;
-    } else {
-      return;
-    }
+    const block = createSingleBlockElement(b, i);
+    if (!block) return;
 
     host.appendChild(block);
     host.appendChild(createBlockAddControls(i));
   });
 
-  // Текстовые блоки
-  host.querySelectorAll('.block-text').forEach(el => {
-    el.onfocus = () => {
-      activeBlockEl = el;
-
-      if (savedSelectionBlock !== el) {
-        clearSavedSelection();
-      }
-    };
-    el.oninput = e => {
-      const i = +e.target.dataset.i;
-      if (d.blocks[i]?.type === 'text') {
-        d.blocks[i].html = sanitizeHtml(e.target.innerHTML);
-      }
-      autoSaveDraft();
-    };
-    el.onkeyup = () => { activeBlockEl = el; };
-    el.onmouseup = () => {
-      activeBlockEl = el;
-      setTimeout(saveCurrentSelection, 0);
-    };
-  });
-
-  // Подписи изображений
-  host.querySelectorAll('.block-caption').forEach(el => {
-    el.oninput = e => {
-      const i = +e.target.dataset.i;
-      if (d.blocks[i]?.type === 'image') {
-        d.blocks[i].caption = e.target.value;
-      }
-      autoSaveDraft();
-    };
-  });
-
-  // Удаление блоков
-  host.querySelectorAll('[data-act="del"]').forEach(el => {
-    el.onclick = () => {
-      const i = +el.dataset.i;
-      if (!d.blocks[i]) return;
-
-      d.blocks.splice(i, 1);
-      if (!d.blocks.length) {
-        d.blocks.push({ type: 'text', html: '' });
-      }
-
-      renderBlocks({
-        focusIndex: Math.min(i, d.blocks.length - 1)
-      });
-      autoSaveDraft();
-    };
-  });
+  // Привязываем обработчики к первоначально созданным блокам.
+  host.querySelectorAll('.block-text').forEach(bindBlockTextElement);
+  host.querySelectorAll('.block-caption').forEach(bindBlockCaptionElement);
+  host.querySelectorAll('[data-act="del"]').forEach(bindBlockDeleteButton);
 
   // Фокус на новый блок
   if (options.focusIndex !== undefined && options.focusIndex !== null) {
