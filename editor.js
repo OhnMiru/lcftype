@@ -52,12 +52,12 @@ async function openEditor() {
 
     if (!_isRestoringDraft) {
       const savedDraft = loadDraftFromStorage();
-      
+
       if (savedDraft && !isDraftEmpty(savedDraft)) {
         const restore = confirm(
           'У вас есть несохраненный черновик. Восстановить?'
         );
-        
+
         if (restore) {
           _isRestoringDraft = true;
           state.draft = savedDraft;
@@ -328,7 +328,7 @@ function renderEditor() {
         data-cmd="mono"
         title="Моноширинный"
       >
-        ` + '`' + ` ` + '`' + `
+        &#96;&nbsp;&#96;
       </button>
 
       <button
@@ -376,16 +376,16 @@ function renderEditor() {
 
     <!-- Кастомная плашка для выделенного текста -->
     <div id="customToolbar" class="custom-toolbar" style="display:none;">
-      
+
       <button data-cmd="bold" title="Жирный">B</button>
       <button data-cmd="italic" title="Курсив">i</button>
       <button data-cmd="underline" title="Подчёркнутый">U</button>
       <button data-cmd="strikeThrough" title="Зачеркнутый"><span style="text-decoration:line-through;">S</span></button>
       <button data-cmd="blockquote" title="Цитировать">❝</button>
       <button data-cmd="spoiler" title="Скрытый">◼</button>
-      <button data-cmd="mono" title="Моноширинный">` + '`' + ` ` + '`' + `</button>
+      <button data-cmd="mono" title="Моноширинный">&#96;&nbsp;&#96;</button>
       <button data-cmd="removeFormat" title="Обычный текст">T</button>
-      
+
     </div>
   `;
 
@@ -403,53 +403,34 @@ function renderEditor() {
 
 
   // =======================================================
-  // Панель форматирования
+  // Панель форматирования (верхняя, всегда видимая)
   // =======================================================
+  // Кнопки нижней плашки (#customToolbar) НЕ трогаем здесь —
+  // они привязываются один раз в initCustomToolbar(), чтобы
+  // не вешать по два обработчика на одну и ту же кнопку.
 
   document
     .querySelectorAll(
-      '#toolbar button, #customToolbar button'
+      '#toolbar button'
     )
     .forEach(btn => {
 
       const handler = (e) => {
         e.preventDefault();
-        
+
         if (!activeBlockEl) {
           showToast('Нажмите на текст, чтобы начать редактирование');
           return;
         }
-        
-        const cmd = btn.dataset.cmd;
-        
-        if (cmd === 'removeFormat') {
-          // Сброс форматирования
-          document.execCommand('removeFormat', false, null);
-        } else {
-          document.execCommand(cmd, false, null);
-        }
-        
-        activeBlockEl.dispatchEvent(new Event('input'));
-        updateToolbarButtons();
+
+        applyFormatCommand(btn.dataset.cmd);
       };
 
       // Для десктопа
       btn.addEventListener('mousedown', handler);
-      
-      // Для мобильных — touchstart
+
+      // Для мобильных
       btn.addEventListener('touchstart', handler, { passive: false });
-      
-      // Для мобильных — двойной тап
-      let lastTap = 0;
-      btn.addEventListener('touchend', (e) => {
-        const now = Date.now();
-        if (now - lastTap < 300) {
-          // Двойной тап — применяем форматирование
-          e.preventDefault();
-          handler(e);
-        }
-        lastTap = now;
-      }, { passive: false });
     });
 
 
@@ -494,7 +475,7 @@ function renderEditor() {
         showToast(
           'Обложка убрана'
         );
-        
+
         autoSaveDraft();
       }
     );
@@ -593,7 +574,7 @@ function renderEditor() {
         renderBlocks({
           focusIndex: idx
         });
-        
+
         autoSaveDraft();
 
       } catch (err) {
@@ -644,7 +625,7 @@ function renderEditor() {
   renderBlocks();
 
   // =======================================================
-  // Инициализация кастомной плашки
+  // Инициализация кастомной плашки (один раз на рендер редактора)
   // =======================================================
 
   initCustomToolbar();
@@ -671,7 +652,7 @@ function insertBlockAfter(
         ? index + 1
         : null
   });
-  
+
   autoSaveDraft();
 }
 
@@ -949,7 +930,7 @@ function renderBlocks(
               e.target.innerHTML
             );
         }
-        
+
         autoSaveDraft();
       };
 
@@ -985,7 +966,7 @@ function renderBlocks(
           d.blocks[i].caption =
             e.target.value;
         }
-        
+
         autoSaveDraft();
       };
     });
@@ -1029,7 +1010,7 @@ function renderBlocks(
               d.blocks.length - 1
             )
         });
-        
+
         autoSaveDraft();
       };
     });
@@ -1100,7 +1081,7 @@ function renderBlocks(
       }
     }
   }
-  
+
   updateDraftBanner();
 }
 
@@ -1308,9 +1289,9 @@ let autoSaveTimeout = null;
 
 function autoSaveDraft() {
   const d = state.draft;
-  
+
   if (!d) return;
-  
+
   if (isDraftEmpty(d)) {
     if (state.hasDraft) {
       clearDraft();
@@ -1318,11 +1299,11 @@ function autoSaveDraft() {
     }
     return;
   }
-  
+
   if (autoSaveTimeout) {
     clearTimeout(autoSaveTimeout);
   }
-  
+
   autoSaveTimeout = setTimeout(() => {
     saveDraftToStorage(d);
     updateDraftBanner();
@@ -1337,12 +1318,160 @@ function autoSaveDraft() {
 function updateDraftBanner() {
   const banner = document.getElementById('draftBanner');
   if (!banner) return;
-  
+
   if (state.hasDraft && !isDraftEmpty(state.draft)) {
     banner.style.display = 'flex';
   } else {
     banner.style.display = 'none';
   }
+}
+
+
+// =========================================================
+// ФОРМАТИРОВАНИЕ ТЕКСТА
+// =========================================================
+// Единая точка входа для команд форматирования — вызывается
+// и из верхней панели #toolbar, и из нижней плашки
+// #customToolbar, поэтому обработчик существует только тут.
+
+const CUSTOM_TAGS = {
+  mono: { tag: 'CODE', className: null },
+  spoiler: { tag: 'SPAN', className: 'tg-spoiler' },
+  blockquote: { tag: 'BLOCKQUOTE', className: null }
+};
+
+const NATIVE_COMMANDS = new Set([
+  'bold',
+  'italic',
+  'underline',
+  'strikeThrough'
+]);
+
+function applyFormatCommand(cmd) {
+  if (!activeBlockEl) {
+    showToast('Нажмите на текст, чтобы начать редактирование');
+    return;
+  }
+
+  const selection = window.getSelection();
+
+  // Если нет выделения — ставим курсор в конец блока,
+  // чтобы execCommand было к чему применяться
+  if (!selection || selection.isCollapsed) {
+    const range = document.createRange();
+    range.selectNodeContents(activeBlockEl);
+    range.collapse(false);
+    selection.removeAllRanges();
+    selection.addRange(range);
+  }
+
+  if (cmd === 'removeFormat') {
+    removeAllFormatting(activeBlockEl, selection);
+  } else if (NATIVE_COMMANDS.has(cmd)) {
+    document.execCommand(cmd, false, null);
+  } else if (CUSTOM_TAGS[cmd]) {
+    toggleCustomTag(cmd, selection);
+  }
+
+  activeBlockEl.dispatchEvent(new Event('input'));
+  updateToolbarButtons();
+}
+
+// ---------------------------------------------------------
+// Обернуть/снять кастомный тег (code / spoiler / blockquote)
+// ---------------------------------------------------------
+
+function toggleCustomTag(cmd, selection) {
+  if (!selection || selection.isCollapsed) {
+    return;
+  }
+
+  const { tag, className } = CUSTOM_TAGS[cmd];
+  const range = selection.getRangeAt(0);
+
+  // Если выделение уже целиком внутри такого тега — снимаем его
+  const existing = findAncestorTag(
+    range.commonAncestorContainer,
+    tag,
+    className
+  );
+
+  if (existing) {
+    unwrapElement(existing);
+    return;
+  }
+
+  // Иначе — оборачиваем выделенное содержимое в тег
+  const wrapper = document.createElement(tag);
+  if (className) {
+    wrapper.className = className;
+  }
+
+  try {
+    const contents = range.extractContents();
+    wrapper.appendChild(contents);
+    range.insertNode(wrapper);
+  } catch (e) {
+    return;
+  }
+
+  selection.removeAllRanges();
+  const newRange = document.createRange();
+  newRange.selectNodeContents(wrapper);
+  selection.addRange(newRange);
+}
+
+function findAncestorTag(node, tagName, className) {
+  let el =
+    node.nodeType === 3
+      ? node.parentElement
+      : node;
+
+  while (el && el.contentEditable !== 'true') {
+    if (
+      el.tagName === tagName &&
+      (!className || el.classList.contains(className))
+    ) {
+      return el;
+    }
+    el = el.parentElement;
+  }
+
+  return null;
+}
+
+function unwrapElement(el) {
+  const parent = el.parentNode;
+
+  while (el.firstChild) {
+    parent.insertBefore(el.firstChild, el);
+  }
+
+  parent.removeChild(el);
+}
+
+// ---------------------------------------------------------
+// Полный сброс форматирования (нативного и кастомного)
+// ---------------------------------------------------------
+
+function removeAllFormatting(blockEl, selection) {
+  document.execCommand('removeFormat', false, null);
+
+  if (!selection || selection.rangeCount === 0) {
+    return;
+  }
+
+  // execCommand('removeFormat') не трогает наши кастомные теги
+  // (CODE, SPAN.tg-spoiler, BLOCKQUOTE) — снимаем их вручную
+  ['CODE', 'SPAN', 'BLOCKQUOTE'].forEach(tagName => {
+    blockEl
+      .querySelectorAll(
+        tagName === 'SPAN'
+          ? 'span.tg-spoiler'
+          : tagName.toLowerCase()
+      )
+      .forEach(unwrapElement);
+  });
 }
 
 
@@ -1354,27 +1483,27 @@ function updateDraftBanner() {
 function showCustomToolbar() {
   const toolbar = document.getElementById('customToolbar');
   if (!toolbar) return;
-  
+
   const selection = window.getSelection();
-  
+
   if (!selection || selection.isCollapsed || !activeBlockEl) {
     toolbar.style.display = 'none';
     return;
   }
-  
+
   const range = selection.getRangeAt(0);
   const rect = range.getClientRects()[0];
-  
+
   if (!rect) {
     toolbar.style.display = 'none';
     return;
   }
-  
+
   const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
   const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
-  
+
   const isMobile = window.innerWidth <= 520;
-  
+
   if (isMobile) {
     toolbar.style.position = 'fixed';
     toolbar.style.top = 'auto';
@@ -1391,9 +1520,9 @@ function showCustomToolbar() {
     toolbar.style.width = 'auto';
     toolbar.style.maxWidth = 'none';
   }
-  
+
   toolbar.style.display = 'flex';
-  
+
   updateToolbarButtons();
 }
 
@@ -1407,64 +1536,60 @@ function hideCustomToolbar() {
 
 // Обновить активные кнопки
 function updateToolbarButtons() {
-  const commands = ['bold', 'italic', 'underline', 'strikeThrough', 'mono', 'spoiler', 'blockquote'];
-  
-  commands.forEach(cmd => {
-    const btn = document.querySelector(`#customToolbar [data-cmd="${cmd}"]`);
-    if (btn) {
-      const isActive = document.queryCommandState(cmd);
-      btn.classList.toggle('active', isActive);
-    }
-  });
-}
+  const nativeCommands = ['bold', 'italic', 'underline', 'strikeThrough'];
 
-// Применить команду к выделенному тексту
-function applyCommandToSelection(cmd) {
+  nativeCommands.forEach(cmd => {
+    document
+      .querySelectorAll(`[data-cmd="${cmd}"]`)
+      .forEach(btn => {
+        let isActive = false;
+        try {
+          isActive = document.queryCommandState(cmd);
+        } catch (e) {}
+        btn.classList.toggle('active', isActive);
+      });
+  });
+
+  // Для кастомных тегов подсвечиваем кнопку, если курсор/выделение
+  // находится внутри соответствующего тега
   const selection = window.getSelection();
-  
-  if (selection.isCollapsed) return;
-  
-  if (cmd === 'removeFormat') {
-    document.execCommand('removeFormat', false, null);
-  } else {
-    document.execCommand(cmd, false, null);
-  }
-  
-  updateToolbarButtons();
+
+  Object.entries(CUSTOM_TAGS).forEach(([cmd, { tag, className }]) => {
+    let isActive = false;
+
+    if (selection && selection.rangeCount && activeBlockEl) {
+      const range = selection.getRangeAt(0);
+      isActive = !!findAncestorTag(range.commonAncestorContainer, tag, className);
+    }
+
+    document
+      .querySelectorAll(`[data-cmd="${cmd}"]`)
+      .forEach(btn => btn.classList.toggle('active', isActive));
+  });
 }
 
 // Инициализация кастомной плашки
 function initCustomToolbar() {
   const toolbar = document.getElementById('customToolbar');
   if (!toolbar) return;
-  
-  function handleToolbarCommand(cmd) {
-    applyCommandToSelection(cmd);
-  }
-  
-  // Привязываем события к кнопкам плашки
+
+  // Привязываем события к кнопкам плашки (только один раз за рендер)
   document.querySelectorAll('#customToolbar [data-cmd]').forEach(btn => {
     const handler = (e) => {
       e.preventDefault();
-      handleToolbarCommand(btn.dataset.cmd);
+
+      if (!activeBlockEl) {
+        return;
+      }
+
+      applyFormatCommand(btn.dataset.cmd);
     };
-    
+
     btn.addEventListener('mousedown', handler);
     btn.addEventListener('touchstart', handler, { passive: false });
-    
-    // Двойной тап
-    let lastTap = 0;
-    btn.addEventListener('touchend', (e) => {
-      const now = Date.now();
-      if (now - lastTap < 300) {
-        e.preventDefault();
-        handler(e);
-      }
-      lastTap = now;
-    }, { passive: false });
   });
-  
-  // Скрываем плашку при прокрутке
+
+  // Скрываем плашку при прокрутке, обновляем позицию
   let scrollTimeout;
   document.addEventListener('scroll', () => {
     clearTimeout(scrollTimeout);
@@ -1475,7 +1600,7 @@ function initCustomToolbar() {
       }
     }, 100);
   });
-  
+
   // Обновляем плашку при изменении выделения
   document.addEventListener('selectionchange', () => {
     const selection = window.getSelection();
