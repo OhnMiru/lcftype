@@ -5,6 +5,60 @@
 
 
 // =========================================================
+// Безопасная привязка тап-кнопок рядом с contenteditable
+//
+// Проблема: если просто вешать click, то на iOS Safari фокус
+// у contenteditable-блока теряется ДО срабатывания click
+// (между touchstart и click проходит blur), из-за чего
+// выделение/курсор к моменту клика уже неверные.
+//
+// Наивное решение — preventDefault() на touchstart, чтобы
+// не терять фокус. Но по спецификации Touch Events
+// preventDefault() на touchstart ОТМЕНЯЕТ синтетический
+// click для этого касания — и на Android (Chrome/WebView,
+// включая Telegram) click после этого просто не срабатывает,
+// хотя на iOS Safari часто всё равно срабатывает (там
+// синтетический click генерируется иначе).
+//
+// Поэтому здесь: touchstart только предотвращает потерю
+// фокуса (preventDefault), а само действие выполняется
+// в touchend — без ожидания click. Обычный click остаётся
+// рабочим путём для мыши/клавиатуры/скринридеров, с флагом
+// защиты от повторного срабатывания, если браузер всё же
+// пришлёт click после touch.
+// =========================================================
+
+function bindTapButton(btn, onActivate) {
+  let handledByTouch = false;
+  let resetTimer = null;
+
+  btn.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+  }, { passive: false });
+
+  btn.addEventListener('touchend', (e) => {
+    e.preventDefault();
+    handledByTouch = true;
+
+    if (resetTimer) clearTimeout(resetTimer);
+    resetTimer = setTimeout(() => { handledByTouch = false; }, 500);
+
+    onActivate(e);
+  }, { passive: false });
+
+  btn.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+  });
+
+  btn.addEventListener('click', (e) => {
+    e.preventDefault();
+    if (handledByTouch) return;
+    onActivate(e);
+  });
+}
+
+
+// =========================================================
 // Открыть редактор с черновиком по ID
 // =========================================================
 
@@ -284,14 +338,8 @@ function renderEditor() {
   // применяется не туда (в т.ч. слипание абзацев).
   // =======================================================
 
-  const preventFocusLoss = e => e.preventDefault();
-
   document.querySelectorAll('#floatingToolbar button').forEach(btn => {
-    btn.addEventListener('mousedown', preventFocusLoss);
-    btn.addEventListener('touchstart', preventFocusLoss, { passive: false });
-
-    btn.addEventListener('click', (e) => {
-      e.preventDefault();
+    bindTapButton(btn, () => {
       if (!activeBlockEl) {
         showToast('Нажмите на текст, чтобы начать редактирование');
         return;
@@ -529,26 +577,18 @@ function createBlockAddControls(index) {
     </button>
   `;
 
-  // Защита от потери фокуса/выделения на iOS — та же логика,
-  // что и для плавающей панели форматирования.
-  const preventFocusLoss = e => e.preventDefault();
-  row.querySelectorAll('button').forEach(b => {
-    b.addEventListener('mousedown', preventFocusLoss);
-    b.addEventListener('touchstart', preventFocusLoss, { passive: false });
+  bindTapButton(row.querySelector('[data-add="text"]'), () => {
+    insertBlockAfter(index, { type: 'text', html: '' });
   });
 
-  row.querySelector('[data-add="text"]').onclick = () => {
-    insertBlockAfter(index, { type: 'text', html: '' });
-  };
-
-  row.querySelector('[data-add="image"]').onclick = () => {
+  bindTapButton(row.querySelector('[data-add="image"]'), () => {
     // Явно фиксируем текущее содержимое ДО открытия нативного
     // пикера — на iOS открытие пикера уводит WebView в фон,
     // и к моменту возврата DOM может быть в непредсказуемом
     // состоянии.
     saveBlocksContent();
     openImagePicker(index + 1);
-  };
+  });
 
   return row;
 }
