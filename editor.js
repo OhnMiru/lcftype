@@ -1345,10 +1345,15 @@ function applyFormatCommand(cmd) {
 
   const selection = window.getSelection();
 
-  // Если нет выделения — ничего не делаем,
-  // просто показываем подсказку, что нужно выделить текст
+  // Если нет выделения — показываем подсказку
   if (!selection || selection.isCollapsed) {
     showToast('Выделите текст, чтобы применить форматирование');
+    return;
+  }
+
+  // Проверяем, что выделение внутри активного блока
+  if (!activeBlockEl.contains(selection.anchorNode)) {
+    showToast('Выделите текст внутри абзаца');
     return;
   }
 
@@ -1447,18 +1452,27 @@ function removeAllFormatting(blockEl, selection) {
   }
 
   const range = selection.getRangeAt(0);
-  const fragment = range.extractContents();
+  
+  // Проверяем, что выделение находится внутри activeBlockEl
+  if (!blockEl.contains(range.commonAncestorContainer)) {
+    return;
+  }
 
-  // Создаем временный контейнер для анализа
+  // Получаем содержимое выделения
+  const fragment = range.extractContents();
+  
+  // Создаем временный контейнер
   const temp = document.createElement('div');
   temp.appendChild(fragment);
 
-  // Рекурсивно удаляем все кастомные теги внутри временного контейнера
-  function unwrapAllCustomTags(node) {
+  // Функция для очистки форматирования
+  function cleanNode(node) {
     const children = [...node.childNodes];
+    
     children.forEach(child => {
       if (child.nodeType === 1) {
         const tagName = child.tagName;
+        
         // Проверяем, является ли тег кастомным
         const isCustom = (
           tagName === 'CODE' ||
@@ -1466,56 +1480,59 @@ function removeAllFormatting(blockEl, selection) {
           (tagName === 'SPAN' && child.classList.contains('tg-spoiler'))
         );
 
-        if (isCustom) {
-          // Разворачиваем тег (переносим детей наружу)
+        // Проверяем, является ли тег нативным форматированием
+        const isNativeFormat = (
+          tagName === 'B' ||
+          tagName === 'STRONG' ||
+          tagName === 'I' ||
+          tagName === 'EM' ||
+          tagName === 'U' ||
+          tagName === 'S' ||
+          tagName === 'STRIKE'
+        );
+
+        if (isCustom || isNativeFormat) {
+          // Разворачиваем тег
           while (child.firstChild) {
             node.insertBefore(child.firstChild, child);
           }
           node.removeChild(child);
         } else {
-          // Рекурсивно обрабатываем детей
-          unwrapAllCustomTags(child);
+          // Рекурсивно обрабатываем вложенные элементы
+          cleanNode(child);
         }
       }
     });
   }
 
-  unwrapAllCustomTags(temp);
+  // Очищаем временный контейнер
+  cleanNode(temp);
 
-  // Получаем очищенное содержимое
-  const cleanContent = temp.innerHTML;
+  // Получаем очищенный HTML
+  let cleanHtml = temp.innerHTML;
 
-  // Вставляем очищенное содержимое обратно в диапазон
+  // Удаляем пустые теги
+  cleanHtml = cleanHtml.replace(/<([^>]+)><\/\1>/g, '');
+
+  // Вставляем очищенное содержимое обратно
   const newRange = document.createRange();
   newRange.selectNodeContents(blockEl);
   newRange.deleteContents();
 
-  const newFragment = newRange.createContextualFragment(cleanContent);
-  newRange.insertNode(newFragment);
-
-  // Убираем лишние пробелы
-  const text = blockEl.textContent;
-  if (!text.trim()) {
-    blockEl.innerHTML = '';
+  if (cleanHtml.trim()) {
+    const newFragment = newRange.createContextualFragment(cleanHtml);
+    newRange.insertNode(newFragment);
   }
 
   // Сбрасываем выделение
   selection.removeAllRanges();
 
-  // Применяем removeFormat ко всему блоку для очистки нативных стилей
-  // Но только если есть что очищать
-  if (blockEl.textContent.trim()) {
-    // Сохраняем позицию курсора
-    const range2 = document.createRange();
-    range2.selectNodeContents(blockEl);
-    range2.collapse(false);
-    selection.addRange(range2);
-    
-    // Применяем removeFormat только к нативному форматированию
-    document.execCommand('removeFormat', false, null);
-  }
+  // Ставим курсор в конец блока
+  const finalRange = document.createRange();
+  finalRange.selectNodeContents(blockEl);
+  finalRange.collapse(false);
+  selection.addRange(finalRange);
 }
-
 
 // =========================================================
 // КАСТОМНАЯ ПЛАШКА ФОРМАТИРОВАНИЯ (в стиле Telegram)
