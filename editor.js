@@ -1,5 +1,6 @@
 // =========================================================
 // Летопись — редактор статей (с поддержкой нескольких черновиков)
+// Исправленная версия: безопасное форматирование, iOS-фиксы
 // =========================================================
 
 
@@ -275,9 +276,20 @@ function renderEditor() {
 
   // =======================================================
   // Плавающая панель форматирования
+  //
+  // ВАЖНО: mousedown/touchstart с preventDefault() —
+  // не даём кнопке украсть фокус у contenteditable-блока.
+  // Без этого на iOS Safari фокус/выделение теряются ДО
+  // срабатывания click, и форматирование/выделение
+  // применяется не туда (в т.ч. слипание абзацев).
   // =======================================================
 
+  const preventFocusLoss = e => e.preventDefault();
+
   document.querySelectorAll('#floatingToolbar button').forEach(btn => {
+    btn.addEventListener('mousedown', preventFocusLoss);
+    btn.addEventListener('touchstart', preventFocusLoss, { passive: false });
+
     btn.addEventListener('click', (e) => {
       e.preventDefault();
       if (!activeBlockEl) {
@@ -517,11 +529,24 @@ function createBlockAddControls(index) {
     </button>
   `;
 
+  // Защита от потери фокуса/выделения на iOS — та же логика,
+  // что и для плавающей панели форматирования.
+  const preventFocusLoss = e => e.preventDefault();
+  row.querySelectorAll('button').forEach(b => {
+    b.addEventListener('mousedown', preventFocusLoss);
+    b.addEventListener('touchstart', preventFocusLoss, { passive: false });
+  });
+
   row.querySelector('[data-add="text"]').onclick = () => {
     insertBlockAfter(index, { type: 'text', html: '' });
   };
 
   row.querySelector('[data-add="image"]').onclick = () => {
+    // Явно фиксируем текущее содержимое ДО открытия нативного
+    // пикера — на iOS открытие пикера уводит WebView в фон,
+    // и к моменту возврата DOM может быть в непредсказуемом
+    // состоянии.
+    saveBlocksContent();
     openImagePicker(index + 1);
   };
 
@@ -819,10 +844,17 @@ function updateDraftBanner() {
 
 
 // =========================================================
-// ФОРМАТИРОВАНИЕ ТЕКСТА (исправленная версия)
+// ФОРМАТИРОВАНИЕ ТЕКСТА
+//
+// Все стили (bold/italic/underline/strikeThrough/mono/
+// spoiler/blockquote) применяются через один и тот же
+// безопасный механизм на основе Range.extractContents() /
+// insertNode(), БЕЗ document.execCommand(). execCommand не
+// уважает границы отдельных contenteditable-блоков и может
+// сливать соседние блоки при форматировании — этого мы
+// избегаем полностью.
 // =========================================================
 
-// Все теги форматирования через единый безопасный механизм
 const CUSTOM_TAGS = {
   bold: { tag: 'B', className: null },
   italic: { tag: 'I', className: null },
@@ -833,16 +865,13 @@ const CUSTOM_TAGS = {
   blockquote: { tag: 'BLOCKQUOTE', className: null }
 };
 
-// execCommand больше не используется для форматирования
-const NATIVE_COMMANDS = new Set();
-
 const ZWSP = '\u200B';
 
 let typingWrapperEl = null;
 
 
 // =========================================================
-// Применить команду форматирования (исправленная версия)
+// Применить команду форматирования
 // =========================================================
 
 function applyFormatCommand(cmd) {
@@ -859,7 +888,11 @@ function applyFormatCommand(cmd) {
     const range = selection.getRangeAt(0);
 
     // =====================================================
-    // ЗАЩИТА: выделение не должно выходить за пределы блока
+    // ЗАЩИТА: выделение не должно выходить за пределы блока.
+    // Без этой проверки, если пользователь случайно выделил
+    // текст через несколько блоков (это физически возможно,
+    // т.к. блоки — соседние DOM-узлы), операция может
+    // затронуть чужой блок и слить их содержимое.
     // =====================================================
 
     if (!activeBlockEl.contains(range.startContainer) ||
@@ -868,10 +901,6 @@ function applyFormatCommand(cmd) {
       selection.removeAllRanges();
       return;
     }
-
-    // =====================================================
-    // Применяем форматирование через безопасный Range
-    // =====================================================
 
     if (cmd === 'removeFormat') {
       removeAllFormatting(activeBlockEl, selection);
@@ -885,16 +914,15 @@ function applyFormatCommand(cmd) {
     return;
   }
 
-  // =====================================================
-  // Нет выделения — включаем "режим печати" с форматом
-  // =====================================================
-
+  // Выделения нет — включаем "режим печати" с форматом
   if (!selection || !activeBlockEl.contains(selection.anchorNode)) {
     placeCaretAtEnd(activeBlockEl);
   }
 
   if (cmd === 'removeFormat') {
-    document.execCommand('removeFormat', false, null);
+    // Снятие форматирования без выделения не имеет чёткого
+    // диапазона применения — просто выходим из текущей
+    // обёртки, если она активна.
     exitTypingWrapper();
     updateFloatingToolbarButtons();
     return;
@@ -909,7 +937,41 @@ function applyFormatCommand(cmd) {
 
 
 // =========================================================
-// Включить/выключить "печать внутри кастомного тега"
+// Получить узел, относительно которого реально стоит курсор.
+//
+// range.startContainer иногда указывает не на текстовый
+// узел, а на родительский контейнер с offset "между"
+// дочерними узлами (например, сразу после восстановления
+// фокуса через .focus()). В этом случае findAncestorTag,
+// получив на входе сам contenteditable-контейнер, сразу
+// возвращает null — и код ошибочно решает, что тега нет,
+// хотя курсор стоит вплотную к нему. Это и была причина
+// того, что повторное нажатие B не снимало жирный текст,
+// а создавало новый <b> поверх.
+// =========================================================
+
+function getCaretReferenceNode(range) {
+  const container = range.startContainer;
+  const offset = range.startOffset;
+
+  if (container.nodeType === Node.TEXT_NODE) {
+    return container;
+  }
+
+  if (offset > 0 && container.childNodes[offset - 1]) {
+    return container.childNodes[offset - 1];
+  }
+
+  if (container.childNodes[offset]) {
+    return container.childNodes[offset];
+  }
+
+  return container;
+}
+
+
+// =========================================================
+// Включить/выключить "печать внутри тега" (без выделения)
 // =========================================================
 
 function toggleCustomTagTypingMode(cmd) {
@@ -919,7 +981,8 @@ function toggleCustomTagTypingMode(cmd) {
   const range = selection.getRangeAt(0);
   const { tag, className } = CUSTOM_TAGS[cmd];
 
-  const existing = findAncestorTag(range.startContainer, tag, className);
+  const refNode = getCaretReferenceNode(range);
+  const existing = findAncestorTag(refNode, tag, className);
 
   if (existing) {
     const newRange = document.createRange();
@@ -991,14 +1054,26 @@ function cleanZeroWidthSpaces(el) {
 }
 
 
+// =========================================================
+// Проверка: не вышел ли курсор за пределы активной обёртки
+// (используется на событие selectionchange)
+// =========================================================
+
 function checkTypingWrapperExit() {
   if (!typingWrapperEl) return;
 
   const selection = window.getSelection();
-  const stillInside = selection &&
-    selection.rangeCount &&
-    typingWrapperEl.isConnected &&
-    typingWrapperEl.contains(selection.getRangeAt(0).startContainer);
+
+  if (!selection || !selection.rangeCount || !typingWrapperEl.isConnected) {
+    const changedBlock = activeBlockEl;
+    exitTypingWrapper();
+    if (changedBlock) changedBlock.dispatchEvent(new Event('input'));
+    return;
+  }
+
+  const range = selection.getRangeAt(0);
+  const refNode = getCaretReferenceNode(range);
+  const stillInside = typingWrapperEl === refNode || typingWrapperEl.contains(refNode);
 
   if (stillInside) return;
 
@@ -1012,7 +1087,15 @@ function checkTypingWrapperExit() {
 
 
 // =========================================================
-// ОБРАБОТКА ENTER — всегда вставляем <br>
+// ОБРАБОТКА ENTER
+//
+// Одиночный Enter — вставляет <br> (перенос строки внутри
+// абзаца). Двойной Enter — создаёт новый текстовый блок.
+// Оба случая обрабатываются вручную (preventDefault), чтобы
+// поведение не зависело от браузера: стандартное поведение
+// contenteditable по Enter непредсказуемо (Chrome вставляет
+// <div>, Firefox — <p>), и при последующей санитайзации это
+// могло приводить к потере разрывов между абзацами.
 // =========================================================
 
 let enterPressCount = 0;
@@ -1020,45 +1103,45 @@ let enterPressTimer = null;
 
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Enter') return;
-  
+
   const blockText = e.target.closest('.block-text');
   if (!blockText) return;
-  
+
   e.preventDefault();
-  
+
   enterPressCount++;
-  
+
   if (enterPressTimer) {
     clearTimeout(enterPressTimer);
     enterPressTimer = null;
   }
-  
+
   // Двойной Enter — создаём новый блок
   if (enterPressCount >= 2) {
     enterPressCount = 0;
-    
+
     const blockIndex = parseInt(blockText.dataset.i);
     if (!isNaN(blockIndex)) {
       const d = state.draft;
       if (d && d.blocks[blockIndex]?.type === 'text') {
         d.blocks[blockIndex].html = sanitizeHtml(blockText.innerHTML);
       }
-      
+
       exitTypingWrapper();
-      
+
       insertBlockAfter(blockIndex, { type: 'text', html: '' });
     }
-    
+
     return;
   }
-  
+
   // Одиночный Enter — вставляем <br>
   document.execCommand('insertLineBreak', false, null);
-  
+
   exitTypingWrapper();
-  
+
   blockText.dispatchEvent(new Event('input'));
-  
+
   enterPressTimer = setTimeout(() => {
     enterPressCount = 0;
     enterPressTimer = null;
@@ -1067,7 +1150,8 @@ document.addEventListener('keydown', (e) => {
 
 
 // =========================================================
-// Обернуть/снять кастомный тег (безопасный Range)
+// Обернуть/снять кастомный тег на выделенном тексте
+// (безопасно: работает строго в пределах Range)
 // =========================================================
 
 function toggleCustomTag(cmd, selection) {
@@ -1102,6 +1186,11 @@ function toggleCustomTag(cmd, selection) {
   selection.addRange(newRange);
 }
 
+
+// =========================================================
+// Найти ближайшего предка с заданным тегом/классом,
+// не выходя за пределы contenteditable-блока
+// =========================================================
 
 function findAncestorTag(node, tagName, className) {
   let el = node.nodeType === 3 ? node.parentElement : node;
@@ -1253,7 +1342,8 @@ function updateFloatingToolbarButtons() {
 
     if (selection && selection.rangeCount && activeBlockEl) {
       const range = selection.getRangeAt(0);
-      isActive = !!findAncestorTag(range.commonAncestorContainer, tag, className);
+      const refNode = getCaretReferenceNode(range);
+      isActive = !!findAncestorTag(refNode, tag, className);
     }
 
     if (typingWrapperEl &&
@@ -1268,6 +1358,24 @@ function updateFloatingToolbarButtons() {
     );
   });
 }
+
+
+// =========================================================
+// Подстраховка для iOS: если приложение уходит в фон
+// (например, во время выбора фото в нативном пикере),
+// сразу фиксируем текущее состояние черновика. iOS может
+// выгружать WebView из памяти при долгом уходе в фон.
+// =========================================================
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden' && state.draft) {
+    saveBlocksContent();
+    if (!isEmptyDraft(state.draft)) {
+      saveDraft(state.draft);
+      state.hasDraft = true;
+    }
+  }
+});
 
 
 // =========================================================
