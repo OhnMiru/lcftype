@@ -766,6 +766,146 @@ function renderSubscribersTab(subscribers) {
 
 
 // =========================================================
+// Диалог обратной связи
+// =========================================================
+
+function openFeedbackDialog() {
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.className = 'profile-overlay';
+
+    overlay.innerHTML = `
+      <div class="profile-dialog feedback-dialog">
+
+        <div class="profile-dialog-title">
+          💬 Обратная связь
+        </div>
+
+        <div class="profile-dialog-text">
+          Есть идея по улучшению, вопрос или нашли баг? Напишите нам!
+        </div>
+
+        <textarea
+          id="feedbackInput"
+          class="profile-bio-input"
+          rows="5"
+          maxlength="2000"
+          placeholder="Напишите ваше сообщение здесь..."
+        ></textarea>
+
+        <div class="profile-bio-counter">
+          <span id="feedbackCounter">0</span> / 2000
+        </div>
+
+        <div class="profile-dialog-actions">
+
+          <button
+            class="btn btn-secondary"
+            id="feedbackCancelBtn"
+          >
+            Отмена
+          </button>
+
+          <button
+            class="btn btn-primary"
+            id="feedbackSendBtn"
+          >
+            Отправить
+          </button>
+
+        </div>
+
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    const input = overlay.querySelector('#feedbackInput');
+    const counter = overlay.querySelector('#feedbackCounter');
+    const sendBtn = overlay.querySelector('#feedbackSendBtn');
+    const cancelBtn = overlay.querySelector('#feedbackCancelBtn');
+
+    input.addEventListener('input', () => {
+      counter.textContent = input.value.length;
+    });
+
+    setTimeout(() => {
+      input.focus();
+    }, 50);
+
+    const closeDialog = () => {
+      overlay.remove();
+      resolve('cancel');
+    };
+
+    cancelBtn.onclick = closeDialog;
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) {
+        closeDialog();
+      }
+    });
+
+    sendBtn.onclick = async () => {
+      const text = input.value.trim();
+
+      if (!text) {
+        showToast('Напишите сообщение');
+        return;
+      }
+
+      if (text.length > 2000) {
+        showToast('Максимум 2000 символов');
+        return;
+      }
+
+      sendBtn.disabled = true;
+      sendBtn.textContent = 'Отправляем…';
+
+      try {
+        const result = await sendFeedback(text);
+        if (result && result.success) {
+          showToast('Сообщение отправлено ✅');
+          resolve('sent');
+          overlay.remove();
+        }
+      } catch (e) {
+        showToast(e.message || 'Не удалось отправить сообщение');
+        sendBtn.disabled = false;
+        sendBtn.textContent = 'Отправить';
+      }
+    };
+
+    input.onkeydown = e => {
+      if (e.key === 'Escape') {
+        closeDialog();
+      }
+      // Ctrl+Enter для отправки
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+        sendBtn.click();
+      }
+    };
+  });
+}
+
+
+// =========================================================
+// Отправить обратную связь
+// =========================================================
+
+async function sendFeedback(text) {
+  try {
+    const r = await callTelegramApi('send-feedback', {
+      text: text.trim()
+    });
+    return r;
+  } catch (e) {
+    console.error('sendFeedback error:', e);
+    throw e;
+  }
+}
+
+
+// =========================================================
 // Страница профиля
 // =========================================================
 
@@ -951,6 +1091,27 @@ async function openProfile() {
           </div>
         </div>
 
+        <!-- Обратная связь -->
+        <div class="profile-card feedback-card chrome">
+          <h3 class="feedback-title">Обратная связь</h3>
+
+          <div class="feedback-desc">
+            Есть идея по улучшению или нашли баг? Напишите нам!
+          </div>
+
+          <button
+            class="btn btn-primary feedback-btn"
+            id="feedbackBtn"
+            type="button"
+          >
+            💬 Написать в поддержку
+          </button>
+
+          <div class="feedback-hint">
+            Ответ придёт в этот чат от бота
+          </div>
+        </div>
+
         <!-- Вкладки -->
         <div class="profile-tabs">
 
@@ -965,7 +1126,7 @@ async function openProfile() {
               Комментарии (${comments.length})
             </button>
             <button class="profile-tab-btn" data-tab="subscribers">
-              Подписки (${subscribersCount})
+              Подписчики (${subscribersCount})
             </button>
           </div>
 
@@ -1082,6 +1243,9 @@ async function openProfile() {
       }
     });
 
+    // Обратная связь
+    document.getElementById('feedbackBtn').addEventListener('click', openFeedbackDialog);
+
     // Переключение вкладок
     document.querySelectorAll('.profile-tab-btn').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -1152,3 +1316,4 @@ window.ensureProfile = ensureProfile;
 window.openProfile = openProfile;
 window.fetchSubscribers = fetchSubscribers;
 window.fetchMySubscriptions = fetchMySubscriptions;
+window.sendFeedback = sendFeedback;
