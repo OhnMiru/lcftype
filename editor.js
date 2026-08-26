@@ -303,6 +303,41 @@ function renderEditor() {
         U
       </button>
 
+      <button
+        data-cmd="strikeThrough"
+        title="Зачеркнутый"
+      >
+        <span style="text-decoration:line-through;">S</span>
+      </button>
+
+      <button
+        data-cmd="blockquote"
+        title="Цитировать"
+      >
+        ❝
+      </button>
+
+      <button
+        data-cmd="spoiler"
+        title="Скрытый"
+      >
+        ◼
+      </button>
+
+      <button
+        data-cmd="mono"
+        title="Моноширинный"
+      >
+        ` + '`' + ` ` + '`' + `
+      </button>
+
+      <button
+        data-cmd="removeFormat"
+        title="Обычный текст"
+      >
+        T
+      </button>
+
     </div>
 
     <div id="blocksHost"></div>
@@ -345,64 +380,11 @@ function renderEditor() {
       <button data-cmd="bold" title="Жирный">B</button>
       <button data-cmd="italic" title="Курсив">i</button>
       <button data-cmd="underline" title="Подчёркнутый">U</button>
-      
-      <div class="toolbar-divider"></div>
-      
-      <button class="toolbar-more-btn" id="toolbarMoreBtn" title="Ещё">⋯</button>
-      
-      <!-- Выпадающее меню -->
-      <div class="toolbar-dropdown" id="toolbarDropdown" style="display:none;">
-        
-        <button data-cmd="selectAll">
-          <span class="dropdown-icon">📋</span>
-          Выбрать все
-        </button>
-        
-        <button data-cmd="cut">
-          <span class="dropdown-icon">✂️</span>
-          Вырезать
-        </button>
-        
-        <button data-cmd="copy">
-          <span class="dropdown-icon">📄</span>
-          Копировать
-        </button>
-        
-        <button data-cmd="paste">
-          <span class="dropdown-icon">📎</span>
-          Вставить
-        </button>
-        
-        <div class="dropdown-divider"></div>
-        
-        <button data-cmd="blockquote">
-          <span class="dropdown-icon">💬</span>
-          Цитировать
-        </button>
-        
-        <button data-cmd="spoiler">
-          <span class="dropdown-icon">👁</span>
-          Скрытый
-        </button>
-        
-        <button data-cmd="strikeThrough">
-          <span class="dropdown-icon">~~S~~</span>
-          Зачеркнутый
-        </button>
-        
-        <button data-cmd="mono">
-          <span class="dropdown-icon">&#96;code&#96;</span>
-          Моно
-        </button>
-        
-        <div class="dropdown-divider"></div>
-        
-        <button data-cmd="removeFormat" class="dropdown-danger">
-          <span class="dropdown-icon">🔄</span>
-          Обычный
-        </button>
-        
-      </div>
+      <button data-cmd="strikeThrough" title="Зачеркнутый"><span style="text-decoration:line-through;">S</span></button>
+      <button data-cmd="blockquote" title="Цитировать">❝</button>
+      <button data-cmd="spoiler" title="Скрытый">◼</button>
+      <button data-cmd="mono" title="Моноширинный">` + '`' + ` ` + '`' + `</button>
+      <button data-cmd="removeFormat" title="Обычный текст">T</button>
       
     </div>
   `;
@@ -421,33 +403,53 @@ function renderEditor() {
 
 
   // =======================================================
-  // Панель форматирования — ИСПРАВЛЕНО ДЛЯ МОБИЛЬНЫХ
+  // Панель форматирования
   // =======================================================
 
   document
     .querySelectorAll(
-      '#toolbar button'
+      '#toolbar button, #customToolbar button'
     )
     .forEach(btn => {
 
-      // Для десктопа — mousedown
-      btn.addEventListener(
-        'mousedown',
-        e => {
-          e.preventDefault();
-          applyFormatting(btn.dataset.cmd);
+      const handler = (e) => {
+        e.preventDefault();
+        
+        if (!activeBlockEl) {
+          showToast('Нажмите на текст, чтобы начать редактирование');
+          return;
         }
-      );
+        
+        const cmd = btn.dataset.cmd;
+        
+        if (cmd === 'removeFormat') {
+          // Сброс форматирования
+          document.execCommand('removeFormat', false, null);
+        } else {
+          document.execCommand(cmd, false, null);
+        }
+        
+        activeBlockEl.dispatchEvent(new Event('input'));
+        updateToolbarButtons();
+      };
 
+      // Для десктопа
+      btn.addEventListener('mousedown', handler);
+      
       // Для мобильных — touchstart
-      btn.addEventListener(
-        'touchstart',
-        e => {
+      btn.addEventListener('touchstart', handler, { passive: false });
+      
+      // Для мобильных — двойной тап
+      let lastTap = 0;
+      btn.addEventListener('touchend', (e) => {
+        const now = Date.now();
+        if (now - lastTap < 300) {
+          // Двойной тап — применяем форматирование
           e.preventDefault();
-          applyFormatting(btn.dataset.cmd);
-        },
-        { passive: false }
-      );
+          handler(e);
+        }
+        lastTap = now;
+      }, { passive: false });
     });
 
 
@@ -646,40 +648,6 @@ function renderEditor() {
   // =======================================================
 
   initCustomToolbar();
-}
-
-
-// =========================================================
-// Применить форматирование — вынесено в отдельную функцию
-// =========================================================
-
-function applyFormatting(cmd) {
-  if (!activeBlockEl) {
-    showToast('Нажмите на текст, чтобы начать редактирование');
-    return;
-  }
-
-  // Проверяем, есть ли выделение
-  const selection = window.getSelection();
-  
-  // Если нет выделения, создаем его в текущем блоке
-  if (!selection || selection.isCollapsed) {
-    // Устанавливаем курсор в конец блока
-    const range = document.createRange();
-    range.selectNodeContents(activeBlockEl);
-    range.collapse(false);
-    selection.removeAllRanges();
-    selection.addRange(range);
-  }
-
-  // Применяем команду
-  document.execCommand(cmd, false, null);
-
-  // Обновляем содержимое блока
-  activeBlockEl.dispatchEvent(new Event('input'));
-
-  // Если есть кастомная плашка — обновляем ее
-  updateToolbarButtons();
 }
 
 
@@ -1434,7 +1402,6 @@ function hideCustomToolbar() {
   const toolbar = document.getElementById('customToolbar');
   if (toolbar) {
     toolbar.style.display = 'none';
-    closeToolbarDropdown();
   }
 }
 
@@ -1457,89 +1424,44 @@ function applyCommandToSelection(cmd) {
   
   if (selection.isCollapsed) return;
   
-  document.execCommand(cmd, false, null);
+  if (cmd === 'removeFormat') {
+    document.execCommand('removeFormat', false, null);
+  } else {
+    document.execCommand(cmd, false, null);
+  }
   
-  // Обновляем кнопки
   updateToolbarButtons();
 }
 
-// Открыть/закрыть выпадающее меню
-function toggleToolbarDropdown(e) {
-  e.stopPropagation();
-  
-  const dropdown = document.getElementById('toolbarDropdown');
-  if (!dropdown) return;
-  
-  const isOpen = dropdown.style.display !== 'none';
-  dropdown.style.display = isOpen ? 'none' : 'block';
-}
-
-// Закрыть выпадающее меню
-function closeToolbarDropdown() {
-  const dropdown = document.getElementById('toolbarDropdown');
-  if (dropdown) {
-    dropdown.style.display = 'none';
-  }
-}
-
-// Инициализация кастомной плашки — ИСПРАВЛЕНО ДЛЯ МОБИЛЬНЫХ
+// Инициализация кастомной плашки
 function initCustomToolbar() {
   const toolbar = document.getElementById('customToolbar');
   if (!toolbar) return;
   
-  // Функция для обработки команд
   function handleToolbarCommand(cmd) {
-    if (cmd === 'selectAll') {
-      document.execCommand('selectAll', false, null);
-      updateToolbarButtons();
-      return;
-    }
-    
-    if (cmd === 'cut' || cmd === 'copy' || cmd === 'paste') {
-      document.execCommand(cmd, false, null);
-      return;
-    }
-    
     applyCommandToSelection(cmd);
   }
   
   // Привязываем события к кнопкам плашки
   document.querySelectorAll('#customToolbar [data-cmd]').forEach(btn => {
-    // Для десктопа
-    btn.addEventListener('mousedown', (e) => {
+    const handler = (e) => {
       e.preventDefault();
       handleToolbarCommand(btn.dataset.cmd);
-    });
+    };
     
-    // Для мобильных
-    btn.addEventListener('touchstart', (e) => {
-      e.preventDefault();
-      handleToolbarCommand(btn.dataset.cmd);
+    btn.addEventListener('mousedown', handler);
+    btn.addEventListener('touchstart', handler, { passive: false });
+    
+    // Двойной тап
+    let lastTap = 0;
+    btn.addEventListener('touchend', (e) => {
+      const now = Date.now();
+      if (now - lastTap < 300) {
+        e.preventDefault();
+        handler(e);
+      }
+      lastTap = now;
     }, { passive: false });
-  });
-  
-  // Кнопка "Ещё"
-  const moreBtn = document.getElementById('toolbarMoreBtn');
-  if (moreBtn) {
-    moreBtn.addEventListener('mousedown', (e) => {
-      e.preventDefault();
-      toggleToolbarDropdown(e);
-    });
-    
-    moreBtn.addEventListener('touchstart', (e) => {
-      e.preventDefault();
-      toggleToolbarDropdown(e);
-    }, { passive: false });
-  }
-  
-  // Закрытие выпадающего меню при клике вне
-  document.addEventListener('mousedown', (e) => {
-    const toolbarEl = document.getElementById('customToolbar');
-    if (!toolbarEl) return;
-    
-    if (!toolbarEl.contains(e.target)) {
-      closeToolbarDropdown();
-    }
   });
   
   // Скрываем плашку при прокрутке
