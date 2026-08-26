@@ -5,38 +5,64 @@
 
 
 function bindTapButton(btn, onActivate) {
-  let handledByTouch = false;
+  let handledByPointer = false;
   let resetTimer = null;
 
-  // Важно: сначала запоминаем selection, затем предотвращаем стандартное
-  // touch-поведение. Это работает стабильнее на iOS и Android WebView.
+  // iOS/Android Telegram WebView: сохраняем выделение ДО того,
+  // как браузер начнёт обрабатывать касание кнопки.
+  btn.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'touch' || e.pointerType === 'pen') {
+      saveCurrentSelection();
+      e.preventDefault();
+    }
+  }, { passive: false });
+
+  btn.addEventListener('pointerup', (e) => {
+    if (e.pointerType === 'touch' || e.pointerType === 'pen') {
+      e.preventDefault();
+      handledByPointer = true;
+
+      if (resetTimer) clearTimeout(resetTimer);
+      resetTimer = setTimeout(() => {
+        handledByPointer = false;
+      }, 700);
+
+      onActivate(e);
+    }
+  }, { passive: false });
+
+  // Fallback для старых WebView без pointer events.
   btn.addEventListener('touchstart', (e) => {
     saveCurrentSelection();
     e.preventDefault();
   }, { passive: false });
 
   btn.addEventListener('touchend', (e) => {
+    if (handledByPointer) {
+      e.preventDefault();
+      return;
+    }
+
     e.preventDefault();
-    handledByTouch = true;
+    handledByPointer = true;
 
     if (resetTimer) clearTimeout(resetTimer);
     resetTimer = setTimeout(() => {
-      handledByTouch = false;
-    }, 500);
+      handledByPointer = false;
+    }, 700);
 
     onActivate(e);
   }, { passive: false });
 
+  // Desktop.
   btn.addEventListener('mousedown', (e) => {
-    // Для мыши также запоминаем выделение до того, как браузер
-    // переведёт фокус на кнопку.
     saveCurrentSelection();
     e.preventDefault();
   });
 
   btn.addEventListener('click', (e) => {
     e.preventDefault();
-    if (handledByTouch) return;
+    if (handledByPointer) return;
     onActivate(e);
   });
 }
@@ -323,6 +349,11 @@ function renderEditor() {
   // =======================================================
 
   document.querySelectorAll('#floatingToolbar button').forEach(btn => {
+    // iOS: кнопка toolbar не должна сама становиться выделяемым текстом.
+    btn.style.webkitUserSelect = 'none';
+    btn.style.userSelect = 'none';
+    btn.style.webkitTouchCallout = 'none';
+    btn.style.touchAction = 'manipulation';
     bindTapButton(btn, () => {
       if (!activeBlockEl) {
         showToast('Нажмите на текст, чтобы начать редактирование');
@@ -912,6 +943,12 @@ let typingWrapperEl = null;
 let savedSelectionRange = null;
 let savedSelectionBlock = null;
 
+// Для iOS храним выделение не только как Range, но и как
+// текстовые offsets внутри contenteditable. Safari может сбросить
+// Selection при touch, но offsets остаются воспроизводимыми.
+let savedSelectionStartOffset = null;
+let savedSelectionEndOffset = null;
+
 function saveCurrentSelection() {
   const selection = window.getSelection();
 
@@ -922,24 +959,44 @@ function saveCurrentSelection() {
     !activeBlockEl ||
     !activeBlockEl.isConnected
   ) {
-    return;
+    return false;
   }
 
   const range = selection.getRangeAt(0);
 
   if (
-    activeBlockEl.contains(range.startContainer) &&
-    activeBlockEl.contains(range.endContainer)
+    !activeBlockEl.contains(range.startContainer) ||
+    !activeBlockEl.contains(range.endContainer)
   ) {
+    return false;
+  }
+
+  try {
     savedSelectionRange = range.cloneRange();
     savedSelectionBlock = activeBlockEl;
+
+    savedSelectionStartOffset = getTextOffsetInBlock(
+      activeBlockEl,
+      range.startContainer,
+      range.startOffset
+    );
+
+    savedSelectionEndOffset = getTextOffsetInBlock(
+      activeBlockEl,
+      range.endContainer,
+      range.endOffset
+    );
+
+    return savedSelectionEndOffset > savedSelectionStartOffset;
+  } catch (e) {
+    return false;
   }
 }
 
 function restoreSavedSelection() {
   if (
-    !savedSelectionRange ||
     !savedSelectionBlock ||
+    savedSelectionBlock !== activeBlockEl ||
     !savedSelectionBlock.isConnected
   ) {
     return false;
@@ -949,25 +1006,54 @@ function restoreSavedSelection() {
   if (!selection) return false;
 
   try {
-    selection.removeAllRanges();
-    selection.addRange(savedSelectionRange);
+    if (
+      Number.isFinite(savedSelectionStartOffset) &&
+      Number.isFinite(savedSelectionEndOffset) &&
+      savedSelectionEndOffset > savedSelectionStartOffset
+    ) {
+      const range = createRangeFromTextOffsets(
+        savedSelectionBlock,
+        savedSelectionStartOffset,
+        savedSelectionEndOffset
+      );
 
-    return (
-      selection.rangeCount > 0 &&
-      !selection.isCollapsed &&
-      savedSelectionBlock.contains(selection.getRangeAt(0).startContainer) &&
-      savedSelectionBlock.contains(selection.getRangeAt(0).endContainer)
-    );
+      selection.removeAllRanges();
+      selection.addRange(range);
+
+      if (
+        selection.rangeCount &&
+        !selection.isCollapsed &&
+        savedSelectionBlock.contains(selection.getRangeAt(0).startContainer) &&
+        savedSelectionBlock.contains(selection.getRangeAt(0).endContainer)
+      ) {
+        return true;
+      }
+    }
+
+    if (savedSelectionRange) {
+      selection.removeAllRanges();
+      selection.addRange(savedSelectionRange);
+
+      return (
+        selection.rangeCount > 0 &&
+        !selection.isCollapsed &&
+        savedSelectionBlock.contains(selection.getRangeAt(0).startContainer) &&
+        savedSelectionBlock.contains(selection.getRangeAt(0).endContainer)
+      );
+    }
   } catch (e) {
-    return false;
+    console.warn('Не удалось восстановить selection:', e);
   }
+
+  return false;
 }
 
 function clearSavedSelection() {
   savedSelectionRange = null;
   savedSelectionBlock = null;
+  savedSelectionStartOffset = null;
+  savedSelectionEndOffset = null;
 }
-
 
 // =========================================================
 // Применить команду форматирования
@@ -993,7 +1079,7 @@ function applyFormatCommand(cmd) {
     hasSelection = restoreSavedSelection();
   }
 
-  // Если сохранённого Range нет, используем текущее выделение.
+  // Если сохранённого выделения нет, используем текущее.
   if (!hasSelection && selection.rangeCount) {
     const currentRange = selection.getRangeAt(0);
 
@@ -1001,6 +1087,21 @@ function applyFormatCommand(cmd) {
       !selection.isCollapsed &&
       activeBlockEl.contains(currentRange.startContainer) &&
       activeBlockEl.contains(currentRange.endContainer);
+
+    if (hasSelection) {
+      savedSelectionRange = currentRange.cloneRange();
+      savedSelectionBlock = activeBlockEl;
+      savedSelectionStartOffset = getTextOffsetInBlock(
+        activeBlockEl,
+        currentRange.startContainer,
+        currentRange.startOffset
+      );
+      savedSelectionEndOffset = getTextOffsetInBlock(
+        activeBlockEl,
+        currentRange.endContainer,
+        currentRange.endOffset
+      );
+    }
   }
 
   if (hasSelection) {
@@ -1028,8 +1129,20 @@ function applyFormatCommand(cmd) {
 
     // После форматирования сохраняем новый Range, если он есть.
     if (selection.rangeCount && !selection.isCollapsed) {
-      savedSelectionRange = selection.getRangeAt(0).cloneRange();
+      const formattedRange = selection.getRangeAt(0);
+
+      savedSelectionRange = formattedRange.cloneRange();
       savedSelectionBlock = activeBlockEl;
+      savedSelectionStartOffset = getTextOffsetInBlock(
+        activeBlockEl,
+        formattedRange.startContainer,
+        formattedRange.startOffset
+      );
+      savedSelectionEndOffset = getTextOffsetInBlock(
+        activeBlockEl,
+        formattedRange.endContainer,
+        formattedRange.endOffset
+      );
     } else {
       clearSavedSelection();
     }
