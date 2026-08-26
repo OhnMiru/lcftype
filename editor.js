@@ -1714,47 +1714,182 @@ function unwrapElement(el) {
 function removeAllFormatting(blockEl, selection) {
   if (!selection || selection.rangeCount === 0) return;
 
-  const range = selection.getRangeAt(0);
+  const originalRange = selection.getRangeAt(0);
 
-  if (!blockEl.contains(range.commonAncestorContainer)) return;
-
-  const selectedText = range.toString();
-
-  if (!selectedText.trim()) return;
-
-  range.deleteContents();
-
-  const point = splitAncestorsUpTo(range.startContainer, range.startOffset, blockEl);
-
-  const textNode = document.createTextNode(selectedText);
-
-  if (point.container.childNodes[point.offset]) {
-    point.container.insertBefore(textNode, point.container.childNodes[point.offset]);
-  } else {
-    point.container.appendChild(textNode);
+  if (
+    !blockEl.contains(originalRange.startContainer) ||
+    !blockEl.contains(originalRange.endContainer)
+  ) {
+    return;
   }
 
-  cleanupEmptyInlineTags(blockEl);
+  if (originalRange.collapsed || !originalRange.toString().trim()) return;
 
-  const newRange = document.createRange();
-  newRange.setStartAfter(textNode);
-  newRange.collapse(true);
-  selection.removeAllRanges();
-  selection.addRange(newRange);
+  // ВАЖНО:
+  // Никогда не используем range.toString() + deleteContents() +
+  // document.createTextNode(). Такой подход превращает несколько
+  // абзацев/переносов строк в один текстовый узел и уничтожает <br>.
+  //
+  // Вместо этого забираем ИМЕННО DOM-содержимое выделения через
+  // extractContents(). Так сохраняются <br>, img и вся остальная
+  // структура выделенного фрагмента.
+  const range = originalRange.cloneRange();
 
-  const blockIndex = parseInt(blockEl.dataset.i);
-  if (!isNaN(blockIndex) && state.draft.blocks[blockIndex]) {
-    const cleanHtml = sanitizeHtml(blockEl.innerHTML);
-    state.draft.blocks[blockIndex].html = cleanHtml;
-    autoSaveDraft();
+  // Маркеры нужны, чтобы после вставки точно восстановить выделение.
+  const startMarker = document.createElement('span');
+  const endMarker = document.createElement('span');
+
+  startMarker.setAttribute('data-format-marker', 'start');
+  endMarker.setAttribute('data-format-marker', 'end');
+  startMarker.style.display = 'none';
+  endMarker.style.display = 'none';
+  startMarker.setAttribute('aria-hidden', 'true');
+  endMarker.setAttribute('aria-hidden', 'true');
+
+  try {
+    const fragment = range.extractContents();
+
+    // Убираем ТОЛЬКО элементы, которые являются форматированием.
+    // <br>, img и текст остаются нетронутыми.
+    stripFormattingFromFragment(fragment);
+
+    // Вставляем маркеры внутрь того же Fragment, чтобы после insertNode
+    // можно было восстановить ровно исходное выделение.
+    const wrappedFragment = document.createDocumentFragment();
+    wrappedFragment.appendChild(startMarker);
+    wrappedFragment.appendChild(fragment);
+    wrappedFragment.appendChild(endMarker);
+
+    range.insertNode(wrappedFragment);
+
+    const newRange = document.createRange();
+    newRange.setStartAfter(startMarker);
+    newRange.setEndBefore(endMarker);
+
+    // Сохраняем выделение до удаления маркеров.
+    selection.removeAllRanges();
+    selection.addRange(newRange);
+
+    startMarker.remove();
+    endMarker.remove();
+
+    // После удаления маркеров Selection может быть слегка скорректирован
+    // WebKit. Повторно строим его по текущим соседним узлам, если возможно.
+    cleanupEmptyInlineTags(blockEl);
+
+    const blockIndex = parseInt(blockEl.dataset.i);
+    if (!isNaN(blockIndex) && state.draft.blocks[blockIndex]) {
+      const cleanHtml = sanitizeHtml(blockEl.innerHTML);
+      state.draft.blocks[blockIndex].html = cleanHtml;
+      autoSaveDraft();
+    }
+
+    updateFloatingToolbarButtons();
+
+    // Сохраняем Range для следующего нажатия toolbar, в том числе на iOS.
+    if (selection.rangeCount && !selection.isCollapsed) {
+      const restoredRange = selection.getRangeAt(0);
+      savedSelectionRange = restoredRange.cloneRange();
+      savedSelectionBlock = blockEl;
+
+      savedSelectionStartOffset = getTextOffsetInBlock(
+        blockEl,
+        restoredRange.startContainer,
+        restoredRange.startOffset
+      );
+      savedSelectionEndOffset = getTextOffsetInBlock(
+        blockEl,
+        restoredRange.endContainer,
+        restoredRange.endOffset
+      );
+    } else {
+      // Если WebKit схлопнул выделение после удаления маркеров,
+      // восстанавливаем его по текстовым координатам исходного Range.
+      const startOffset = getTextOffsetInBlock(
+        blockEl,
+        originalRange.startContainer,
+        originalRange.startOffset
+      );
+      const endOffset = getTextOffsetInBlock(
+        blockEl,
+        originalRange.endContainer,
+        originalRange.endOffset
+      );
+
+      const fallbackRange = createRangeFromTextOffsets(
+        blockEl,
+        startOffset,
+        endOffset
+      );
+
+      selection.removeAllRanges();
+      selection.addRange(fallbackRange);
+
+      savedSelectionRange = fallbackRange.cloneRange();
+      savedSelectionBlock = blockEl;
+      savedSelectionStartOffset = startOffset;
+      savedSelectionEndOffset = endOffset;
+    }
+  } catch (e) {
+    console.error('Не удалось снять форматирование:', e);
+
+    // Если DOM-операция не удалась, не оставляем редактор в полусломанном
+    // состоянии. Пытаемся вернуть исходный Range.
+    try {
+      selection.removeAllRanges();
+      selection.addRange(originalRange);
+    } catch (_) {}
   }
+}
 
-  updateFloatingToolbarButtons();
 
-  if (selection.rangeCount && !selection.isCollapsed) {
-    savedSelectionRange = selection.getRangeAt(0).cloneRange();
-    savedSelectionBlock = blockEl;
-  }
+// Снимает только пользовательское текстовое форматирование.
+// Структурные элементы (<br>, img и т.п.) НЕ удаляются.
+function stripFormattingFromFragment(fragment) {
+  const formattingSelectors = [
+    'b', 'strong',
+    'i', 'em',
+    'u',
+    's', 'strike',
+    'code',
+    'span.tg-spoiler',
+    'blockquote'
+  ];
+
+  const formattingElements = Array.from(
+    fragment.querySelectorAll(formattingSelectors.join(','))
+  );
+
+  // Идём от самых глубоких элементов к внешним. Это позволяет корректно
+  // обработать конструкции вроде <b><i>текст</i></b>.
+  formattingElements.sort((a, b) => {
+    const depth = el => {
+      let d = 0;
+      let node = el;
+      while (node && node.parentNode) {
+        d++;
+        node = node.parentNode;
+      }
+      return d;
+    };
+
+    return depth(b) - depth(a);
+  });
+
+  formattingElements.forEach(el => {
+    if (!el.parentNode) return;
+
+    const parent = el.parentNode;
+
+    // Удаляем саму форматирующую обёртку, но переносим ВСЕ её children
+    // обратно в родителя. Поэтому <br>, img, текст и вложенная структура
+    // не пропадают.
+    while (el.firstChild) {
+      parent.insertBefore(el.firstChild, el);
+    }
+
+    el.remove();
+  });
 }
 
 
