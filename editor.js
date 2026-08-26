@@ -27,7 +27,7 @@ function newDraft() {
 // Открыть редактор новой статьи
 // =========================================================
 
-let _isRestoringDraft = false; // ← флаг для предотвращения повторного показа
+let _isRestoringDraft = false;
 
 async function openEditor() {
   try {
@@ -50,7 +50,6 @@ async function openEditor() {
     state.view = 'editor';
     state.currentId = null;
 
-    // Проверяем, есть ли сохраненный черновик (только если не идет восстановление)
     if (!_isRestoringDraft) {
       const savedDraft = loadDraftFromStorage();
       
@@ -60,7 +59,7 @@ async function openEditor() {
         );
         
         if (restore) {
-          _isRestoringDraft = true; // ← устанавливаем флаг
+          _isRestoringDraft = true;
           state.draft = savedDraft;
           showToast('Черновик восстановлен');
         } else {
@@ -71,7 +70,6 @@ async function openEditor() {
         state.draft = newDraft();
       }
     } else {
-      // Если идет восстановление, сбрасываем флаг и используем уже загруженный черновик
       _isRestoringDraft = false;
       if (!state.draft) {
         state.draft = newDraft();
@@ -340,6 +338,73 @@ function renderEditor() {
       class="hint chrome"
       id="editorHint"
     ></div>
+
+    <!-- Кастомная плашка для выделенного текста -->
+    <div id="customToolbar" class="custom-toolbar" style="display:none;">
+      
+      <button data-cmd="bold" title="Жирный">B</button>
+      <button data-cmd="italic" title="Курсив">i</button>
+      <button data-cmd="underline" title="Подчёркнутый">U</button>
+      
+      <div class="toolbar-divider"></div>
+      
+      <button class="toolbar-more-btn" id="toolbarMoreBtn" title="Ещё">⋯</button>
+      
+      <!-- Выпадающее меню -->
+      <div class="toolbar-dropdown" id="toolbarDropdown" style="display:none;">
+        
+        <button data-cmd="selectAll">
+          <span class="dropdown-icon">📋</span>
+          Выбрать все
+        </button>
+        
+        <button data-cmd="cut">
+          <span class="dropdown-icon">✂️</span>
+          Вырезать
+        </button>
+        
+        <button data-cmd="copy">
+          <span class="dropdown-icon">📄</span>
+          Копировать
+        </button>
+        
+        <button data-cmd="paste">
+          <span class="dropdown-icon">📎</span>
+          Вставить
+        </button>
+        
+        <div class="dropdown-divider"></div>
+        
+        <button data-cmd="blockquote">
+          <span class="dropdown-icon">💬</span>
+          Цитировать
+        </button>
+        
+        <button data-cmd="spoiler">
+          <span class="dropdown-icon">👁</span>
+          Скрытый
+        </button>
+        
+        <button data-cmd="strikeThrough">
+          <span class="dropdown-icon">~~S~~</span>
+          Зачеркнутый
+        </button>
+        
+        <button data-cmd="mono">
+          <span class="dropdown-icon">`code`</span>
+          Моно
+        </button>
+        
+        <div class="dropdown-divider"></div>
+        
+        <button data-cmd="removeFormat" class="dropdown-danger">
+          <span class="dropdown-icon">🔄</span>
+          Обычный
+        </button>
+        
+      </div>
+      
+    </div>
   `;
 
   // =======================================================
@@ -356,7 +421,7 @@ function renderEditor() {
 
 
   // =======================================================
-  // Панель форматирования
+  // Панель форматирования (обычная)
   // =======================================================
 
   document
@@ -554,7 +619,7 @@ function renderEditor() {
 
 
   // =======================================================
-  // Баннер черновика — ИСПРАВЛЕНО!
+  // Баннер черновика
   // =======================================================
 
   document
@@ -565,9 +630,7 @@ function renderEditor() {
         e.stopPropagation();
         if (confirm('Удалить сохраненный черновик?')) {
           clearDraft();
-          // Создаем новый пустой черновик
           state.draft = newDraft();
-          // Перерендериваем редактор (баннер исчезнет)
           renderEditor();
           showToast('Черновик удален');
         }
@@ -580,6 +643,12 @@ function renderEditor() {
   // =======================================================
 
   renderBlocks();
+
+  // =======================================================
+  // Инициализация кастомной плашки
+  // =======================================================
+
+  initCustomToolbar();
 }
 
 
@@ -1275,6 +1344,209 @@ function updateDraftBanner() {
   } else {
     banner.style.display = 'none';
   }
+}
+
+
+// =========================================================
+// КАСТОМНАЯ ПЛАШКА ФОРМАТИРОВАНИЯ (в стиле Telegram)
+// =========================================================
+
+// Показать кастомную плашку
+function showCustomToolbar() {
+  const toolbar = document.getElementById('customToolbar');
+  if (!toolbar) return;
+  
+  const selection = window.getSelection();
+  
+  if (!selection || selection.isCollapsed || !activeBlockEl) {
+    toolbar.style.display = 'none';
+    return;
+  }
+  
+  const range = selection.getRangeAt(0);
+  const rect = range.getClientRects()[0];
+  
+  if (!rect) {
+    toolbar.style.display = 'none';
+    return;
+  }
+  
+  const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+  const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+  
+  const isMobile = window.innerWidth <= 520;
+  
+  if (isMobile) {
+    toolbar.style.position = 'fixed';
+    toolbar.style.top = 'auto';
+    toolbar.style.bottom = '20px';
+    toolbar.style.left = '50%';
+    toolbar.style.transform = 'translateX(-50%)';
+    toolbar.style.width = 'calc(100% - 32px)';
+    toolbar.style.maxWidth = '400px';
+  } else {
+    toolbar.style.position = 'absolute';
+    toolbar.style.top = (rect.top + scrollTop - 55) + 'px';
+    toolbar.style.left = (rect.left + scrollLeft + rect.width/2 - 140) + 'px';
+    toolbar.style.transform = 'none';
+    toolbar.style.width = 'auto';
+    toolbar.style.maxWidth = 'none';
+  }
+  
+  toolbar.style.display = 'flex';
+  
+  updateToolbarButtons();
+}
+
+// Скрыть кастомную плашку
+function hideCustomToolbar() {
+  const toolbar = document.getElementById('customToolbar');
+  if (toolbar) {
+    toolbar.style.display = 'none';
+    closeToolbarDropdown();
+  }
+}
+
+// Обновить активные кнопки
+function updateToolbarButtons() {
+  const commands = ['bold', 'italic', 'underline', 'strikeThrough', 'mono', 'spoiler', 'blockquote'];
+  
+  commands.forEach(cmd => {
+    const btn = document.querySelector(`#customToolbar [data-cmd="${cmd}"]`);
+    if (btn) {
+      const isActive = document.queryCommandState(cmd);
+      btn.classList.toggle('active', isActive);
+    }
+  });
+}
+
+// Применить команду к выделенному тексту
+function applyCommandToSelection(cmd) {
+  const selection = window.getSelection();
+  
+  if (selection.isCollapsed) return;
+  
+  const range = selection.getRangeAt(0);
+  
+  document.execCommand(cmd, false, null);
+  
+  selection.removeAllRanges();
+  selection.addRange(range);
+  
+  updateToolbarButtons();
+}
+
+// Открыть/закрыть выпадающее меню
+function toggleToolbarDropdown(e) {
+  e.stopPropagation();
+  
+  const dropdown = document.getElementById('toolbarDropdown');
+  if (!dropdown) return;
+  
+  const isOpen = dropdown.style.display !== 'none';
+  dropdown.style.display = isOpen ? 'none' : 'block';
+}
+
+// Закрыть выпадающее меню
+function closeToolbarDropdown() {
+  const dropdown = document.getElementById('toolbarDropdown');
+  if (dropdown) {
+    dropdown.style.display = 'none';
+  }
+}
+
+// Инициализация кастомной плашки
+function initCustomToolbar() {
+  const toolbar = document.getElementById('customToolbar');
+  if (!toolbar) return;
+  
+  // Привязываем события к кнопкам плашки
+  document.querySelectorAll('#customToolbar [data-cmd]').forEach(btn => {
+    btn.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      
+      const cmd = btn.dataset.cmd;
+      
+      if (cmd === 'selectAll') {
+        document.execCommand('selectAll', false, null);
+        updateToolbarButtons();
+        return;
+      }
+      
+      if (cmd === 'cut' || cmd === 'copy' || cmd === 'paste') {
+        document.execCommand(cmd, false, null);
+        return;
+      }
+      
+      applyCommandToSelection(cmd);
+    });
+    
+    // Для мобильных — touch события
+    btn.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      
+      const cmd = btn.dataset.cmd;
+      
+      if (cmd === 'selectAll') {
+        document.execCommand('selectAll', false, null);
+        updateToolbarButtons();
+        return;
+      }
+      
+      if (cmd === 'cut' || cmd === 'copy' || cmd === 'paste') {
+        document.execCommand(cmd, false, null);
+        return;
+      }
+      
+      applyCommandToSelection(cmd);
+    }, { passive: false });
+  });
+  
+  // Кнопка "Ещё"
+  const moreBtn = document.getElementById('toolbarMoreBtn');
+  if (moreBtn) {
+    moreBtn.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      toggleToolbarDropdown(e);
+    });
+    
+    moreBtn.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      toggleToolbarDropdown(e);
+    }, { passive: false });
+  }
+  
+  // Закрытие выпадающего меню при клике вне
+  document.addEventListener('mousedown', (e) => {
+    const toolbarEl = document.getElementById('customToolbar');
+    if (!toolbarEl) return;
+    
+    if (!toolbarEl.contains(e.target)) {
+      closeToolbarDropdown();
+    }
+  });
+  
+  // Скрываем плашку при прокрутке
+  let scrollTimeout;
+  document.addEventListener('scroll', () => {
+    clearTimeout(scrollTimeout);
+    scrollTimeout = setTimeout(() => {
+      const selection = window.getSelection();
+      if (selection && !selection.isCollapsed && activeBlockEl) {
+        showCustomToolbar();
+      }
+    }, 100);
+  });
+  
+  // Обновляем плашку при изменении выделения
+  document.addEventListener('selectionchange', () => {
+    const selection = window.getSelection();
+    if (selection && !selection.isCollapsed && activeBlockEl) {
+      showCustomToolbar();
+    } else {
+      hideCustomToolbar();
+    }
+  });
 }
 
 
