@@ -102,12 +102,18 @@ async function fetchArticle(id) {
 // Загрузка изображения в Supabase Storage
 // =========================================================
 
+// =========================================================
+// Загрузка изображения в Cloudinary
+// =========================================================
+
+const CLOUDINARY_CLOUD  = 'n2gmz7nm';
+const CLOUDINARY_PRESET = 'lcftype_unsigned';
+
 async function uploadImage(
   dataUrl,
   filename
 ) {
   const res = await fetch(dataUrl);
-
   const blob = await res.blob();
 
   const safe = String(
@@ -117,33 +123,28 @@ async function uploadImage(
     '_'
   );
 
-  const path =
-    `${Date.now()}-${Math.random()
-      .toString(36)
-      .slice(2, 8)}-${safe}`;
+  const fd = new FormData();
+  fd.append('file', blob, safe);
+  fd.append('upload_preset', CLOUDINARY_PRESET);
 
-  const {
-    error
-  } = await db.storage
-    .from('images')
-    .upload(
-      path,
-      blob,
-      {
-        contentType:
-          blob.type || 'image/jpeg',
-        upsert: false
-      }
-    );
+  const r = await fetch(
+    `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`,
+    {
+      method: 'POST',
+      body: fd
+    }
+  );
 
-  if (error) {
-    throw error;
+  if (!r.ok) {
+    throw new Error('Не удалось загрузить изображение');
   }
 
-  return db.storage
-    .from('images')
-    .getPublicUrl(path)
-    .data.publicUrl;
+  const data = await r.json();
+
+  return data.secure_url.replace(
+    '/upload/',
+    '/upload/f_auto,q_auto/'
+  );
 }
 
 
